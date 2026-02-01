@@ -290,11 +290,18 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         items
     }
 
-    fn instantiate(&mut self, typ: Type) -> Type {
+    /// Instantiate the given type, returning the instantiated type and associating
+    /// the instantiation bindings with the given [PathId] in the current context.
+    fn instantiate(&mut self, typ: Type, path: Option<PathId>) -> Type {
         match typ {
-            Type::Forall(generics, typ) => {
+            Type::Forall(generics, old_type) => {
                 let substitutions = generics.iter().map(|generic| (*generic, self.next_type_variable())).collect();
-                typ.substitute(&substitutions, &self.bindings)
+                let typ = old_type.substitute(&substitutions, &self.bindings);
+                if !substitutions.is_empty() && let Some(path) = path {
+                    let substitutions = mapvec(generics.iter(), |generic| substitutions[generic].clone());
+                    self.current_extended_context_mut().insert_instantiation(path, old_type, substitutions);
+                }
+                typ
             },
             other => other,
         }

@@ -6,18 +6,22 @@
 //! Although the MIR may eventually be monomorphized, the initial output of this builder uses a
 //! uniform representation instead, relying on a later pass to manually specialize each function
 //! if desired.
-use std::{collections::BTreeMap, sync::Arc};
+use std::{
+    collections::BTreeMap,
+    sync::{Arc, LazyLock},
+};
 
+use dashmap::DashMap;
 use inc_complete::DbGet;
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 
 use crate::{
-    incremental::{GetItem, TypeCheck},
+    incremental::{GetItem, GetItemRaw, TypeCheck},
     iterator_extensions::mapvec,
     lexer::token::{FloatKind, IntegerKind},
     mir::{
-        Block, BlockId, Definition, DefinitionId, FloatConstant, Instruction, IntConstant, Mir, TerminatorInstruction,
-        Type, Value,
+        Block, BlockId, Definition, DefinitionId, FloatConstant, Generic, Instruction, IntConstant, Mir,
+        TerminatorInstruction, Type, Value, next_definition_id,
     },
     name_resolution::{Origin, builtin::Builtin},
     parser::{
@@ -25,35 +29,53 @@ use crate::{
         ids::{ExprId, NameId, PathId, PatternId, TopLevelId, TopLevelName},
     },
     type_inference::{
+        self,
         dependency_graph::TypeCheckResult,
         fresh_expr::ExtendedTopLevelContext,
         patterns::{Case, Constructor, DecisionTree},
+        types::Type as TCType,
     },
 };
 
 mod types;
 
+/// Maps each TopLevelName to a unique DefinitionId
+pub(crate) type SharedIdsMap = DashMap<TopLevelName, DefinitionId>;
+
+/// A map from [TopLevelName] to [DefinitionId] shared between concurrent calls of
+/// [build_initial_mir].
+static NAME_IDS: LazyLock<SharedIdsMap> = LazyLock::new(DashMap::new);
+
+/// Builds the MIR with the default shared global [SharedIdsMap].
+pub(crate) fn build_initial_mir_with_shared_map<T>(compiler: &T, item_id: TopLevelId) -> Option<Mir>
+where
+    T: DbGet<TypeCheck> + DbGet<GetItem> + DbGet<GetItemRaw>,
+{
+    build_initial_mir(compiler, &NAME_IDS, item_id)
+}
+
 /// Convert the given item to an initial MIR representation. This may be done in parallel with all
 /// other items in the program.
 ///
-/// The initial MIR representation uses a uniform-representation for generics, rather than
-/// a monomorphized one. If monomorphization is required, a separate monomorphization pass should
-/// be run on the MIR after collecting it all.
-pub(crate) fn build_initial_mir<T>(compiler: &T, item_id: TopLevelId) -> Option<Mir>
+/// The initial MIR representation has no special handling of generics and requires another pass
+/// afterward to reshape them into something the runtime can handle. Examples include either
+/// monomorphization to specialize generics out of the code or an existential generics approach
+/// which will pass around unsized values by reference.
+pub(crate) fn build_initial_mir<T>(compiler: &T, ids: &SharedIdsMap, item_id: TopLevelId) -> Option<Mir>
 where
-    T: DbGet<TypeCheck> + DbGet<GetItem>,
+    T: DbGet<TypeCheck> + DbGet<GetItem> + DbGet<GetItemRaw>,
 {
     let types = TypeCheck(item_id).get(compiler);
     let (item, _) = GetItem(item_id).get(compiler);
 
     match &item.kind {
         cst::TopLevelItemKind::Definition(definition) => {
-            let mut context = Context::new(compiler, &types, item_id);
+            let mut context = Context::new(compiler, &types, item_id, ids);
             context.definition(definition);
             Some(context.finish())
         },
         cst::TopLevelItemKind::TypeDefinition(type_definition) => {
-            let mut context = Context::new(compiler, &types, item_id);
+            let mut context = Context::new(compiler, &types, item_id, ids);
             context.type_definition(type_definition);
             Some(context.finish())
         },
@@ -73,44 +95,44 @@ struct Context<'local, Db> {
 
     top_level_id: TopLevelId,
 
+    /// The number of generics in scope
+    generics_in_scope: FxHashMap<type_inference::generics::Generic, Generic>,
+
     current_function: Option<Definition>,
     current_block: BlockId,
 
     variables: FxHashMap<Origin, Value>,
 
-    next_function_id: u32,
+    /// Contains the name of every [DefinitionId] referenced in each of the `self.finished_functions`
+    referenced_names: FxHashMap<DefinitionId, Name>,
+
     finished_functions: FxHashMap<DefinitionId, Definition>,
-    name_mappings: FxHashMap<TopLevelName, DefinitionId>,
+    name_to_id: &'local SharedIdsMap,
 
     definition_types: FxHashMap<DefinitionId, Type>,
-    external_types: FxHashMap<TopLevelName, Type>,
 }
 
 impl<'local, Db> Context<'local, Db>
 where
-    Db: DbGet<TypeCheck> + DbGet<GetItem>,
+    Db: DbGet<TypeCheck> + DbGet<GetItem> + DbGet<GetItemRaw>,
 {
-    fn new(compiler: &'local Db, types: &'local TypeCheckResult, top_level_id: TopLevelId) -> Self {
+    fn new(
+        compiler: &'local Db, types: &'local TypeCheckResult, top_level_id: TopLevelId,
+        name_mappings: &'local SharedIdsMap,
+    ) -> Self {
         Self {
             compiler,
             types,
             top_level_id,
+            generics_in_scope: Default::default(),
             variables: FxHashMap::default(),
             current_block: BlockId::ENTRY_BLOCK,
             current_function: None,
             finished_functions: Default::default(),
-            name_mappings: Default::default(),
-            next_function_id: 0,
+            name_to_id: name_mappings,
             definition_types: Default::default(),
-            external_types: Default::default(),
+            referenced_names: Default::default(),
         }
-    }
-
-    /// Return the next free function id, and increment the id after.
-    fn next_definition_id(&mut self) -> DefinitionId {
-        let index = self.next_function_id;
-        self.next_function_id += 1;
-        DefinitionId { item: self.top_level_id, index }
     }
 
     /// Returns the current function being built. Panics if thre is none.
@@ -118,10 +140,9 @@ where
         self.current_function.as_mut().unwrap()
     }
 
-    fn type_of_value(&self, value: Value) -> Type {
+    fn type_of_value(&self, value: &Value) -> Type {
         match value {
-            Value::Definition(id) => self.definition_types[&id].clone(),
-            Value::External(id) => self.external_types[&id].clone(),
+            Value::Definition(id) => self.definition_types[id].clone(),
             other => self.current_function.as_ref().unwrap().type_of_value(other),
         }
     }
@@ -177,14 +198,22 @@ where
         self.convert_type(typ, None)
     }
 
-    fn reference_definition(&mut self, id: DefinitionId, typ: Type) -> Value {
-        self.definition_types.insert(id, typ);
-        Value::Definition(id)
+    /// Retrieves the corresponding [DefinitionId] for a particular [TopLevelName].
+    /// Note that this uses a shared [DashMap] internally and the resulting id will be
+    /// nondeterministic across multiple compiler runs.
+    fn get_definition_id(&self, name: &TopLevelName) -> DefinitionId {
+        *self.name_to_id.entry(*name).or_insert_with(next_definition_id)
     }
 
-    fn reference_external(&mut self, name: TopLevelName, typ: Type) -> Value {
-        self.external_types.insert(name, typ);
-        Value::External(name)
+    fn get_definition_name(&self, name: &TopLevelName) -> Name {
+        let (_, context) = GetItemRaw(name.top_level_item).get(self.compiler);
+        context.names[name.local_name_id].clone()
+    }
+
+    fn make_definition_value(&mut self, id: DefinitionId, name: Name, typ: Type) -> Value {
+        self.referenced_names.insert(id, name);
+        self.definition_types.insert(id, typ);
+        Value::Definition(id)
     }
 
     fn expression(&mut self, expr: ExprId) -> Value {
@@ -240,14 +269,23 @@ where
         // This allows us to convert all definitions to MIR in parallel, trusting
         // that the links will work out later.
         match self.context().path_origin(path_id) {
-            Some(Origin::TopLevelDefinition(name)) if name.top_level_item == self.top_level_id => {
-                let id = self.name_mappings[&name];
-                let typ = self.convert_type(&self.types.result.maps.path_types[&path_id], None);
-                self.reference_definition(id, typ)
-            },
             Some(Origin::TopLevelDefinition(name)) => {
+                let id = self.get_definition_id(&name);
+                let name = self.get_definition_name(&name);
                 let typ = self.convert_type(&self.types.result.maps.path_types[&path_id], None);
-                self.reference_external(name, typ)
+
+                // If this type was instantiated, then we need to recover the pre-instantiated
+                // type and make an explicit [Instruction::Instantiate].
+                let value = if let Some((_generic_type, bindings)) = self.types.result.context.get_instantiation(path_id) {
+                    self.referenced_names.insert(id, name);
+                    let bindings = Arc::new(mapvec(bindings, |typ| self.convert_type(typ, None)));
+                    let instruction = Instruction::Instantiate(id, bindings);
+                    self.push_instruction(instruction, typ)
+                } else {
+                    self.make_definition_value(id, name, typ.clone())
+                };
+
+                value
             },
             Some(origin @ Origin::Builtin(Builtin::PairConstructor)) => {
                 if let Some(existing) = self.variables.get(&origin) {
@@ -274,8 +312,12 @@ where
     fn define_pair_constructor(&mut self) -> Value {
         let name = Arc::new(Builtin::PairConstructor.to_string());
         let tuple_type = Type::tuple(vec![Type::POINTER, Type::POINTER]);
+        let typ = Type::Function(Arc::new(super::FunctionType {
+            parameters: vec![Type::POINTER, Type::POINTER],
+            return_type: tuple_type,
+        }));
 
-        let id = self.new_definition(name, |this| {
+        let id = self.new_definition(name.clone(), 2, typ.clone(), |this| {
             this.push_parameter(Type::POINTER);
             this.push_parameter(Type::POINTER);
 
@@ -283,15 +325,11 @@ where
             let b = Value::Parameter(BlockId::ENTRY_BLOCK, 1);
             let make_tuple = Instruction::MakeTuple(vec![a, b]);
 
-            let tuple_type = Type::tuple(vec![Type::POINTER, Type::POINTER]);
+            let tuple_type = Type::tuple(vec![Type::generic(0), Type::generic(1)]);
             let tuple = this.push_instruction(make_tuple, tuple_type.clone());
             this.terminate_block(TerminatorInstruction::Return(tuple));
         });
-        let typ = Type::Function(Arc::new(super::FunctionType {
-            parameters: vec![Type::POINTER, Type::POINTER],
-            return_type: tuple_type,
-        }));
-        self.reference_definition(id, typ)
+        self.make_definition_value(id, name, typ)
     }
 
     fn sequence(&mut self, sequence: &[SequenceItem]) -> Value {
@@ -305,7 +343,11 @@ where
     fn definition(&mut self, definition: &cst::Definition) -> Value {
         let previous_state = self.is_global(definition).then(|| {
             let name = self.try_find_name(definition.pattern).unwrap_or_else(|| Arc::new("global".to_string()));
-            self.start_global(name)
+            let typ = &self.types.result.maps.pattern_types[&definition.pattern];
+            self.set_generics_in_scope(&typ);
+            let generic_count = self.generics_in_scope.len() as u32;
+            let typ = self.convert_type(&typ, None);
+            self.start_global(name, generic_count, typ)
         });
 
         let mut value = match &self.context()[definition.rhs] {
@@ -337,7 +379,7 @@ where
     fn member_access(&mut self, member_access: &cst::MemberAccess, expr: ExprId) -> Value {
         let tuple = self.expression(member_access.object);
         let index = self.context().member_access_index(expr).unwrap_or(u32::MAX);
-        let element_type = match self.type_of_value(tuple) {
+        let element_type = match self.type_of_value(&tuple) {
             Type::Tuple(elements) => elements.get(index as usize).cloned().unwrap_or(Type::ERROR),
             _ => Type::ERROR,
         };
@@ -366,18 +408,19 @@ where
     /// Save the current function state, create a new function,
     /// run `f` to fill in the function's body, then restore the previous state
     /// and return the new function value.
-    fn new_definition(&mut self, name: Name, f: impl FnOnce(&mut Self)) -> DefinitionId {
-        let state = self.start_global(name);
+    fn new_definition(&mut self, name: Name, generic_count: u32, typ: Type, f: impl FnOnce(&mut Self)) -> DefinitionId {
+        let state = self.start_global(name, generic_count, typ);
         f(self);
         self.end_global(state)
     }
 
-    fn start_global(&mut self, name: Name) -> (Option<Definition>, BlockId) {
+    fn start_global(&mut self, name: Name, generic_count: u32, typ: Type) -> (Option<Definition>, BlockId) {
         // Safety: This function must always be paired with [Self::end_global]
         let previous_function = self.current_function.take();
         let previous_block = std::mem::replace(&mut self.current_block, BlockId::ENTRY_BLOCK);
-        let definition_id = self.next_definition_id();
-        self.current_function = Some(Definition::new(name, definition_id));
+        let definition_id = next_definition_id();
+        self.referenced_names.insert(definition_id, name.clone());
+        self.current_function = Some(Definition::new(name, definition_id, generic_count, typ));
         (previous_function, previous_block)
     }
 
@@ -385,7 +428,6 @@ where
         // Safety: This function must always be paired with [Self::start_global]
         let mut finished_function = std::mem::replace(&mut self.current_function, start_global_state.0).unwrap();
         finished_function.definition_types = std::mem::take(&mut self.definition_types);
-        finished_function.external_types = std::mem::take(&mut self.external_types);
 
         let definition_id = finished_function.id;
         self.current_block = start_global_state.1;
@@ -396,7 +438,13 @@ where
 
     fn lambda(&mut self, lambda: &cst::Lambda, name: Option<Name>, expr: ExprId) -> Value {
         let name = name.unwrap_or_else(|| Arc::new("lambda".to_string()));
-        let id = self.new_definition(name, |this| {
+        let typ = self.convert_type(&self.types.result.maps.expr_types[&expr], None);
+
+        // Lambdas aren't really generic but they may capture generics from their containing
+        // function. Marking them as generic here effectively hoists out the generic parameters.
+        let generics_count = self.generics_in_scope.len() as u32;
+
+        let id = self.new_definition(name.clone(), generics_count, typ.clone(), |this| {
             for (i, parameter) in lambda.parameters.iter().enumerate() {
                 let parameter_type = &this.types.result.maps.pattern_types[&parameter.pattern];
                 this.push_parameter(this.convert_type(parameter_type, None));
@@ -408,8 +456,7 @@ where
             let return_value = this.expression(lambda.body);
             this.terminate_block(TerminatorInstruction::Return(return_value));
         });
-        let typ = self.convert_type(&self.types.result.maps.expr_types[&expr].clone(), None);
-        self.reference_definition(id, typ)
+        self.make_definition_value(id, name, typ)
     }
 
     fn if_(&mut self, if_: &cst::If, expr: ExprId) -> Value {
@@ -508,7 +555,7 @@ where
                 // Cast the whole value being matched `(tag, union)` to `(tag, this_variant)`
                 // and extract the variant from the tuple.
                 let variant = self.extract_variant(value_being_matched, *variant_index);
-                let variant_type = self.type_of_value(variant);
+                let variant_type = self.type_of_value(&variant);
 
                 // And for each variable, extract the relevant field of the variant
                 for (i, argument) in case.arguments.iter().enumerate() {
@@ -540,7 +587,7 @@ where
     }
 
     fn extract_tag_value(&mut self, value_being_matched: Value) -> Value {
-        match self.type_of_value(value_being_matched) {
+        match self.type_of_value(&value_being_matched) {
             Type::Primitive(_) => value_being_matched,
             Type::Tuple(fields) => {
                 if fields.is_empty() {
@@ -559,7 +606,7 @@ where
     /// Cast & Extract the variant value from the given `(tag, union)` tuple.
     /// Returns the variant (as a tuple, no longer a union).
     fn extract_variant(&mut self, value_being_matched: Value, variant_index: usize) -> Value {
-        let fields = match self.type_of_value(value_being_matched) {
+        let fields = match self.type_of_value(&value_being_matched) {
             Type::Tuple(fields) => fields,
             _ => unreachable!("Only `(tag, union)` tuples may have fields to extract"),
         };
@@ -601,7 +648,7 @@ where
         fields.sort_unstable_by_key(|(name, _)| field_order.get(name).unwrap_or(&0));
 
         let fields = mapvec(fields, |(_name, value)| value);
-        let tuple_type = Type::Tuple(Arc::new(mapvec(&fields, |value| self.type_of_value(*value))));
+        let tuple_type = Type::Tuple(Arc::new(mapvec(&fields, |value| self.type_of_value(value))));
 
         self.push_instruction(Instruction::MakeTuple(fields), tuple_type)
     }
@@ -622,7 +669,7 @@ where
                 }
             },
             cst::Pattern::Literal(_) => (),
-            cst::Pattern::Constructor(_type, arguments) => match self.type_of_value(value) {
+            cst::Pattern::Constructor(_type, arguments) => match self.type_of_value(&value) {
                 Type::Union(_variants) => todo!("Deconstruct union"),
                 Type::Tuple(fields) => {
                     for (i, (field_type, argument)) in fields.iter().zip(arguments).enumerate() {
@@ -643,10 +690,19 @@ where
     }
 
     fn finish(self) -> Mir {
-        Mir {
-            definitions: self.finished_functions,
-            names: self.name_mappings,
-            referenced_external_items: FxHashSet::default(),
+        Mir { definitions: self.finished_functions, names: self.referenced_names }
+    }
+
+    /// Sets [self.generics_in_scope] to a map mapping each generic from the given type to a
+    /// `[mir::Generic]` used when translating [type_inference::types::Type]s into [crate::mir::Type]s.
+    fn set_generics_in_scope(&mut self, definition_type: &TCType) {
+        use type_inference::types::Type;
+        if let Type::Forall(generics, _) = definition_type {
+            for (i, generic) in generics.iter().enumerate() {
+                self.generics_in_scope.insert(generic.clone(), Generic(i as u32));
+            }
+        } else {
+            self.generics_in_scope.clear();
         }
     }
 
@@ -654,26 +710,30 @@ where
     fn type_definition(&mut self, _type_definition: &cst::TypeDefinition) {
         // For a type definition, each generalized name will be each publically visible constructor
         for (constructor_name, constructor_type) in &self.types.result.generalized {
+            self.set_generics_in_scope(&constructor_type);
             let constructor_name = *constructor_name;
 
             // TODO: This doesn't include the tag for unions
             if let crate::type_inference::types::Type::Function(function) = constructor_type.ignore_forall() {
-                self.define_type_constructor(constructor_name, &function.parameters)
+                self.define_type_constructor(constructor_name, constructor_type, &function.parameters)
             } else {
                 // todo!("Non-function type constructors: {constructor_name}: {constructor_type}")
-                self.define_type_constructor(constructor_name, &[])
+                self.define_type_constructor(constructor_name, constructor_type, &[])
             }
         }
     }
 
     fn define_type_constructor(
-        &mut self, name_id: NameId, parameter_types: &[crate::type_inference::types::ParameterType],
+        &mut self, name_id: NameId, constructor_type: &TCType,
+        field_types: &[crate::type_inference::types::ParameterType],
     ) {
         let top_level_name = TopLevelName::new(self.top_level_id, name_id);
         let name = self.context()[name_id].clone();
+        let typ = self.convert_type(constructor_type, None);
+        let generic_count = self.generics_in_scope.len() as u32;
 
-        let id = self.new_definition(name, |this| {
-            let (fields, field_types) = parameter_types
+        let id = self.new_definition(name, generic_count, typ, |this| {
+            let (fields, field_types) = field_types
                 .iter()
                 .enumerate()
                 .map(|(i, field_type)| {
@@ -687,6 +747,6 @@ where
             let tuple = this.push_instruction(Instruction::MakeTuple(fields), result_type);
             this.terminate_block(TerminatorInstruction::Return(tuple));
         });
-        self.name_mappings.insert(top_level_name, id);
+        self.name_to_id.insert(top_level_name, id);
     }
 }

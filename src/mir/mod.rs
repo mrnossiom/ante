@@ -11,17 +11,16 @@
 //! This file contains the various types which comprise the IR. See the submodules for the
 //! passes that translate the cst to the IR.
 
-use std::sync::Arc;
+use std::sync::{
+    Arc,
+    atomic::{AtomicU32, Ordering},
+};
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::{
     lexer::token::{F64, FloatKind, IntegerKind},
-    parser::{
-        cst::Name,
-        ids::{TopLevelId, TopLevelName},
-    },
-    type_inference::generics::Generic,
+    parser::cst::Name,
     vecmap::VecMap,
 };
 pub(crate) mod builder;
@@ -32,26 +31,47 @@ pub(crate) mod monomorphization;
 pub(crate) struct Mir {
     pub(crate) definitions: Definitions,
 
-    /// Maps [TopLevelName]s to their new [DefinitionId]
-    #[allow(unused)]
-    pub(crate) names: FxHashMap<TopLevelName, DefinitionId>,
-
-    /// Any external names referenced in this MIR that need to be linked in later.
-    /// Note that this excludes any actual `extern` definitions which aren't expected to be linked in.
-    #[allow(unused)]
-    pub(crate) referenced_external_items: FxHashSet<TopLevelId>,
+    /// Maps the DefinitionId of every referenced definition in this Mir to its name
+    pub(crate) names: FxHashMap<DefinitionId, Name>,
 }
 
 pub(crate) type Definitions = FxHashMap<DefinitionId, Definition>;
 
+impl Mir {
+    pub fn extend(mut self, other: Mir) -> Mir {
+        self.definitions.extend(other.definitions);
+        self.names.extend(other.names);
+        self
+    }
+
+    fn get(&self, id: DefinitionId) -> Option<&Definition> {
+        self.definitions.get(&id)
+    }
+}
+
+impl std::ops::Index<DefinitionId> for Mir {
+    type Output = Definition;
+
+    fn index(&self, index: DefinitionId) -> &Self::Output {
+        &self.definitions[&index]
+    }
+}
+
 /// A Definition may be a function or global. Globals are represented
 /// as single blocks with no parameters to account for them needing to
 /// construct tuples which are instructions in this IR.
+#[derive(Clone)]
 pub(crate) struct Definition {
     pub(crate) name: Name,
 
-    /// The unique FunctionId identifying this function
+    /// The unique DefinitionId identifying this function
     id: DefinitionId,
+
+    /// The number of generic type arguments of this definition
+    generic_count: u32,
+
+    /// The type of this Definition. This is lazily computed from [Self::function_type].
+    typ: Type,
 
     /// A function's blocks are always non-empty, consisting of at least an entry
     /// block with `BlockId(0)`
@@ -69,27 +89,34 @@ pub(crate) struct Definition {
     /// Types of any definition ids used in this [Definition]. This may include
     /// external definitions not included in this [Mir] as well.
     definition_types: FxHashMap<DefinitionId, Type>,
-
-    external_types: FxHashMap<TopLevelName, Type>,
 }
 
 impl Definition {
-    fn new(name: Name, id: DefinitionId) -> Definition {
+    fn new(name: Name, id: DefinitionId, generic_count: u32, typ: Type) -> Definition {
         let mut blocks = VecMap::default();
         let entry = blocks.push(Block::new(Vec::new()));
         assert_eq!(entry, BlockId::ENTRY_BLOCK);
+
         Definition {
             name,
             id,
             blocks,
+            typ,
+            generic_count,
             instructions: VecMap::default(),
             instruction_result_types: VecMap::default(),
             definition_types: Default::default(),
-            external_types: Default::default(),
         }
     }
 
-    pub fn type_of_value(&self, value: Value) -> Type {
+    /// Clone this definition but with a new id
+    fn clone_with_id(&self, new_id: DefinitionId) -> Self {
+        let mut clone = self.clone();
+        clone.id = new_id;
+        clone
+    }
+
+    pub fn type_of_value(&self, value: &Value) -> Type {
         match value {
             Value::Error => Type::ERROR,
             Value::Unit => Type::UNIT,
@@ -97,18 +124,15 @@ impl Definition {
             Value::Char(_) => Type::CHAR,
             Value::Integer(constant) => Type::int(constant.kind()),
             Value::Float(constant) => Type::float(constant.kind()),
-            Value::InstructionResult(instruction_id) => self.instruction_result_types[instruction_id].clone(),
+            Value::InstructionResult(instruction_id) => self.instruction_result_types[*instruction_id].clone(),
             Value::Parameter(block_id, parameter_index) => {
-                self.blocks[block_id].parameter_types[parameter_index as usize].clone()
+                self.blocks[*block_id].parameter_types[*parameter_index as usize].clone()
             },
             Value::Definition(definition_id) => self
                 .definition_types
                 .get(&definition_id)
                 .cloned()
                 .unwrap_or_else(|| panic!("No definition type for {definition_id}")),
-            Value::External(name) => {
-                self.external_types.get(&name).cloned().unwrap_or_else(|| panic!("No external type for {name}"))
-            },
         }
     }
 
@@ -175,6 +199,11 @@ impl Definition {
         assert_eq!(visited.len(), self.blocks.len());
         order
     }
+
+    /// True if this function is not generic over any type variables
+    fn is_monomorphic(&self) -> bool {
+        self.generic_count == 0
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -227,25 +256,25 @@ pub enum Value {
     /// If the block is the entry block, these are the function parameters
     Parameter(BlockId, u32),
 
-    /// A global value identified by its index in the CST traversal order
-    /// of the [TopLevelName] that defined it. Usually this index is 0, but
-    /// since lambdas are broken out into their own definitions, these may
-    /// be assigned higher indices.
+    /// A global, often a function
     Definition(DefinitionId),
-
-    /// A name external to the current [TopLevelItem]. This name will have to
-    /// be resolved to a [DefinitionId] later on via [Mir::names] once it is linked in.
-    External(TopLevelName),
 }
 
-/// A function or lambda originally located within [Self::item], identified
-/// by its index in the CST traversal order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) struct DefinitionId {
-    item: TopLevelId,
-    index: u32,
+pub(crate) struct DefinitionId(u32);
+
+/// DefinitionIds are assigned in monotonically increasing order. These IDs are nondeterministic in
+/// practice due to this counter being used concurrently. As a result, anything using these ids
+/// should not be used as the input or result of an incremental computation.
+static NEXT_DEFINITION_ID: AtomicU32 = AtomicU32::new(0);
+
+fn next_definition_id() -> DefinitionId {
+    // Relaxed ordering since we only care the resulting id is unique
+    DefinitionId(NEXT_DEFINITION_ID.fetch_add(1, Ordering::Relaxed))
 }
 
+/// A basic block with linear control-flow until the terminator instruction which may branch.
+#[derive(Clone)]
 pub struct Block {
     pub parameter_types: Vec<Type>,
     pub instructions: Vec<InstructionId>,
@@ -262,6 +291,7 @@ impl Block {
     }
 }
 
+#[derive(Clone)]
 pub enum Instruction {
     Call {
         function: Value,
@@ -279,12 +309,20 @@ pub enum Instruction {
     /// The destination type is given by the type of the resulting value.
     /// Requires the destination type's size to be less than or equal to the original type's size.
     Transmute(Value),
+
+    /// Instantiate a polymorphic value with concrete types. The actual bindings are not given
+    /// but can be found from the result type.
+    Instantiate(DefinitionId, Arc<GenericBindings>),
+
+    /// Returns the given value as-is. Used by monomorphization to replace `Instantiate` instructions.
+    Id(Value),
 }
 
 /// A [JmpTarget] is a block to jump to with arguments for that block.
 /// A block's arguments is MIR's equivalent of PHI values in other SSA-based IRs.
 type JmpTarget = (BlockId, Option<Value>);
 
+#[derive(Clone)]
 pub enum TerminatorInstruction {
     Jmp(JmpTarget),
     If {
@@ -382,7 +420,7 @@ impl FloatConstant {
 }
 
 /// TODO: This is very similar to [crate::type_inference::types::Type] - do we really need both?
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Type {
     Primitive(PrimitiveType),
     Tuple(Arc<Vec<Type>>),
@@ -391,8 +429,6 @@ pub enum Type {
     /// A C-style union of the given types. Sum types are encoded as this + a tag.
     Union(Arc<Vec<Type>>),
 
-    /// TODO: These should probably be in a simpler form.
-    /// E.g. numbered from the function they were declared in.
     Generic(Generic),
 }
 
@@ -415,6 +451,10 @@ impl Type {
         Type::Tuple(Arc::new(vec![Type::POINTER, Type::int(IntegerKind::U32)]))
     }
 
+    pub fn generic(index: u32) -> Type {
+        Type::Generic(Generic(index))
+    }
+
     /// The type of a tagged-union's tag
     pub fn tag_type() -> Type {
         Type::int(IntegerKind::U8)
@@ -435,7 +475,14 @@ impl Type {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+/// Generics are represented as their index into their function's generic_count
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub struct Generic(u32);
+
+/// Each nth item in the bindings Vec corresponds to the nth generic of a definition.
+type GenericBindings = Vec<Type>;
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum PrimitiveType {
     Error,
     Unit,
@@ -447,7 +494,7 @@ pub enum PrimitiveType {
     Float(FloatKind),
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FunctionType {
     pub parameters: Vec<Type>,
     pub return_type: Type,
@@ -457,13 +504,11 @@ pub struct FunctionType {
 mod tests {
     use std::sync::Arc;
 
-    use crate::mir::{Block, BlockId, Definition, DefinitionId, TerminatorInstruction, Value};
+    use crate::mir::{Block, BlockId, Definition, TerminatorInstruction, Type, Value, next_definition_id};
 
     /// Create an empty function for testing
     fn make_function() -> Definition {
-        // Safety: `FunctionId` is POD and this should never be read by `topological_sort` anyway
-        let id = unsafe { std::mem::zeroed::<DefinitionId>() };
-        Definition::new(Arc::new(String::new()), id)
+        Definition::new(Arc::new(String::new()), next_definition_id(), 0, Type::ERROR)
     }
 
     #[test]

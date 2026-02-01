@@ -5,28 +5,31 @@ use crate::{
     mir::{self, Block, BlockId, DefinitionId, FloatConstant, IntConstant, PrimitiveType, Type, Value},
 };
 
-impl Display for mir::Definition {
+impl Display for mir::Mir {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        fmt_function(self, f)
+        for function in self.definitions.values() {
+            fmt_function(function, self, f)?;
+            writeln!(f)?;
+        }
+        Ok(())
     }
 }
 
-impl Display for Value {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        match self {
-            Value::Error => write!(f, "#error"),
-            Value::Unit => write!(f, "()"),
-            Value::Bool(b) => write!(f, "{b}"),
-            Value::Char(c) => write!(f, "{c}"),
-            Value::Integer(int) => write!(f, "{int}"),
-            Value::Float(float) => write!(f, "{float}"),
-            Value::InstructionResult(instruction_id) => write!(f, "v{}", instruction_id.0),
-            Value::Parameter(block_id, i) => write!(f, "b{}_{}", block_id.0, i),
-            Value::Definition(id) => write!(f, "{id}"),
-            Value::External(id) => write!(f, "e{id}"),
-        }
-    }
-}
+// impl Display for Value {
+//     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+//         match self {
+//             Value::Error => write!(f, "#error"),
+//             Value::Unit => write!(f, "()"),
+//             Value::Bool(b) => write!(f, "{b}"),
+//             Value::Char(c) => write!(f, "{c}"),
+//             Value::Integer(int) => write!(f, "{int}"),
+//             Value::Float(float) => write!(f, "{float}"),
+//             Value::InstructionResult(instruction_id) => write!(f, "v{}", instruction_id.0),
+//             Value::Parameter(block_id, i) => write!(f, "b{}_{}", block_id.0, i),
+//             Value::Definition(id) => write!(f, "{id}"),
+//         }
+//     }
+// }
 
 impl Display for IntConstant {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
@@ -56,11 +59,7 @@ impl Display for FloatConstant {
 
 impl Display for DefinitionId {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        write!(f, "f{}", self.item)?;
-        if self.index != 0 {
-            write!(f, "_{}", self.index)?;
-        }
-        Ok(())
+        write!(f, "d{}", self.0)
     }
 }
 
@@ -105,7 +104,7 @@ impl Display for Type {
                     write!(f, " -> ({})", function_type.return_type)
                 }
             },
-            Type::Generic(id) => write!(f, "{id}"),
+            Type::Generic(id) => write!(f, "'{}", id.0),
             Type::Union(variants) => {
                 write!(f, "{{")?;
                 for (i, variant) in variants.iter().enumerate() {
@@ -138,76 +137,80 @@ impl Display for PrimitiveType {
     }
 }
 
-fn fmt_function(function: &mir::Definition, f: &mut Formatter) -> Result {
+fn fmt_function(function: &mir::Definition, mir: &mir::Mir, f: &mut Formatter) -> Result {
     write!(f, "fun {} {}", function.name, function.id)?;
     for (block_id, block) in function.blocks.iter() {
         writeln!(f)?;
-        fmt_block(block_id, function, block, f)?;
+        fmt_block(block_id, mir, function, block, f)?;
     }
     Ok(())
 }
 
-fn fmt_block(id: BlockId, function: &mir::Definition, block: &Block, f: &mut Formatter) -> Result {
+fn fmt_block(id: BlockId, mir: &mir::Mir, function: &mir::Definition, block: &Block, f: &mut Formatter) -> Result {
     write!(f, "  b{}(", id.0)?;
+    let v = |value: &Value| ValueDisplay { value: *value, mir };
+
     for (i, typ) in block.parameter_types.iter().enumerate() {
         if i != 0 {
             write!(f, ", ")?;
         }
-        write!(f, "{}: {}", Value::Parameter(id, i as u32), typ)?;
+        write!(f, "{}: {typ}", v(&Value::Parameter(id, i as u32)))?;
     }
     writeln!(f, "):")?;
 
     for instruction_id in block.instructions.iter().copied() {
         let instruction = &function.instructions[instruction_id];
-        fmt_instruction(instruction_id, instruction, function, f)?;
+        fmt_instruction(instruction_id, instruction, mir, function, f)?;
     }
 
     match block.terminator.as_ref() {
-        Some(terminator) => fmt_terminator(terminator, f)?,
+        Some(terminator) => fmt_terminator(terminator, mir, f)?,
         None => write!(f, "  (no terminator)")?,
     }
 
     Ok(())
 }
 
-fn fmt_terminator(terminator: &mir::TerminatorInstruction, f: &mut Formatter<'_>) -> Result {
+fn fmt_terminator(terminator: &mir::TerminatorInstruction, mir: &mir::Mir, f: &mut Formatter<'_>) -> Result {
+    let v = |value: &Value| ValueDisplay { value: *value, mir };
     write!(f, "    ")?;
+
     match terminator {
         mir::TerminatorInstruction::Jmp((block_id, argument)) => {
             write!(f, "jmp {block_id}")?;
             if let Some(argument) = argument {
-                write!(f, " {argument}")?;
+                write!(f, " {}", v(argument))?;
             }
             Ok(())
         },
         mir::TerminatorInstruction::If { condition, then, else_, end } => {
-            write!(f, "if {condition} then {}", then.0)?;
+            write!(f, "if {} then {}", v(condition), then.0)?;
             if let Some(argument) = then.1 {
-                write!(f, " {argument}")?;
+                write!(f, " {}", v(&argument))?;
             }
             write!(f, " else {}", else_.0)?;
             if let Some(argument) = else_.1 {
-                write!(f, " {argument}")?;
+                write!(f, " {}", v(&argument))?;
             }
             write!(f, " end {end}")
         },
         mir::TerminatorInstruction::Unreachable => write!(f, "unreachable"),
-        mir::TerminatorInstruction::Return(value) => write!(f, "return {value}"),
+        mir::TerminatorInstruction::Return(value) => write!(f, "return {}", v(value)),
         mir::TerminatorInstruction::Switch { int_value, cases, else_, end } => {
-            writeln!(f, "switch {int_value}")?;
+            writeln!(f, "switch {}", v(int_value))?;
             for (i, (case_block, case_arg)) in cases.iter().enumerate() {
                 if i != 0 {
                     writeln!(f)?;
                 }
                 write!(f, "    | {i} -> {case_block}")?;
                 if let Some(arg) = case_arg {
-                    write!(f, " {arg}")?;
+                    write!(f, " {}", v(arg))?;
                 }
             }
             if let Some((else_block, else_arg)) = else_ {
                 write!(f, "\n    | _ -> {else_block}")?;
                 if let Some(arg) = else_arg {
-                    write!(f, " {arg}")?;
+                    write!(f, " {}", v(arg))?;
                 }
             }
             write!(f, "\n    end {end}")
@@ -216,29 +219,80 @@ fn fmt_terminator(terminator: &mir::TerminatorInstruction, f: &mut Formatter<'_>
 }
 
 fn fmt_instruction(
-    instruction_id: mir::InstructionId, instruction: &mir::Instruction, function: &mir::Definition,
+    instruction_id: mir::InstructionId, instruction: &mir::Instruction, mir: &mir::Mir, function: &mir::Definition,
     f: &mut Formatter<'_>,
 ) -> Result {
+    let v = |value: &Value| ValueDisplay { value: *value, mir };
+
     let result_type = &function.instruction_result_types[instruction_id];
-    write!(f, "    {}: {result_type} = ", Value::InstructionResult(instruction_id))?;
+    write!(f, "    {}: {result_type} = ", v(&Value::InstructionResult(instruction_id)))?;
 
     match instruction {
         mir::Instruction::Call { function, arguments } => {
-            write!(f, "{function}")?;
+            write!(f, "{}", v(function))?;
             for argument in arguments {
-                write!(f, " {argument}")?;
+                write!(f, " {}", v(argument))?;
             }
         },
-        mir::Instruction::IndexTuple { tuple, index } => write!(f, "{tuple}.{index}")?,
-        mir::Instruction::MakeTuple(fields) => write!(f, "({})", comma_separated(fields))?,
+        mir::Instruction::IndexTuple { tuple, index } => write!(f, "{}.{index}", v(tuple))?,
+        mir::Instruction::MakeTuple(fields) => write!(f, "({})", comma_separated(fields, mir))?,
         mir::Instruction::MakeString(s) => write!(f, "\"{s}\"")?,
-        mir::Instruction::StackAlloc(value) => write!(f, "alloca {value}")?,
-        mir::Instruction::Transmute(value) => write!(f, "transmute {value}")?,
+        mir::Instruction::StackAlloc(value) => write!(f, "alloca {}", v(value))?,
+        mir::Instruction::Transmute(value) => write!(f, "transmute {}", v(value))?,
+        mir::Instruction::Id(value) => write!(f, "id {}", v(value))?,
+        mir::Instruction::Instantiate(definition_id, generics) => {
+            write!(f, "instantiate {definition_id}")?;
+            for generic in generics.iter() {
+                write!(f, " {}", generic)?;
+            }
+        },
     }
 
     writeln!(f)
 }
 
-fn comma_separated<T: ToString>(items: &[T]) -> String {
-    mapvec(items, ToString::to_string).join(", ")
+fn comma_separated(items: &[Value], mir: &mir::Mir) -> String {
+    items.iter().map(|v| ValueDisplay { value: *v, mir }.to_string()).collect::<Vec<_>>().join(", ")
+}
+
+struct ValueDisplay<'local> {
+    value: Value,
+    mir: &'local mir::Mir,
+}
+
+impl<'local> Display for ValueDisplay<'local> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        match &self.value {
+            Value::Error => write!(f, "#error"),
+            Value::Unit => write!(f, "()"),
+            Value::Bool(b) => write!(f, "{b}"),
+            Value::Char(c) => write!(f, "{c}"),
+            Value::Integer(int) => write!(f, "{int}"),
+            Value::Float(float) => write!(f, "{float}"),
+            Value::InstructionResult(instruction_id) => write!(f, "v{}", instruction_id.0),
+            Value::Parameter(block_id, i) => write!(f, "b{}_{}", block_id.0, i),
+            Value::Definition(id) => {
+                if let Some(name) = self.mir.names.get(id) {
+                    write!(f, "{name}_")?;
+                }
+                write!(f, "{id}")
+            },
+        }
+    }
+}
+
+impl Display for Value {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        match self {
+            Value::Error => write!(f, "#error"),
+            Value::Unit => write!(f, "()"),
+            Value::Bool(b) => write!(f, "{b}"),
+            Value::Char(c) => write!(f, "{c}"),
+            Value::Integer(int) => write!(f, "{int}"),
+            Value::Float(float) => write!(f, "{float}"),
+            Value::InstructionResult(instruction_id) => write!(f, "v{}", instruction_id.0),
+            Value::Parameter(block_id, i) => write!(f, "b{}_{}", block_id.0, i),
+            Value::Definition(id) => write!(f, "{id}"),
+        }
+    }
 }

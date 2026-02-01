@@ -17,7 +17,7 @@ where
     pub(super) fn convert_type(&self, typ: &TCType, args: Option<&[TCType]>) -> Type {
         match typ.follow(&self.types.bindings) {
             TCType::Primitive(primitive_type) => self.convert_primitive_type(*primitive_type, args),
-            TCType::Generic(generic) => Type::Generic(*generic),
+            TCType::Generic(generic) => Type::Generic(self.generics_in_scope[&generic]),
             // All type variables should be bound when we finish type inference
             TCType::Variable(_type_variable_id) => Type::ERROR,
             TCType::Function(function_type) => {

@@ -62,6 +62,16 @@ pub struct ExtendedTopLevelContext {
     /// This maps expression to a map from each field name in the Constructor
     /// expresssion to the field's expected index in its type.
     constructor_field_orders: BTreeMap<ExprId, BTreeMap<NameId, u32>>,
+
+    /// Maps each [PathId] that has been instantiated during type inference to
+    /// it's non-generic type before instantiation, along with the instantiation bindings that were
+    /// later used to instantiate it.
+    ///
+    /// The post-instantiation type is already associated with the [PathId] in the result of type
+    /// inference.
+    ///
+    /// Non-generic [PathId]s are not in this map.
+    instantiations: FxHashMap<PathId, (Arc<Type>, Vec<Type>)>,
 }
 
 impl<'local, 'innter> TypeChecker<'local, 'innter> {
@@ -103,6 +113,7 @@ impl ExtendedTopLevelContext {
             decision_trees: Default::default(),
             member_access_indices: Default::default(),
             constructor_field_orders: Default::default(),
+            instantiations: Default::default(),
         }
     }
 
@@ -207,12 +218,10 @@ impl ExtendedTopLevelContext {
         self.name_origins.insert(name_id, origin);
     }
 
-    #[allow(unused)]
     pub(crate) fn path_origin(&self, path_id: PathId) -> Option<Origin> {
         self.path_origins.get(&path_id).copied()
     }
 
-    #[allow(unused)]
     pub(crate) fn name_origin(&self, name_id: NameId) -> Option<Origin> {
         self.name_origins.get(&name_id).copied()
     }
@@ -233,7 +242,6 @@ impl ExtendedTopLevelContext {
 
     /// Retrieve a given tree from the given expression (expected to be a match expression)
     /// or panic if there is none.
-    #[allow(unused)]
     pub(crate) fn decision_tree(&self, expr: ExprId) -> Option<&(ExprId, DecisionTree)> {
         self.decision_trees.get(&expr)
     }
@@ -245,7 +253,6 @@ impl ExtendedTopLevelContext {
     }
 
     /// Retrieve which field index the member access' field refers to in the object type
-    #[allow(unused)]
     pub(crate) fn member_access_index(&self, expr: ExprId) -> Option<u32> {
         self.member_access_indices.get(&expr).copied()
     }
@@ -254,9 +261,16 @@ impl ExtendedTopLevelContext {
         self.constructor_field_orders.insert(id, field_order);
     }
 
-    #[allow(unused)]
     pub(crate) fn constructor_field_order(&self, id: ExprId) -> Option<&BTreeMap<NameId, u32>> {
         self.constructor_field_orders.get(&id)
+    }
+
+    pub(crate) fn insert_instantiation(&mut self, path: PathId, old_type: Arc<Type>, bindings: Vec<Type>) {
+        self.instantiations.insert(path, (old_type, bindings));
+    }
+
+    pub(crate) fn get_instantiation(&self, path: PathId) -> Option<&(Arc<Type>, Vec<Type>)> {
+        self.instantiations.get(&path)
     }
 }
 

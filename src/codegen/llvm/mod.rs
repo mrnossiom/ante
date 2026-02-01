@@ -14,7 +14,7 @@ use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    incremental::{CodegenLlvm, DbHandle, GetItemRaw},
+    incremental::{CodegenLlvm, DbHandle},
     iterator_extensions::mapvec,
     lexer::token::{FloatKind, IntegerKind},
     mir::{self, BlockId, DefinitionId, FloatConstant, PrimitiveType, TerminatorInstruction},
@@ -32,12 +32,15 @@ pub fn initialize_native_target() {
     Target::initialize_native(&config).unwrap();
 }
 
-pub fn codegen_llvm_impl(context: &CodegenLlvm, compiler: &DbHandle) -> Option<CodegenLlvmResult> {
-    let mir = mir::builder::build_initial_mir(compiler, context.0)?;
+pub fn codegen_llvm_impl(_context: &CodegenLlvm, compiler: &DbHandle) -> Option<CodegenLlvmResult> {
+    // TODO: Cache monomorphization result. This is extremely inefficient:
+    // we're remonomorphizing the whole program on every llvm codegen call
+    let mir = mir::monomorphization::monomorphize(compiler);
+
     let name = &mir.definitions.iter().next().map_or("_", |(_, function)| &function.name);
 
     let llvm = inkwell::context::Context::create();
-    let mut module = ModuleContext::new(&llvm, &mir, name, compiler);
+    let mut module = ModuleContext::new(&llvm, &mir, name);
 
     for (id, function) in &mir.definitions {
         module.codegen_function(function, *id);
@@ -89,12 +92,10 @@ fn native_target_machine() -> TargetMachine {
         .unwrap()
 }
 
-struct ModuleContext<'ctx, 'db> {
+struct ModuleContext<'ctx> {
     llvm: &'ctx inkwell::context::Context,
     module: Module<'ctx>,
     builder: Builder<'ctx>,
-
-    compiler: &'ctx DbHandle<'db>,
 
     mir: &'ctx mir::Mir,
 
@@ -111,10 +112,8 @@ struct ModuleContext<'ctx, 'db> {
     incoming: FxHashMap<BlockId, Vec<(BasicBlock<'ctx>, BasicValueEnum<'ctx>)>>,
 }
 
-impl<'ctx, 'db> ModuleContext<'ctx, 'db> {
-    fn new(
-        llvm: &'ctx inkwell::context::Context, mir: &'ctx mir::Mir, name: &str, compiler: &'ctx DbHandle<'db>,
-    ) -> Self {
+impl<'ctx> ModuleContext<'ctx> {
+    fn new(llvm: &'ctx inkwell::context::Context, mir: &'ctx mir::Mir, name: &str) -> Self {
         let module = llvm.create_module(name);
         let target = TargetMachine::get_default_triple();
         module.set_triple(&target);
@@ -122,7 +121,6 @@ impl<'ctx, 'db> ModuleContext<'ctx, 'db> {
             llvm,
             module,
             mir,
-            compiler,
             current_function: None,
             current_function_value: None,
             values: Default::default(),
@@ -263,14 +261,22 @@ impl<'ctx, 'db> ModuleContext<'ctx, 'db> {
     fn find_return_type(&self, function: &mir::Definition) -> mir::Type {
         for (_, block) in function.blocks.iter() {
             if let Some(TerminatorInstruction::Return(value)) = &block.terminator {
-                return function.type_of_value(*value);
+                return function.type_of_value(value);
             }
         }
         mir::Type::ERROR
     }
 
-    fn get_function(&self, id: DefinitionId) -> &'ctx mir::Definition {
-        &self.mir.definitions[&id]
+    /// Return the given [mir::Definition] if it is within `self.mir`. Return `None` otherwise.
+    fn try_get_function(&self, id: DefinitionId) -> Option<&'ctx mir::Definition> {
+        self.mir.definitions.get(&id)
+    }
+
+    /// Returns the name of the given [DefinitionId].
+    /// As long as the [DefinitionId] is referenced in `self.mir`, this should never panic.
+    fn get_name(&self, id: DefinitionId) -> &'ctx str {
+        println!("get name {id}");
+        self.mir.names[&id].as_ref()
     }
 
     fn lookup_value(&mut self, value: mir::Value) -> BasicValueEnum<'ctx> {
@@ -294,36 +300,15 @@ impl<'ctx, 'db> ModuleContext<'ctx, 'db> {
                     return *value;
                 }
 
-                let typ = self.get_function(self.current_function.unwrap()).type_of_value(value);
+                let typ = self.try_get_function(self.current_function.unwrap()).unwrap().type_of_value(&value);
                 let typ = self.convert_function_type(&typ).unwrap();
 
-                let name = &self.get_function(function_id).name;
+                let name = self.get_name(function_id);
+
                 let function_value =
                     self.module.add_function(name, typ, None).as_global_value().as_pointer_value().into();
                 self.values.insert(value, function_value);
                 function_value
-            },
-            mir::Value::External(name) => {
-                if let Some(value) = self.values.get(&value) {
-                    return *value;
-                }
-
-                let typ = self.get_function(self.current_function.unwrap()).type_of_value(value);
-                let (_, context) = GetItemRaw(name.top_level_item).get(self.compiler);
-                let name = &context.names[name.local_name_id];
-
-                let global = match self.convert_function_type(&typ) {
-                    Some(function_type) => {
-                        self.module.add_function(name, function_type, None).as_global_value().as_pointer_value().into()
-                    },
-                    None => {
-                        let typ = self.convert_type(&typ);
-                        self.module.add_global(typ, None, name).as_pointer_value().into()
-                    },
-                };
-
-                self.values.insert(value, global);
-                global
             },
         }
     }
@@ -331,7 +316,7 @@ impl<'ctx, 'db> ModuleContext<'ctx, 'db> {
     fn codegen_instruction(&mut self, function: &mir::Definition, id: mir::InstructionId) {
         let result = match &function.instructions[id] {
             mir::Instruction::Call { function: function_value, arguments } => {
-                let typ = self.convert_function_type(&function.type_of_value(*function_value)).unwrap();
+                let typ = self.convert_function_type(&function.type_of_value(function_value)).unwrap();
                 let function = self.lookup_value(*function_value).into_pointer_value();
                 let arguments = mapvec(arguments, |arg| self.lookup_value(*arg).into());
                 self.builder
@@ -365,11 +350,15 @@ impl<'ctx, 'db> ModuleContext<'ctx, 'db> {
             },
             mir::Instruction::Transmute(value) => {
                 // Transmute the value by storing it in an alloca and loading it as a different type
-                let result_type = self.convert_type(&function.type_of_value(mir::Value::InstructionResult(id)));
+                let result_type = self.convert_type(&function.type_of_value(&mir::Value::InstructionResult(id)));
                 let value = self.lookup_value(*value);
                 let alloca = self.builder.build_alloca(value.get_type(), "").unwrap();
                 self.builder.build_store(alloca, value).unwrap();
                 self.builder.build_load(result_type, alloca, "").unwrap()
+            },
+            mir::Instruction::Id(value) => self.lookup_value(*value),
+            mir::Instruction::Instantiate(..) => {
+                unreachable!("Instruction::Instantiate remaining in the code during llvm codegen")
             },
         };
         self.values.insert(mir::Value::InstructionResult(id), result);

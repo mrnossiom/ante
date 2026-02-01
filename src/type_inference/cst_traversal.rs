@@ -148,7 +148,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             .or_else(|| self.current_extended_context().path_origin(path));
 
         let actual = match origin {
-            Some(Origin::TopLevelDefinition(id)) => self.type_of_top_level_name(&id),
+            Some(Origin::TopLevelDefinition(id)) => self.type_of_top_level_name(&id, Some(path)),
             Some(Origin::Local(name)) => self.name_types[&name].clone(),
             Some(Origin::TypeResolution) => self.resolve_type_resolution(path, expected),
             Some(Origin::Builtin(builtin)) => self.check_builtin(builtin, path),
@@ -167,12 +167,14 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     }
 
     /// Returns the instantiated type of the given TopLevelName.
-    pub(super) fn type_of_top_level_name(&mut self, name: &TopLevelName) -> Type {
+    ///
+    /// Stores the result of the instantiation (if any) to the given [PathId].
+    pub(super) fn type_of_top_level_name(&mut self, name: &TopLevelName, path: Option<PathId>) -> Type {
         if let Some(typ) = self.item_types.get(name) {
             typ.clone()
         } else {
             let typ = GetType(*name).get(self.compiler);
-            self.instantiate(typ)
+            self.instantiate(typ, path)
         }
     }
 
@@ -189,7 +191,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         self.current_extended_context_mut().insert_path_origin(path, Origin::TopLevelDefinition(id));
 
         let result = GetType(id).get(self.compiler);
-        self.instantiate(result)
+        self.instantiate(result, Some(path))
     }
 
     /// Issue a NameNotInScope error and return Type::Error

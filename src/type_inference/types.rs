@@ -357,12 +357,10 @@ impl Type {
             crate::parser::cst::Type::String => Type::STRING,
             crate::parser::cst::Type::Char => Type::CHAR,
             crate::parser::cst::Type::Named(path) => {
-                // TODO: is `current_resolve` sufficient or do we need the [ExtendedTopLevelContext]?
                 let origin = resolve.path_origins.get(path).copied();
                 Self::convert_origin_to_type(origin, Type::UserDefined)
             },
             crate::parser::cst::Type::Variable(name) => {
-                // TODO: is `current_resolve` sufficient or do we need the [ExtendedTopLevelContext]?
                 let origin = resolve.name_origins.get(name).copied();
                 Self::convert_origin_to_type(origin, |origin| Type::Generic(Generic::Named(origin)))
             },

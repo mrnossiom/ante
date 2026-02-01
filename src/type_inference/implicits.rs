@@ -106,7 +106,8 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         // TODO: Make this more efficient so we don't need to go through every single implicit
         if let Some(item) = self.current_item {
             for (name, name_id) in VisibleImplicits(item.source_file).get(self.compiler).iter() {
-                let name_type = self.type_of_top_level_name(name_id);
+                // TODO: Need to store generic instantiations
+                let name_type = self.type_of_top_level_name(name_id, None);
                 if self.try_unify(&name_type, target_type).is_ok() {
                     let origin = Origin::TopLevelDefinition(*name_id);
                     self.check_implicit_candidate(

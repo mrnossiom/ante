@@ -77,6 +77,9 @@ pub enum EmitTarget {
     /// A representation of the program with simpler control-flow created after type checking
     Mir,
 
+    /// Monomorphized Mir
+    MirMono,
+
     /// LLVM-IR or Cranelift IR depending on the selected backend
     Ir,
 }

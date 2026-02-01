@@ -86,6 +86,7 @@ fn compile(args: Cli) {
         Some(EmitTarget::AstR) => display_name_resolution(&compiler),
         Some(EmitTarget::AstT) => display_type_checking(&compiler, true),
         Some(EmitTarget::Mir) => display_mir(&compiler),
+        Some(EmitTarget::MirMono) => display_mir_mono(&compiler),
         Some(EmitTarget::Ir) => llvm_codegen_separate(&compiler, true).2,
         None => llvm_codegen_all(&compiler, &args.files),
     };
@@ -213,14 +214,31 @@ fn display_mir(compiler: &Db) -> BTreeSet<Diagnostic> {
         let parse = Parse(*file).get(compiler);
 
         for item in &parse.cst.top_level_items {
-            let mir = mir::builder::build_initial_mir(compiler, item.id);
+            let mir = mir::builder::build_initial_mir_with_shared_map(compiler, item.id);
             if let Some(mir) = mir {
-                for definition in mir.definitions.into_values() {
-                    println!("{definition}\n");
-                }
+                println!("{mir}");
             }
             let more_diagnostics: BTreeSet<_> = compiler.get_accumulated(TypeCheck(item.id));
             diagnostics.extend(more_diagnostics);
+        }
+    }
+    diagnostics
+}
+
+fn display_mir_mono(compiler: &Db) -> BTreeSet<Diagnostic> {
+    let mir = mir::monomorphization::monomorphize(compiler);
+    println!("{mir}");
+
+    let crates = GetCrateGraph.get(compiler);
+    let mut diagnostics = BTreeSet::new();
+    for crate_ in crates.values() {
+        for file in crate_.source_files.values() {
+            let parse = Parse(*file).get(compiler);
+
+            for item in parse.cst.top_level_items.iter() {
+                let more_diagnostics: BTreeSet<_> = compiler.get_accumulated(TypeCheck(item.id));
+                diagnostics.extend(more_diagnostics);
+            }
         }
     }
     diagnostics
@@ -272,7 +290,8 @@ fn llvm_codegen_separate(compiler: &Db, display_ir: bool) -> (Vec<Arc<Vec<u8>>>,
 fn display_llvm_bitcode(result: &CodegenLlvmResult, module_name: String) {
     let buffer = inkwell::memory_buffer::MemoryBuffer::create_from_memory_range(&result.module_bitcode, &module_name);
     let context = inkwell::context::Context::create();
-    let new_module = inkwell::module::Module::parse_bitcode_from_buffer(&buffer, &context).expect("Failed to parse llvm module bitcode");
+    let new_module = inkwell::module::Module::parse_bitcode_from_buffer(&buffer, &context)
+        .expect("Failed to parse llvm module bitcode");
     let module = new_module.print_to_string();
     let module = module.to_string_lossy();
     println!("{module}");

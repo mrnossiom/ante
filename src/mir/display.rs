@@ -9,7 +9,7 @@ impl Display for mir::Mir {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         for function in self.definitions.values() {
             fmt_function(function, self, f)?;
-            writeln!(f)?;
+            writeln!(f, "\n")?;
         }
         Ok(())
     }

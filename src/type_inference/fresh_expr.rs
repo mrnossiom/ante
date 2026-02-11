@@ -71,7 +71,7 @@ pub struct ExtendedTopLevelContext {
     /// inference.
     ///
     /// Non-generic [PathId]s are not in this map.
-    instantiations: FxHashMap<PathId, (Arc<Type>, Vec<Type>)>,
+    instantiations: FxHashMap<PathId, Vec<Type>>,
 }
 
 impl<'local, 'innter> TypeChecker<'local, 'innter> {
@@ -265,11 +265,11 @@ impl ExtendedTopLevelContext {
         self.constructor_field_orders.get(&id)
     }
 
-    pub(crate) fn insert_instantiation(&mut self, path: PathId, old_type: Arc<Type>, bindings: Vec<Type>) {
-        self.instantiations.insert(path, (old_type, bindings));
+    pub(crate) fn insert_instantiation(&mut self, path: PathId, bindings: Vec<Type>) {
+        self.instantiations.insert(path, bindings);
     }
 
-    pub(crate) fn get_instantiation(&self, path: PathId) -> Option<&(Arc<Type>, Vec<Type>)> {
+    pub(crate) fn get_instantiation(&self, path: PathId) -> Option<&Vec<Type>> {
         self.instantiations.get(&path)
     }
 }

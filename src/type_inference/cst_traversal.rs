@@ -148,7 +148,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             .or_else(|| self.current_extended_context().path_origin(path));
 
         let actual = match origin {
-            Some(Origin::TopLevelDefinition(id)) => self.type_of_top_level_name(&id, Some(path)),
+            Some(Origin::TopLevelDefinition(id)) => self.type_of_top_level_name(&id, path),
             Some(Origin::Local(name)) => self.name_types[&name].clone(),
             Some(Origin::TypeResolution) => self.resolve_type_resolution(path, expected),
             Some(Origin::Builtin(builtin)) => self.check_builtin(builtin, path),
@@ -169,12 +169,46 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     /// Returns the instantiated type of the given TopLevelName.
     ///
     /// Stores the result of the instantiation (if any) to the given [PathId].
-    pub(super) fn type_of_top_level_name(&mut self, name: &TopLevelName, path: Option<PathId>) -> Type {
+    pub(super) fn type_of_top_level_name(&mut self, name: &TopLevelName, path: PathId) -> Type {
         if let Some(typ) = self.item_types.get(name) {
             typ.clone()
         } else {
             let typ = GetType(*name).get(self.compiler);
-            self.instantiate(typ, path)
+            let (typ, bindings) = self.instantiate(typ);
+            if let Some(bindings) = bindings {
+                self.current_extended_context_mut().insert_instantiation(path, bindings);
+            }
+            typ
+        }
+    }
+
+    /// Returns the type of a [TopLevelName], possibly instantiating it and returning the bindings,
+    /// if any, along with the type.
+    pub(super) fn type_and_bindings_of_top_level_name(&mut self, name: &TopLevelName) -> (Type, Option<Vec<Type>>) {
+        if let Some(typ) = self.item_types.get(name) {
+            (typ.clone(), None)
+        } else {
+            let typ = GetType(*name).get(self.compiler);
+            self.instantiate(typ)
+        }
+    }
+
+    /// Instantiate the given type, returning the instantiated type and the instantiation bindings.
+    ///
+    /// This function should not be used outside of [Self::type_and_bindings_of_top_level_name] or [Self::type_of_top_level_name]
+    /// since the resulting bindings always need to be remembered.
+    fn instantiate(&mut self, typ: Type) -> (Type, Option<Vec<Type>>) {
+        match typ {
+            Type::Forall(generics, old_type) => {
+                let substitutions = generics.iter().map(|generic| (*generic, self.next_type_variable())).collect();
+                let typ = old_type.substitute(&substitutions, &self.bindings);
+
+                let bindings = (!substitutions.is_empty()).then(|| {
+                    mapvec(generics.iter(), |generic| substitutions[generic].clone())
+                });
+                (typ, bindings)
+            },
+            other => (other, None),
         }
     }
 
@@ -189,9 +223,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
 
         // Remember what this `Origin::TypeResolution` path actually refers to from now on
         self.current_extended_context_mut().insert_path_origin(path, Origin::TopLevelDefinition(id));
-
-        let result = GetType(id).get(self.compiler);
-        self.instantiate(result, Some(path))
+        self.type_of_top_level_name(&id, path)
     }
 
     /// Issue a NameNotInScope error and return Type::Error

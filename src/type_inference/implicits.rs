@@ -92,6 +92,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 let name = self.current_extended_context()[name].clone();
                 self.check_implicit_candidate(
                     name_type,
+                    None,
                     target_type,
                     name,
                     origin,
@@ -107,11 +108,12 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         if let Some(item) = self.current_item {
             for (name, name_id) in VisibleImplicits(item.source_file).get(self.compiler).iter() {
                 // TODO: Need to store generic instantiations
-                let name_type = self.type_of_top_level_name(name_id, None);
+                let (name_type, bindings) = self.type_and_bindings_of_top_level_name(name_id);
                 if self.try_unify(&name_type, target_type).is_ok() {
                     let origin = Origin::TopLevelDefinition(*name_id);
                     self.check_implicit_candidate(
                         name_type,
+                        bindings,
                         target_type,
                         name.clone(),
                         origin,
@@ -123,7 +125,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             }
         }
 
-        let (name, origin, name_type, arguments) = if candidates.is_empty() {
+        let (name, origin, bindings, name_type, arguments) = if candidates.is_empty() {
             self.issue_no_implicit_found_error(target_type, parameter_index, function);
             return None;
         } else if candidates.len() == 1 {
@@ -134,20 +136,20 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         };
 
         let location = function.locate(self);
-        Some(self.create_implicit_argument_expr(name, origin, name_type, arguments, location))
+        Some(self.create_implicit_argument_expr(name, origin, bindings, name_type, arguments, location))
     }
 
     /// Check if the given `implicit_type` matches the `target_type` directly, or if it can be
     /// called as a function to produce the target type. If either are true, push the candidate to
     /// the candidates list.
     fn check_implicit_candidate(
-        &mut self, implicit_type: Type, target_type: &Type, name: Name, origin: Origin, candidates: &mut Candidates,
-        parameter_index: usize, function: ExprId,
+        &mut self, implicit_type: Type, type_bindings: Option<Vec<Type>>, target_type: &Type, name: Name,
+        origin: Origin, candidates: &mut Candidates, parameter_index: usize, function: ExprId,
     ) {
         match self.implicit_type_matches(&implicit_type, target_type) {
             ImplicitMatch::NoMatch => (),
             ImplicitMatch::MatchedAsIs => {
-                candidates.push((name, origin, implicit_type, Vec::new()));
+                candidates.push((name, origin, type_bindings, implicit_type, Vec::new()));
             },
             ImplicitMatch::Call(function_type) => {
                 // TODO: Make this algorithm iterative instead of recursive
@@ -161,7 +163,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 }
 
                 if arguments.len() == function_type.parameters.len() {
-                    candidates.push((name, origin, implicit_type, arguments));
+                    candidates.push((name, origin, type_bindings, implicit_type, arguments));
                 }
             },
         }
@@ -199,7 +201,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         let type_string = self.type_to_string(&implicit_type);
         let function_name = self.try_get_name(function);
         let location = function.locate(self);
-        let matches = mapvec(matching, |(name, _, _, _)| name);
+        let matches = mapvec(matching, |(name, _, _, _, _)| name);
         self.compiler.accumulate(Diagnostic::MultipleImplicitsFound {
             matches,
             type_string,
@@ -283,12 +285,19 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     /// - 0 arguments: The expression is a variable
     /// - 1+ arguments: The expression is a function call to the given name, using the given arguments.
     fn create_implicit_argument_expr(
-        &mut self, name: Name, origin: Origin, name_type: Type, arguments: Vec<cst::Argument>, location: Location,
+        &mut self, name: Name, origin: Origin, type_bindings: Option<Vec<Type>>, name_type: Type,
+        arguments: Vec<cst::Argument>, location: Location,
     ) -> ExprId {
         let name = name.as_ref().clone();
         let path = self.push_path(cst::Path::ident(name, location.clone()), name_type.clone(), location.clone());
-        self.current_extended_context_mut().insert_path_origin(path, origin);
         let variable = cst::Expr::Variable(path);
+
+        let context = self.current_extended_context_mut();
+        context.insert_path_origin(path, origin);
+
+        if let Some(bindings) = type_bindings {
+            context.insert_instantiation(path, bindings);
+        }
 
         if arguments.is_empty() {
             self.push_expr(variable, name_type, location)
@@ -302,9 +311,9 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
 }
 
 /// Candidates when searching for an implicit value.
-/// Contains the name, origin, type for the implicit, along with any arguments to call it with (if
-/// any) if we should call this implicit for its return value.
-type Candidates = Vec<(Name, Origin, Type, Vec<cst::Argument>)>;
+/// Contains the name, origin, instantiation type bindings, type for the implicit, along with any arguments to
+/// call it with (if any) if we should call this implicit for its return value.
+type Candidates = Vec<(Name, Origin, Option<Vec<Type>>, Type, Vec<cst::Argument>)>;
 
 enum ImplicitMatch {
     NoMatch,

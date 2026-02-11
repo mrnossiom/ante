@@ -271,12 +271,13 @@ where
         match self.context().path_origin(path_id) {
             Some(Origin::TopLevelDefinition(name)) => {
                 let id = self.get_definition_id(&name);
+            println!("variable {name} = {id}");
                 let name = self.get_definition_name(&name);
                 let typ = self.convert_type(&self.types.result.maps.path_types[&path_id], None);
 
                 // If this type was instantiated, then we need to recover the pre-instantiated
                 // type and make an explicit [Instruction::Instantiate].
-                let value = if let Some((_generic_type, bindings)) = self.types.result.context.get_instantiation(path_id) {
+                let value = if let Some(bindings) = self.types.result.context.get_instantiation(path_id) {
                     self.referenced_names.insert(id, name);
                     let bindings = Arc::new(mapvec(bindings, |typ| self.convert_type(typ, None)));
                     let instruction = Instruction::Instantiate(id, bindings);
@@ -317,7 +318,9 @@ where
             return_type: tuple_type,
         }));
 
-        let id = self.new_definition(name.clone(), 2, typ.clone(), |this| {
+        // TODO: We have no NameId to cache this definition so we'll end up
+        // redefining the pair constructor each time it is used.
+        let id = self.new_definition(name.clone(), None, 2, typ.clone(), |this| {
             this.push_parameter(Type::POINTER);
             this.push_parameter(Type::POINTER);
 
@@ -341,18 +344,21 @@ where
     }
 
     fn definition(&mut self, definition: &cst::Definition) -> Value {
-        let previous_state = self.is_global(definition).then(|| {
-            let name = self.try_find_name(definition.pattern).unwrap_or_else(|| Arc::new("global".to_string()));
+        let previous_state = self.is_non_function_global(definition).then(|| {
+            let (name, name_id) = match self.try_find_name(definition.pattern) {
+                Some((name, name_id)) => (name, Some(name_id)),
+                None => (Arc::new("global".to_string()), None)
+            };
             let typ = &self.types.result.maps.pattern_types[&definition.pattern];
             self.set_generics_in_scope(&typ);
             let generic_count = self.generics_in_scope.len() as u32;
             let typ = self.convert_type(&typ, None);
-            self.start_global(name, generic_count, typ)
+            self.start_global(name, name_id, generic_count, typ)
         });
 
         let mut value = match &self.context()[definition.rhs] {
             cst::Expr::Lambda(lambda) => {
-                let name = self.try_find_name(definition.pattern);
+                let name = self.try_find_name(definition.pattern).map(|(name, _)| name);
                 self.lambda(lambda, name, definition.rhs)
             },
             _ => self.expression(definition.rhs),
@@ -372,7 +378,7 @@ where
     }
 
     /// True if the given definition is syntactically a global non-function variable.
-    fn is_global(&self, definition: &cst::Definition) -> bool {
+    fn is_non_function_global(&self, definition: &cst::Definition) -> bool {
         self.current_function.is_none() && !matches!(self.context()[definition.rhs], cst::Expr::Lambda(_))
     }
 
@@ -393,14 +399,14 @@ where
         self.push_instruction(Instruction::Call { function, arguments }, result_type)
     }
 
-    fn try_find_name(&self, pattern: PatternId) -> Option<Name> {
+    fn try_find_name(&self, pattern: PatternId) -> Option<(Name, NameId)> {
         match &self.context()[pattern] {
             cst::Pattern::Error => None,
             cst::Pattern::Literal(_) => None,
             cst::Pattern::Constructor(..) => None,
             cst::Pattern::TypeAnnotation(pattern, _) => self.try_find_name(*pattern),
             cst::Pattern::Variable(name) | cst::Pattern::MethodName { item_name: name, .. } => {
-                Some(self.context()[*name].clone())
+                Some((self.context()[*name].clone(), *name))
             },
         }
     }
@@ -408,17 +414,27 @@ where
     /// Save the current function state, create a new function,
     /// run `f` to fill in the function's body, then restore the previous state
     /// and return the new function value.
-    fn new_definition(&mut self, name: Name, generic_count: u32, typ: Type, f: impl FnOnce(&mut Self)) -> DefinitionId {
-        let state = self.start_global(name, generic_count, typ);
+    fn new_definition(&mut self, name: Name, name_id: Option<NameId>, generic_count: u32, typ: Type, f: impl FnOnce(&mut Self)) -> DefinitionId {
+        let state = self.start_global(name, name_id, generic_count, typ);
         f(self);
         self.end_global(state)
     }
 
-    fn start_global(&mut self, name: Name, generic_count: u32, typ: Type) -> (Option<Definition>, BlockId) {
+    fn start_global(
+        &mut self, name: Name, name_id: Option<NameId>, generic_count: u32, typ: Type,
+    ) -> (Option<Definition>, BlockId) {
         // Safety: This function must always be paired with [Self::end_global]
         let previous_function = self.current_function.take();
         let previous_block = std::mem::replace(&mut self.current_block, BlockId::ENTRY_BLOCK);
-        let definition_id = next_definition_id();
+
+        let definition_id = if let Some(name_id) = name_id {
+            let id = self.get_definition_id(&TopLevelName::new(self.top_level_id, name_id));
+            println!("start_global {} = {id}", TopLevelName::new(self.top_level_id, name_id));
+            id
+        } else {
+            next_definition_id()
+        };
+
         self.referenced_names.insert(definition_id, name.clone());
         self.current_function = Some(Definition::new(name, definition_id, generic_count, typ));
         (previous_function, previous_block)
@@ -444,7 +460,7 @@ where
         // function. Marking them as generic here effectively hoists out the generic parameters.
         let generics_count = self.generics_in_scope.len() as u32;
 
-        let id = self.new_definition(name.clone(), generics_count, typ.clone(), |this| {
+        let id = self.new_definition(name.clone(), None, generics_count, typ.clone(), |this| {
             for (i, parameter) in lambda.parameters.iter().enumerate() {
                 let parameter_type = &this.types.result.maps.pattern_types[&parameter.pattern];
                 this.push_parameter(this.convert_type(parameter_type, None));
@@ -732,7 +748,7 @@ where
         let typ = self.convert_type(constructor_type, None);
         let generic_count = self.generics_in_scope.len() as u32;
 
-        let id = self.new_definition(name, generic_count, typ, |this| {
+        let id = self.new_definition(name, Some(name_id), generic_count, typ, |this| {
             let (fields, field_types) = field_types
                 .iter()
                 .enumerate()

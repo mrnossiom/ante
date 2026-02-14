@@ -7,6 +7,15 @@ use crate::{
 
 impl Display for mir::Mir {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        for (id, typ) in self.external.iter() {
+            let name = self.names.get(id).map(|s| s.as_str()).unwrap_or_else(|| "#no-name");
+            writeln!(f, "extern {name}: {typ}")?;
+        }
+
+        if !self.external.is_empty() {
+            writeln!(f)?;
+        }
+
         for function in self.definitions.values() {
             fmt_function(function, self, f)?;
             writeln!(f, "\n")?;
@@ -267,7 +276,7 @@ impl<'local> Display for ValueDisplay<'local> {
             Value::InstructionResult(instruction_id) => write!(f, "v{}", instruction_id.0),
             Value::Parameter(block_id, i) => write!(f, "b{}_{}", block_id.0, i),
             Value::Definition(id) => {
-                if let Some(name) = self.mir.names.get(id) {
+                if let Some(name) = self.mir.get_name(*id) {
                     write!(f, "{name}_")?;
                 }
                 write!(f, "{id}")

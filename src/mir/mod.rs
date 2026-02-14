@@ -32,7 +32,12 @@ mod validation;
 pub(crate) struct Mir {
     pub(crate) definitions: Definitions,
 
-    /// Maps the DefinitionId of every referenced definition in this Mir to its name
+    /// Any extern symbols. Each symbol's name is stored separately in `self.names`.
+    pub(crate) external: FxHashMap<DefinitionId, Type>,
+
+    /// Maps the DefinitionId of any externally referenced DefinitionId to its name.
+    /// This includes ids in `self.external` as well as ids referenced from instructions
+    /// in `self.definitions` but not present in the definitions map itself.
     names: FxHashMap<DefinitionId, Name>,
 }
 
@@ -41,6 +46,7 @@ pub(crate) type Definitions = FxHashMap<DefinitionId, Definition>;
 impl Mir {
     pub fn extend(mut self, other: Mir) -> Mir {
         self.definitions.extend(other.definitions);
+        self.external.extend(other.external);
         self.names.extend(other.names);
         self
     }
@@ -49,8 +55,14 @@ impl Mir {
         self.definitions.get(&id)
     }
 
-    pub fn get_name(&self, id: DefinitionId) -> &Name {
-        self.get(id).map(|def| &def.name).unwrap_or_else(|| &self.names[&id])
+    pub fn get_name(&self, id: DefinitionId) -> Option<&Name> {
+        self.get(id).map(|def| &def.name).or_else(|| self.names.get(&id))
+    }
+
+    fn with_externals_and_names(mut self, external: FxHashMap<DefinitionId, Type>, names: FxHashMap<DefinitionId, Arc<String>>) -> Mir {
+        self.external = external;
+        self.names.extend(names);
+        self
     }
 }
 

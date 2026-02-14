@@ -25,7 +25,7 @@ use crate::{
     },
     name_resolution::{Origin, builtin::Builtin},
     parser::{
-        cst::{self, Literal, Name, SequenceItem},
+        cst::{self, Extern, Literal, Name, SequenceItem},
         ids::{ExprId, NameId, PathId, PatternId, TopLevelId, TopLevelName},
     },
     type_inference::{
@@ -67,22 +67,24 @@ where
 {
     let types = TypeCheck(item_id).get(compiler);
     let (item, _) = GetItem(item_id).get(compiler);
+    let mut context = Context::new(compiler, &types, item_id, ids);
 
     match &item.kind {
         cst::TopLevelItemKind::Definition(definition) => {
-            let mut context = Context::new(compiler, &types, item_id, ids);
-            context.definition(definition);
+            context.definition(definition, true);
             Some(context.finish())
         },
         cst::TopLevelItemKind::TypeDefinition(type_definition) => {
-            let mut context = Context::new(compiler, &types, item_id, ids);
             context.type_definition(type_definition);
             Some(context.finish())
         },
-        cst::TopLevelItemKind::TraitDefinition(_) => None,
-        cst::TopLevelItemKind::TraitImpl(_) => None,
+        cst::TopLevelItemKind::TraitDefinition(_) => unreachable!("Traits should be desguared to types"),
+        cst::TopLevelItemKind::TraitImpl(_) => unreachable!("Trait impls should be desguared to definitions"),
         cst::TopLevelItemKind::EffectDefinition(_) => None,
-        cst::TopLevelItemKind::Extern(_) => None, // TODO
+        cst::TopLevelItemKind::Extern(extern_) => {
+            context.external(extern_, item.id);
+            Some(context.finish())
+        },
         cst::TopLevelItemKind::Comptime(_) => None,
     }
 }
@@ -110,6 +112,9 @@ struct Context<'local, Db> {
     name_to_id: &'local SharedIdsMap,
 
     definition_types: FxHashMap<DefinitionId, Type>,
+
+    /// Any external items will have their type stored here and name stored in `self.referenced_names`
+    external: FxHashMap<DefinitionId, Type>,
 }
 
 impl<'local, Db> Context<'local, Db>
@@ -132,6 +137,7 @@ where
             name_to_id: name_mappings,
             definition_types: Default::default(),
             referenced_names: Default::default(),
+            external: Default::default(),
         }
     }
 
@@ -222,7 +228,7 @@ where
             cst::Expr::Literal(literal) => self.literal(literal, expr),
             cst::Expr::Variable(path_id) => self.variable(*path_id),
             cst::Expr::Sequence(sequence) => self.sequence(sequence),
-            cst::Expr::Definition(definition) => self.definition(definition),
+            cst::Expr::Definition(definition) => self.definition(definition, false),
             cst::Expr::MemberAccess(member_access) => self.member_access(member_access, expr),
             cst::Expr::Call(call) => self.call(call, expr),
             cst::Expr::Lambda(lambda) => self.lambda(lambda, None, None, expr),
@@ -342,16 +348,23 @@ where
         result
     }
 
-    fn definition(&mut self, definition: &cst::Definition) -> Value {
+    fn definition(&mut self, definition: &cst::Definition, is_global: bool) -> Value {
         let (name, name_id) = match self.try_find_name(definition.pattern) {
             Some((name, name_id)) => (name, Some(name_id)),
             None => (Arc::new("global".to_string()), None),
         };
 
-        let previous_state = self.is_non_function_global(definition).then(|| {
+        println!("defining {name}");
+        if is_global {
             let typ = &self.types.result.maps.pattern_types[&definition.pattern];
+            println!("  type is {}", typ.to_string(&self.types.bindings, self.context(), self.compiler));
             self.set_generics_in_scope(&typ);
+            println!("{} generics in scope", self.generics_in_scope.len());
+        }
+
+        let previous_state = self.is_non_function_global(definition).then(|| {
             let generic_count = self.generics_in_scope.len() as u32;
+            let typ = &self.types.result.maps.pattern_types[&definition.pattern];
             let typ = self.convert_type(&typ, None);
             self.start_global(name, name_id, generic_count, typ)
         });
@@ -706,19 +719,19 @@ where
     }
 
     fn finish(self) -> Mir {
-        Mir { definitions: self.finished_functions, names: self.referenced_names }
+        Mir { definitions: self.finished_functions, external: self.external, names: self.referenced_names }
     }
 
     /// Sets [self.generics_in_scope] to a map mapping each generic from the given type to a
     /// `[mir::Generic]` used when translating [type_inference::types::Type]s into [crate::mir::Type]s.
     fn set_generics_in_scope(&mut self, definition_type: &TCType) {
         use type_inference::types::Type;
+        self.generics_in_scope.clear();
+
         if let Type::Forall(generics, _) = definition_type {
             for (i, generic) in generics.iter().enumerate() {
                 self.generics_in_scope.insert(generic.clone(), Generic(i as u32));
             }
-        } else {
-            self.generics_in_scope.clear();
         }
     }
 
@@ -764,5 +777,15 @@ where
             this.terminate_block(TerminatorInstruction::Return(tuple));
         });
         self.name_to_id.insert(top_level_name, id);
+    }
+
+    /// For an extern item, we only have to store its name in `self.referenced_names` and type in `self.external`
+    fn external(&mut self, extern_: &Extern, item_id: TopLevelId) {
+        let name_id = TopLevelName::new(item_id, extern_.declaration.name);
+        let id = self.get_definition_id(&name_id);
+        let typ = &self.types.result.maps.name_types[&extern_.declaration.name];
+        let typ = self.convert_type(&typ, None);
+        self.external.insert(id, typ);
+        self.referenced_names.insert(id, self.context()[extern_.declaration.name].clone());
     }
 }

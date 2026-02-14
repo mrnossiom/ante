@@ -1,13 +1,14 @@
 use std::sync::Arc;
 
 use inc_complete::DbGet;
+use rustc_hash::FxHashMap;
 
 use crate::{
     incremental::{GetItem, TypeCheck},
     iterator_extensions::mapvec,
     mir::{FunctionType, Type, builder::Context},
     name_resolution::{Origin, builtin::Builtin},
-    type_inference::{TypeBody, types::Type as TCType},
+    type_inference::{TypeBody, types::{Type as TCType, TypeBindings}},
 };
 
 impl<'local, Db> Context<'local, Db>
@@ -15,7 +16,36 @@ where
     Db: DbGet<TypeCheck> + DbGet<GetItem>,
 {
     pub(super) fn convert_type(&self, typ: &TCType, args: Option<&[TCType]>) -> Type {
-        match typ.follow(&self.types.bindings) {
+        let ctx = ConvertTypeContext {
+            compiler: self.compiler,
+            type_bindings: &self.types.bindings,
+            generics_in_scope: &self.generics_in_scope,
+        };
+        ctx.convert_type(typ, args)
+    }
+
+    /// Returns the nth field of the tuple type, or [Type::ERROR] if there is none
+    pub(super) fn tuple_field_type(tuple: &Type, n: usize) -> Type {
+        match tuple {
+            Type::Tuple(fields) => fields.get(n).cloned().unwrap_or(Type::ERROR),
+            _ => Type::ERROR,
+        }
+    }
+}
+
+/// Maps type inference generics to Mir generics
+type GenericsInScope = FxHashMap<crate::type_inference::generics::Generic, crate::mir::Generic>; 
+
+struct ConvertTypeContext<'a, Db> {
+    compiler: &'a Db,
+    type_bindings: &'a TypeBindings,
+    generics_in_scope: &'a GenericsInScope,
+}
+
+impl<Db> ConvertTypeContext<'_, Db> where Db: DbGet<TypeCheck> + DbGet<GetItem> {
+    /// TODO: The split of this from [Context::convert_type] ended up being unnecessary.
+    pub(super) fn convert_type(&self, typ: &TCType, args: Option<&[TCType]>) -> Type {
+        match typ.follow(self.type_bindings) {
             TCType::Primitive(primitive_type) => self.convert_primitive_type(*primitive_type, args),
             TCType::Generic(generic) => Type::Generic(self.generics_in_scope[&generic]),
             // All type variables should be bound when we finish type inference
@@ -95,7 +125,8 @@ where
     }
 
     fn convert_primitive_type(
-        &self, typ: crate::type_inference::types::PrimitiveType, args: Option<&[TCType]>,
+        &self,
+        typ: crate::type_inference::types::PrimitiveType, args: Option<&[TCType]>
     ) -> Type {
         match typ {
             crate::type_inference::types::PrimitiveType::Error => Type::ERROR,
@@ -115,14 +146,6 @@ where
         match args {
             Some(args) if args.len() == 2 => Type::tuple(mapvec(args, |arg| self.convert_type(arg, None))),
             // Rely on type-checking to issue this argument-count mismatch error to the user
-            _ => Type::ERROR,
-        }
-    }
-
-    /// Returns the nth field of the tuple type, or [Type::ERROR] if there is none
-    pub(super) fn tuple_field_type(tuple: &Type, n: usize) -> Type {
-        match tuple {
-            Type::Tuple(fields) => fields.get(n).cloned().unwrap_or(Type::ERROR),
             _ => Type::ERROR,
         }
     }

@@ -6,7 +6,7 @@ use crate::mir::{Definition, Instruction, Mir, Value};
 
 impl Mir {
     /// Ensures:
-    /// - Each referenced [DefinitionId] corresponds to a [Definition] in this Mir
+    /// - Each referenced [DefinitionId] corresponds to a [Definition] or extern item in this Mir
     pub(crate) fn assert_fully_linked(self) -> Self {
         self.definitions.par_iter().for_each(|(_, definition)| {
             definition.assert_fully_linked(&self);
@@ -41,7 +41,7 @@ impl Definition {
         }
 
         for id in referenced_ids {
-            if !mir.definitions.contains_key(&id) {
+            if !mir.definitions.contains_key(&id) && !mir.external.contains_key(&id) {
                 eprintln!("No definition for id {id:?}");
             }
         }

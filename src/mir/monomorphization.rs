@@ -45,7 +45,10 @@ where
         .definitions
         .iter()
         .filter(|(_, definition)| definition.is_monomorphic())
-        .map(|(_, definition)| definition.clone())
+        .map(|(_, definition)| {
+            shared.insert((definition.id, Arc::new(Vec::new())), definition.id);
+            definition.clone()
+        })
         .collect::<Vec<_>>();
 
     monomorphic_definitions
@@ -55,6 +58,7 @@ where
             acc.extend(monomorphized)
         })
         .reduce(Mir::default, Mir::extend)
+        .with_externals_and_names(initial_mir.external, initial_mir.names)
         .assert_fully_linked()
 }
 
@@ -88,7 +92,11 @@ fn monomorphize_non_generic_definition(
         }
     }
 
-    Mir { definitions: context.finished_definitions, names: context.names }
+    Mir {
+        definitions: context.finished_definitions,
+        external: Default::default(),
+        names: context.names,
+    }
 }
 
 struct FunctionContext<'local> {
@@ -142,6 +150,7 @@ impl<'local> FunctionContext<'local> {
                 let new_id = *self.definitions.entry((*id, bindings.clone())).or_insert_with(|| {
                     let new_id = next_definition_id();
                     removed_ids.insert(*id);
+                    println!("New instance for id {id} with bindings {bindings:?}");
                     let typ = definition.instruction_result_types[instruction_id].clone();
                     self.names.insert(new_id, initial_mir.names[id].clone());
                     self.queue.push(DefinitionToMonomorphize {

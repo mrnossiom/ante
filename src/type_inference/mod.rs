@@ -284,6 +284,9 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         for (name, typ) in self.item_types.clone().iter() {
             self.current_item = Some(name.top_level_item);
             let typ = typ.generalize(&self.bindings);
+            println!("Generalized {} : {}",
+                self.item_contexts[&name.top_level_item].1.names[name.local_name_id],
+                self.type_to_string(&typ));
             items.entry(name.top_level_item).or_default().insert(name.local_name_id, typ);
         }
 

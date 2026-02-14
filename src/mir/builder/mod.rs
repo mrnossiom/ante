@@ -225,7 +225,7 @@ where
             cst::Expr::Definition(definition) => self.definition(definition),
             cst::Expr::MemberAccess(member_access) => self.member_access(member_access, expr),
             cst::Expr::Call(call) => self.call(call, expr),
-            cst::Expr::Lambda(lambda) => self.lambda(lambda, None, expr),
+            cst::Expr::Lambda(lambda) => self.lambda(lambda, None, None, expr),
             cst::Expr::If(if_) => self.if_(if_, expr),
             cst::Expr::Match(_) => self.match_(expr),
             cst::Expr::Handle(handle) => self.handle(handle),
@@ -271,7 +271,6 @@ where
         match self.context().path_origin(path_id) {
             Some(Origin::TopLevelDefinition(name)) => {
                 let id = self.get_definition_id(&name);
-            println!("variable {name} = {id}");
                 let name = self.get_definition_name(&name);
                 let typ = self.convert_type(&self.types.result.maps.path_types[&path_id], None);
 
@@ -299,7 +298,7 @@ where
             },
             Some(origin) => *self.variables.get(&origin).unwrap_or_else(|| panic!("No cached variable for {origin}")),
             None => {
-                println!("Warning: no origin for {path_id:?}: {}", self.context()[path_id]);
+                eprintln!("Warning: no origin for {path_id:?}: {}", self.context()[path_id]);
                 Value::Error
             },
         }
@@ -344,11 +343,12 @@ where
     }
 
     fn definition(&mut self, definition: &cst::Definition) -> Value {
+        let (name, name_id) = match self.try_find_name(definition.pattern) {
+            Some((name, name_id)) => (name, Some(name_id)),
+            None => (Arc::new("global".to_string()), None),
+        };
+
         let previous_state = self.is_non_function_global(definition).then(|| {
-            let (name, name_id) = match self.try_find_name(definition.pattern) {
-                Some((name, name_id)) => (name, Some(name_id)),
-                None => (Arc::new("global".to_string()), None)
-            };
             let typ = &self.types.result.maps.pattern_types[&definition.pattern];
             self.set_generics_in_scope(&typ);
             let generic_count = self.generics_in_scope.len() as u32;
@@ -359,7 +359,7 @@ where
         let mut value = match &self.context()[definition.rhs] {
             cst::Expr::Lambda(lambda) => {
                 let name = self.try_find_name(definition.pattern).map(|(name, _)| name);
-                self.lambda(lambda, name, definition.rhs)
+                self.lambda(lambda, name_id, name, definition.rhs)
             },
             _ => self.expression(definition.rhs),
         };
@@ -414,7 +414,9 @@ where
     /// Save the current function state, create a new function,
     /// run `f` to fill in the function's body, then restore the previous state
     /// and return the new function value.
-    fn new_definition(&mut self, name: Name, name_id: Option<NameId>, generic_count: u32, typ: Type, f: impl FnOnce(&mut Self)) -> DefinitionId {
+    fn new_definition(
+        &mut self, name: Name, name_id: Option<NameId>, generic_count: u32, typ: Type, f: impl FnOnce(&mut Self),
+    ) -> DefinitionId {
         let state = self.start_global(name, name_id, generic_count, typ);
         f(self);
         self.end_global(state)
@@ -428,9 +430,7 @@ where
         let previous_block = std::mem::replace(&mut self.current_block, BlockId::ENTRY_BLOCK);
 
         let definition_id = if let Some(name_id) = name_id {
-            let id = self.get_definition_id(&TopLevelName::new(self.top_level_id, name_id));
-            println!("start_global {} = {id}", TopLevelName::new(self.top_level_id, name_id));
-            id
+            self.get_definition_id(&TopLevelName::new(self.top_level_id, name_id))
         } else {
             next_definition_id()
         };
@@ -452,7 +452,7 @@ where
         definition_id
     }
 
-    fn lambda(&mut self, lambda: &cst::Lambda, name: Option<Name>, expr: ExprId) -> Value {
+    fn lambda(&mut self, lambda: &cst::Lambda, name_id: Option<NameId>, name: Option<Name>, expr: ExprId) -> Value {
         let name = name.unwrap_or_else(|| Arc::new("lambda".to_string()));
         let typ = self.convert_type(&self.types.result.maps.expr_types[&expr], None);
 
@@ -460,7 +460,7 @@ where
         // function. Marking them as generic here effectively hoists out the generic parameters.
         let generics_count = self.generics_in_scope.len() as u32;
 
-        let id = self.new_definition(name.clone(), None, generics_count, typ.clone(), |this| {
+        let id = self.new_definition(name.clone(), name_id, generics_count, typ.clone(), |this| {
             for (i, parameter) in lambda.parameters.iter().enumerate() {
                 let parameter_type = &this.types.result.maps.pattern_types[&parameter.pattern];
                 this.push_parameter(this.convert_type(parameter_type, None));
@@ -681,7 +681,7 @@ where
                 if let Some(origin) = self.context().name_origin(*name) {
                     self.variables.insert(origin, value);
                 } else {
-                    println!("Warning: no name_origin for {name}");
+                    eprintln!("Warning: no name_origin for {name}");
                 }
             },
             cst::Pattern::Literal(_) => (),

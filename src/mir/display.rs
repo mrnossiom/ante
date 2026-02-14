@@ -15,22 +15,6 @@ impl Display for mir::Mir {
     }
 }
 
-// impl Display for Value {
-//     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-//         match self {
-//             Value::Error => write!(f, "#error"),
-//             Value::Unit => write!(f, "()"),
-//             Value::Bool(b) => write!(f, "{b}"),
-//             Value::Char(c) => write!(f, "{c}"),
-//             Value::Integer(int) => write!(f, "{int}"),
-//             Value::Float(float) => write!(f, "{float}"),
-//             Value::InstructionResult(instruction_id) => write!(f, "v{}", instruction_id.0),
-//             Value::Parameter(block_id, i) => write!(f, "b{}_{}", block_id.0, i),
-//             Value::Definition(id) => write!(f, "{id}"),
-//         }
-//     }
-// }
-
 impl Display for IntConstant {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         match self {
@@ -138,7 +122,18 @@ impl Display for PrimitiveType {
 }
 
 fn fmt_function(function: &mir::Definition, mir: &mir::Mir, f: &mut Formatter) -> Result {
-    write!(f, "fun {} {}", function.name, function.id)?;
+    write!(f, "fn {} {}: ", function.name, function.id)?;
+
+    if function.generic_count != 0 {
+        write!(f, "forall")?;
+        for i in 0 .. function.generic_count {
+            write!(f, " {}", Type::generic(i))?;
+        }
+        write!(f, ". ")?;
+    }
+
+    write!(f, "{}", function.typ)?;
+
     for (block_id, block) in function.blocks.iter() {
         writeln!(f)?;
         fmt_block(block_id, mir, function, block, f)?;

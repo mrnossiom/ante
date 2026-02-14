@@ -135,7 +135,6 @@ impl<'local> FunctionContext<'local> {
             if let Instruction::Instantiate(id, bindings) = instruction {
                 let new_id = *self.definitions.entry((*id, bindings.clone())).or_insert_with(|| {
                     let new_id = next_definition_id();
-                    eprintln!("nested {id} => {new_id}");
                     removed_ids.insert(*id);
                     let typ = definition.instruction_result_types[instruction_id].clone();
                     self.names.insert(new_id, initial_mir.names[id].clone());

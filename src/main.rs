@@ -207,19 +207,21 @@ fn display_type_checking(compiler: &Db, show_types: bool) -> BTreeSet<Diagnostic
 
 fn display_mir(compiler: &Db) -> BTreeSet<Diagnostic> {
     let crates = GetCrateGraph.get(compiler);
-    let local_crate = &crates[&CrateId::LOCAL];
+    //let local_crate = &crates[&CrateId::LOCAL];
     let mut diagnostics = BTreeSet::new();
 
-    for file in local_crate.source_files.values() {
-        let parse = Parse(*file).get(compiler);
+    for crate_ in crates.values() {
+        for file in crate_.source_files.values() {
+            let parse = Parse(*file).get(compiler);
 
-        for item in &parse.cst.top_level_items {
-            let mir = mir::builder::build_initial_mir_with_shared_map(compiler, item.id);
-            if let Some(mir) = mir {
-                println!("{mir}");
+            for item in &parse.cst.top_level_items {
+                let mir = mir::builder::build_initial_mir_with_shared_map(compiler, item.id);
+                if let Some(mir) = mir {
+                    print!("{mir}");
+                }
+                let more_diagnostics: BTreeSet<_> = compiler.get_accumulated(TypeCheck(item.id));
+                diagnostics.extend(more_diagnostics);
             }
-            let more_diagnostics: BTreeSet<_> = compiler.get_accumulated(TypeCheck(item.id));
-            diagnostics.extend(more_diagnostics);
         }
     }
     diagnostics

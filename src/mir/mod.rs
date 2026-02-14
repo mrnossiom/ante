@@ -26,13 +26,14 @@ use crate::{
 pub(crate) mod builder;
 mod display;
 pub(crate) mod monomorphization;
+mod validation;
 
 #[derive(Default)]
 pub(crate) struct Mir {
     pub(crate) definitions: Definitions,
 
     /// Maps the DefinitionId of every referenced definition in this Mir to its name
-    pub(crate) names: FxHashMap<DefinitionId, Name>,
+    names: FxHashMap<DefinitionId, Name>,
 }
 
 pub(crate) type Definitions = FxHashMap<DefinitionId, Definition>;
@@ -46,6 +47,10 @@ impl Mir {
 
     fn get(&self, id: DefinitionId) -> Option<&Definition> {
         self.definitions.get(&id)
+    }
+
+    pub fn get_name(&self, id: DefinitionId) -> &Name {
+        self.get(id).map(|def| &def.name).unwrap_or_else(|| &self.names[&id])
     }
 }
 
@@ -318,6 +323,24 @@ pub enum Instruction {
     Id(Value),
 }
 
+impl Instruction {
+    pub fn for_each_value(&self, mut f: impl FnMut(&Value)) {
+        match self {
+            Instruction::Call { function, arguments } => {
+                f(function);
+                arguments.iter().for_each(f);
+            },
+            Instruction::IndexTuple { tuple, index: _ } => f(tuple),
+            Instruction::MakeString(_) => (),
+            Instruction::MakeTuple(elements) => elements.iter().for_each(f),
+            Instruction::StackAlloc(value) => f(value),
+            Instruction::Transmute(value) => f(value),
+            Instruction::Instantiate(_, _) => (),
+            Instruction::Id(value) => f(value),
+        }
+    }
+}
+
 /// A [JmpTarget] is a block to jump to with arguments for that block.
 /// A block's arguments is MIR's equivalent of PHI values in other SSA-based IRs.
 type JmpTarget = (BlockId, Option<Value>);
@@ -354,6 +377,37 @@ impl TerminatorInstruction {
 
     fn if_(condition: Value, then: BlockId, else_: BlockId, end: BlockId) -> Self {
         TerminatorInstruction::If { condition, then: (then, None), else_: (else_, None), end }
+    }
+
+    pub fn for_each_value(&self, mut f: impl FnMut(&Value)) {
+        match self {
+            TerminatorInstruction::Jmp((_, Some(value))) => f(value),
+            TerminatorInstruction::Jmp((_, None)) => (),
+            TerminatorInstruction::If { condition, then, else_, end: _ } => {
+                f(condition);
+                if let Some(then) = &then.1 {
+                    f(then);
+                }
+                if let Some(else_) = &else_.1 {
+                    f(else_);
+                }
+            },
+            TerminatorInstruction::Switch { int_value, cases, else_, end: _ } => {
+                f(int_value);
+                for (_, case_value) in cases {
+                    if let Some(value) = case_value {
+                        f(value);
+                    }
+                }
+                if let Some(else_) = else_ {
+                    if let Some(else_value) = &else_.1 {
+                        f(else_value);
+                    }
+                }
+            },
+            TerminatorInstruction::Unreachable => (),
+            TerminatorInstruction::Return(value) => f(value),
+        }
     }
 }
 

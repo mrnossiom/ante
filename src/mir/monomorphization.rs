@@ -55,6 +55,7 @@ where
             acc.extend(monomorphized)
         })
         .reduce(Mir::default, Mir::extend)
+        .assert_fully_linked()
 }
 
 /// The entry point to monomorphization is any non-generic definition.
@@ -80,6 +81,7 @@ fn monomorphize_non_generic_definition(
         // call to [monomorphize_non_generic_definition].
         if !original_definition.is_monomorphic() {
             let mut definition = original_definition.clone_with_id(item.new_id);
+            definition.generic_count = 0;
             definition.typ = item.monomorphized_type;
             context.generic_mapping = item.bindings.clone();
             context.monomorphize_definition(definition, initial_mir);
@@ -103,12 +105,16 @@ struct FunctionContext<'local> {
 }
 
 struct DefinitionToMonomorphize {
+    /// The old id pre-monomorphization
     old_id: DefinitionId,
+    /// The id referring to the monomorphized version of `old_id` with the given generic bindings
     new_id: DefinitionId,
     bindings: Arc<GenericBindings>,
     monomorphized_type: Type,
 }
 
+/// Maps (old_id, generic bindings) to a new [DefinitionId] referring to the newly monomorphized
+/// version of `old_id` with the given generic type bindings.
 type SharedDefinitions = DashMap<(DefinitionId, Arc<GenericBindings>), DefinitionId>;
 
 impl<'local> FunctionContext<'local> {

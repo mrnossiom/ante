@@ -126,7 +126,7 @@ fn fmt_function(function: &mir::Definition, mir: &mir::Mir, f: &mut Formatter) -
 
     if function.generic_count != 0 {
         write!(f, "forall")?;
-        for i in 0 .. function.generic_count {
+        for i in 0..function.generic_count {
             write!(f, " {}", Type::generic(i))?;
         }
         write!(f, ". ")?;

@@ -276,7 +276,7 @@ impl<'ctx> ModuleContext<'ctx> {
     /// As long as the [DefinitionId] is referenced in `self.mir`, this should never panic.
     fn get_name(&self, id: DefinitionId) -> &'ctx str {
         println!("get name {id}");
-        self.mir.names[&id].as_ref()
+        self.mir.get_name(id).as_ref()
     }
 
     fn lookup_value(&mut self, value: mir::Value) -> BasicValueEnum<'ctx> {

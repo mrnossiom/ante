@@ -203,9 +203,8 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 let substitutions = generics.iter().map(|generic| (*generic, self.next_type_variable())).collect();
                 let typ = old_type.substitute(&substitutions, &self.bindings);
 
-                let bindings = (!substitutions.is_empty()).then(|| {
-                    mapvec(generics.iter(), |generic| substitutions[generic].clone())
-                });
+                let bindings = (!substitutions.is_empty())
+                    .then(|| mapvec(generics.iter(), |generic| substitutions[generic].clone()));
                 (typ, bindings)
             },
             other => (other, None),

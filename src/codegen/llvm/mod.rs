@@ -36,6 +36,7 @@ pub fn codegen_llvm_impl(_context: &CodegenLlvm, compiler: &DbHandle) -> Option<
     // TODO: Cache monomorphization result. This is extremely inefficient:
     // we're remonomorphizing the whole program on every llvm codegen call
     let mir = mir::monomorphization::monomorphize(compiler);
+    println!("llvm input mir:\n{mir}");
 
     let name = &mir.definitions.iter().next().map_or("_", |(_, function)| &function.name);
 
@@ -275,7 +276,6 @@ impl<'ctx> ModuleContext<'ctx> {
     /// Returns the name of the given [DefinitionId].
     /// As long as the [DefinitionId] is referenced in `self.mir`, this should never panic.
     fn get_name(&self, id: DefinitionId) -> &'ctx str {
-        println!("get name {id}");
         self.mir.get_name(id).unwrap().as_ref()
     }
 
@@ -331,7 +331,10 @@ impl<'ctx> ModuleContext<'ctx> {
             },
             mir::Instruction::MakeString(string) => {
                 let string_data = self.llvm.const_string(string.as_bytes(), false);
-                let global = self.module.add_global(string_data.get_type(), None, "string_literal");
+                // Need to create a unique name across modules. Llvm will auto-rename within
+                // the same module so duplicate names within one function won't matter.
+                let name = format!("{}_str", self.current_function.unwrap());
+                let global = self.module.add_global(string_data.get_type(), None, &name);
                 global.set_initializer(&string_data);
                 let c_string = global.as_pointer_value().into();
 

@@ -278,15 +278,16 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
 
     /// Generalize all types in the current SCC.
     /// The returned Vec is in the same order as the SCC.
+    ///
+    /// Note that NameIds and PatternIds locally within each function will still refer to the
+    /// non-generalized version of their types. If you want to retrieve the generalized type of an
+    /// item from this SCC, you'll need to go through the generalized results specifically.
     fn generalize_all(&mut self) -> BTreeMap<TopLevelId, BTreeMap<NameId, Type>> {
         let mut items: BTreeMap<_, BTreeMap<_, _>> = BTreeMap::new();
 
         for (name, typ) in self.item_types.clone().iter() {
             self.current_item = Some(name.top_level_item);
             let typ = typ.generalize(&self.bindings);
-            println!("Generalized {} : {}",
-                self.item_contexts[&name.top_level_item].1.names[name.local_name_id],
-                self.type_to_string(&typ));
             items.entry(name.top_level_item).or_default().insert(name.local_name_id, typ);
         }
 

@@ -248,7 +248,7 @@ fn display_mir_mono(compiler: &Db) -> BTreeSet<Diagnostic> {
 
 /// Codegen each item as a separate llvm module
 /// Returns (module strings, true if there are any errors, diagnostics)
-fn llvm_codegen_separate(compiler: &Db, display_ir: bool) -> (Vec<Arc<Vec<u8>>>, bool, BTreeSet<Diagnostic>) {
+fn llvm_codegen_separate(compiler: &Db, display_ir: bool, monomorphize: bool) -> (Vec<Arc<Vec<u8>>>, bool, BTreeSet<Diagnostic>) {
     let crates = GetCrateGraph.get(compiler);
     let mut diagnostics = BTreeSet::new();
     crate::codegen::llvm::initialize_native_target();

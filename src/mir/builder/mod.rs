@@ -354,12 +354,9 @@ where
             None => (Arc::new("global".to_string()), None),
         };
 
-        println!("defining {name}");
         if is_global {
-            let typ = &self.types.result.maps.pattern_types[&definition.pattern];
-            println!("  type is {}", typ.to_string(&self.types.bindings, self.context(), self.compiler));
+            let typ = &self.types.result.generalized[&name_id.unwrap()];
             self.set_generics_in_scope(&typ);
-            println!("{} generics in scope", self.generics_in_scope.len());
         }
 
         let previous_state = self.is_non_function_global(definition).then(|| {

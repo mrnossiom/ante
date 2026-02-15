@@ -4,7 +4,7 @@
 //! The monomorphizer starts from the entry point to the program and from there builds a queue
 //! of functions which need to be monomorphized. This queue can be processed concurrently with
 //! each individual function being handled by a single [FunctionContext] object.
-use std::sync::Arc;
+use std::{collections::hash_map::Entry, sync::Arc};
 
 use dashmap::DashMap;
 use inc_complete::DbGet;
@@ -44,13 +44,20 @@ where
     let monomorphic_definitions = initial_mir
         .definitions
         .iter()
-        .filter(|(_, definition)| definition.is_monomorphic())
+        .filter(|(_, definition)| definition.is_monomorphic() || definition.name.as_str() == "main")
         .map(|(_, definition)| {
             shared.insert((definition.id, Arc::new(Vec::new())), definition.id);
             definition.clone()
         })
         .collect::<Vec<_>>();
 
+    println!("Monomorphic defs:");
+    for def in &monomorphic_definitions {
+        println!("  {}", def.name);
+    }
+
+    // TODO: Switch to a concurrent queue to better utilize each thread instead of having each
+    // thread compile each function reachable from each monomorphic function.
     monomorphic_definitions
         .into_par_iter()
         .fold(Mir::default, |acc, definition| {
@@ -150,7 +157,6 @@ impl<'local> FunctionContext<'local> {
                 let new_id = *self.definitions.entry((*id, bindings.clone())).or_insert_with(|| {
                     let new_id = next_definition_id();
                     removed_ids.insert(*id);
-                    println!("New instance for id {id} with bindings {bindings:?}");
                     let typ = definition.instruction_result_types[instruction_id].clone();
                     self.names.insert(new_id, initial_mir.names[id].clone());
                     self.queue.push(DefinitionToMonomorphize {
@@ -161,6 +167,11 @@ impl<'local> FunctionContext<'local> {
                     });
                     new_id
                 });
+
+                if let Entry::Vacant(entry) = definition.definition_types.entry(new_id) {
+                    let typ = definition.instruction_result_types[instruction_id].clone();
+                    entry.insert(typ);
+                }
 
                 *instruction = Instruction::Id(Value::Definition(new_id));
             }

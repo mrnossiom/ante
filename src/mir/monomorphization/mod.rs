@@ -11,6 +11,8 @@ use inc_complete::DbGet;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use rustc_hash::{FxHashMap, FxHashSet};
 
+mod select_largest_variant;
+
 use crate::{
     definition_collection::collect_all_items,
     incremental::{GetCrateGraph, GetItem, GetItemRaw, Parse, TypeCheck},
@@ -50,11 +52,6 @@ where
             definition.clone()
         })
         .collect::<Vec<_>>();
-
-    println!("Monomorphic defs:");
-    for def in &monomorphic_definitions {
-        println!("  {}", def.name);
-    }
 
     // TODO: Switch to a concurrent queue to better utilize each thread instead of having each
     // thread compile each function reachable from each monomorphic function.

@@ -8,7 +8,7 @@ use inkwell::{
     module::Module,
     targets::{CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetMachine},
     types::{BasicType, BasicTypeEnum, IntType},
-    values::{AnyValue, BasicValueEnum, FunctionValue},
+    values::{AnyValue, BasicValueEnum, FunctionValue, GlobalValue},
 };
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
@@ -36,8 +36,6 @@ pub fn codegen_llvm_impl(_context: &CodegenLlvm, compiler: &DbHandle) -> Option<
     // TODO: Cache monomorphization result. This is extremely inefficient:
     // we're remonomorphizing the whole program on every llvm codegen call
     let mir = mir::monomorphization::monomorphize(compiler);
-    println!("llvm input mir:\n{mir}");
-
     let name = &mir.definitions.iter().next().map_or("_", |(_, function)| &function.name);
 
     let llvm = inkwell::context::Context::create();
@@ -45,6 +43,10 @@ pub fn codegen_llvm_impl(_context: &CodegenLlvm, compiler: &DbHandle) -> Option<
 
     for (id, function) in &mir.definitions {
         module.codegen_function(function, *id);
+    }
+
+    for (id, typ) in &mir.external {
+        module.codegen_extern(*id, typ);
     }
 
     if let Err(error) = module.module.verify() {
@@ -105,6 +107,7 @@ struct ModuleContext<'ctx> {
     current_function: Option<DefinitionId>,
     current_function_value: Option<FunctionValue<'ctx>>,
 
+    global_values: FxHashMap<mir::Value, GlobalValue<'ctx>>,
     values: FxHashMap<mir::Value, BasicValueEnum<'ctx>>,
 
     /// Block arguments are added here to later insert them as PHI values.
@@ -124,6 +127,7 @@ impl<'ctx> ModuleContext<'ctx> {
             mir,
             current_function: None,
             current_function_value: None,
+            global_values: Default::default(),
             values: Default::default(),
             builder: llvm.create_builder(),
             blocks: Default::default(),
@@ -132,17 +136,12 @@ impl<'ctx> ModuleContext<'ctx> {
     }
 
     fn codegen_function(&mut self, function: &mir::Definition, id: mir::DefinitionId) {
-        let function_value = match self.values.get(&mir::Value::Definition(id)) {
+        let function_value = match self.global_values.get(&mir::Value::Definition(id)) {
             Some(existing) => existing.as_any_value_enum().into_function_value(),
             None => {
-                let parameter_types =
-                    mapvec(&function.blocks[BlockId::ENTRY_BLOCK].parameter_types, |typ| self.convert_type(typ).into());
-
-                let return_type = self.convert_type(&self.find_return_type(function));
-                let function_type = return_type.fn_type(&parameter_types, false);
+                let function_type = self.convert_function_type(&function.typ).unwrap();
                 let function_value = self.module.add_function(&function.name, function_type, None);
-                self.values
-                    .insert(mir::Value::Definition(id), function_value.as_global_value().as_pointer_value().into());
+                self.global_values.insert(mir::Value::Definition(id), function_value.as_global_value());
                 function_value
             },
         };
@@ -258,16 +257,6 @@ impl<'ctx> ModuleContext<'ctx> {
         Some(return_type.fn_type(&parameters, false))
     }
 
-    /// TODO: We could store the return type directly in the function to avoid searching for it
-    fn find_return_type(&self, function: &mir::Definition) -> mir::Type {
-        for (_, block) in function.blocks.iter() {
-            if let Some(TerminatorInstruction::Return(value)) = &block.terminator {
-                return function.type_of_value(value);
-            }
-        }
-        mir::Type::ERROR
-    }
-
     /// Return the given [mir::Definition] if it is within `self.mir`. Return `None` otherwise.
     fn try_get_function(&self, id: DefinitionId) -> Option<&'ctx mir::Definition> {
         self.mir.definitions.get(&id)
@@ -296,8 +285,8 @@ impl<'ctx> ModuleContext<'ctx> {
                 *self.values.get(&value).unwrap_or_else(|| panic!("llvm codegen: mir value is not cached: {value}"))
             },
             mir::Value::Definition(function_id) => {
-                if let Some(value) = self.values.get(&value) {
-                    return *value;
+                if let Some(value) = self.global_values.get(&value) {
+                    return value.as_pointer_value().into();
                 }
 
                 let typ = self.try_get_function(self.current_function.unwrap()).unwrap().type_of_value(&value);
@@ -305,10 +294,9 @@ impl<'ctx> ModuleContext<'ctx> {
 
                 let name = self.get_name(function_id);
 
-                let function_value =
-                    self.module.add_function(name, typ, None).as_global_value().as_pointer_value().into();
-                self.values.insert(value, function_value);
-                function_value
+                let function_value = self.module.add_function(name, typ, None).as_global_value();
+                self.global_values.insert(value, function_value);
+                function_value.as_pointer_value().into()
             },
         }
     }
@@ -425,6 +413,15 @@ impl<'ctx> ModuleContext<'ctx> {
                 let value = self.lookup_value(*value);
                 self.builder.build_return(Some(&value)).unwrap();
             },
+        }
+    }
+
+    fn codegen_extern(&mut self, id: DefinitionId, typ: &mir::Type) {
+        if !self.values.contains_key(&mir::Value::Definition(id)) {
+            let function_type = self.convert_function_type(typ).unwrap();
+            let name = self.get_name(id);
+            let function_value = self.module.add_function(name, function_type, None);
+            self.values.insert(mir::Value::Definition(id), function_value.as_global_value().as_pointer_value().into());
         }
     }
 }

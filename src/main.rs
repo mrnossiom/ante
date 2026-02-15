@@ -248,7 +248,7 @@ fn display_mir_mono(compiler: &Db) -> BTreeSet<Diagnostic> {
 
 /// Codegen each item as a separate llvm module
 /// Returns (module strings, true if there are any errors, diagnostics)
-fn llvm_codegen_separate(compiler: &Db, display_ir: bool, monomorphize: bool) -> (Vec<Arc<Vec<u8>>>, bool, BTreeSet<Diagnostic>) {
+fn llvm_codegen_separate(compiler: &Db, display_ir: bool) -> (Vec<Arc<Vec<u8>>>, bool, BTreeSet<Diagnostic>) {
     let crates = GetCrateGraph.get(compiler);
     let mut diagnostics = BTreeSet::new();
     crate::codegen::llvm::initialize_native_target();
@@ -301,10 +301,15 @@ fn display_llvm_bitcode(result: &CodegenLlvmResult, module_name: String) {
 
 /// Codegen everything, linking together each separate llvm module
 fn llvm_codegen_all(compiler: &Db, files: &[PathBuf]) -> BTreeSet<Diagnostic> {
-    let (modules, has_errors, diagnostics) = llvm_codegen_separate(compiler, false);
+    let (mut modules, has_errors, diagnostics) = llvm_codegen_separate(compiler, false);
     if has_errors {
         return diagnostics;
     }
+
+    // Monomorphization currently needs all definitions to compile, so each llvm call currently
+    // compiles the whole program. This should be fixed in the future, but for now each module is
+    // the whole program so we just need one.
+    modules.truncate(1);
 
     let module_name = files.first().map_or_else(|| "a.out".into(), |file| file.with_extension(""));
     let module_name = module_name.to_string_lossy();

@@ -59,7 +59,9 @@ impl Mir {
         self.get(id).map(|def| &def.name).or_else(|| self.names.get(&id))
     }
 
-    fn with_externals_and_names(mut self, external: FxHashMap<DefinitionId, Type>, names: FxHashMap<DefinitionId, Arc<String>>) -> Mir {
+    fn with_externals_and_names(
+        mut self, external: FxHashMap<DefinitionId, Type>, names: FxHashMap<DefinitionId, Arc<String>>,
+    ) -> Mir {
         self.external = external;
         self.names.extend(names);
         self
@@ -82,13 +84,13 @@ pub(crate) struct Definition {
     pub(crate) name: Name,
 
     /// The unique DefinitionId identifying this function
-    id: DefinitionId,
+    pub(crate) id: DefinitionId,
 
     /// The number of generic type arguments of this definition
-    generic_count: u32,
+    pub(crate) generic_count: u32,
 
     /// The type of this Definition. This is lazily computed from [Self::function_type].
-    typ: Type,
+    pub(crate) typ: Type,
 
     /// A function's blocks are always non-empty, consisting of at least an entry
     /// block with `BlockId(0)`
@@ -275,6 +277,14 @@ pub enum Value {
 
     /// A global, often a function
     Definition(DefinitionId),
+}
+
+impl Value {
+    /// Returns a value representing a union's tag.
+    /// This should always be of type [Type::tag_type()]
+    pub fn tag_value(value: u8) -> Value {
+        Value::Integer(IntConstant::U8(value))
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -537,6 +547,22 @@ impl Type {
             variants.pop().unwrap()
         } else {
             Type::Union(Arc::new(variants))
+        }
+    }
+
+    fn function_return_type(&self) -> Option<&Type> {
+        match self {
+            Type::Function(function) => Some(&function.return_type),
+            _ => None,
+        }
+    }
+
+    /// If this is a tagged-union type in the form `(tag, {union})`, return `{union}`
+    /// otherwise return None.
+    fn without_union_tag(&self) -> Option<Self> {
+        match self {
+            Type::Tuple(fields) if fields.len() == 2 => fields.get(1).cloned(),
+            _ => None,
         }
     }
 }

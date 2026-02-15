@@ -733,18 +733,23 @@ where
     }
 
     /// For type definitions we need to define their constructors
-    fn type_definition(&mut self, _type_definition: &cst::TypeDefinition) {
-        // For a type definition, each generalized name will be each publically visible constructor
-        for (constructor_name, constructor_type) in &self.types.result.generalized {
-            self.set_generics_in_scope(&constructor_type);
-            let constructor_name = *constructor_name;
+    fn type_definition(&mut self, type_definition: &cst::TypeDefinition) {
+        let constructors = match &type_definition.body {
+            cst::TypeDefinitionBody::Struct(_) => vec![(type_definition.name, None)],
+            cst::TypeDefinitionBody::Enum(variants) => {
+                mapvec(variants.iter().enumerate(), |(i, (name, _))| (*name, Some(i.try_into().unwrap())))
+            },
+            cst::TypeDefinitionBody::Alias(_) | cst::TypeDefinitionBody::Error => return,
+        };
 
-            // TODO: This doesn't include the tag for unions
+        for (constructor_name, tag) in constructors {
+            let constructor_type = &self.types.result.generalized[&constructor_name];
+            self.set_generics_in_scope(constructor_type);
+
             if let crate::type_inference::types::Type::Function(function) = constructor_type.ignore_forall() {
-                self.define_type_constructor(constructor_name, constructor_type, &function.parameters)
+                self.define_type_constructor(constructor_name, constructor_type, &function.parameters, tag)
             } else {
-                // todo!("Non-function type constructors: {constructor_name}: {constructor_type}")
-                self.define_type_constructor(constructor_name, constructor_type, &[])
+                self.define_type_constructor(constructor_name, constructor_type, &[], tag)
             }
         }
     }
@@ -752,10 +757,19 @@ where
     fn define_type_constructor(
         &mut self, name_id: NameId, constructor_type: &TCType,
         field_types: &[crate::type_inference::types::ParameterType],
+        tag: Option<u8>,
     ) {
         let top_level_name = TopLevelName::new(self.top_level_id, name_id);
         let name = self.context()[name_id].clone();
         let typ = self.convert_type(constructor_type, None);
+        let result_type = match typ.function_return_type() {
+            Some(return_type) => return_type.clone(),
+            None => typ.clone(),
+        };
+
+        // This is the raw union type without the tag
+        let raw_union_type = result_type.without_union_tag();
+
         let generic_count = self.generics_in_scope.len() as u32;
 
         let id = self.new_definition(name, Some(name_id), generic_count, typ, |this| {
@@ -769,9 +783,18 @@ where
                 })
                 .unzip();
 
-            let result_type = Type::tuple(field_types);
-            let tuple = this.push_instruction(Instruction::MakeTuple(fields), result_type);
-            this.terminate_block(TerminatorInstruction::Return(tuple));
+            let tuple_type = Type::tuple(field_types);
+            let mut result = this.push_instruction(Instruction::MakeTuple(fields), tuple_type);
+
+            // If this is a union type we must also add the tag and cast to the union type
+            if let Some(tag) = tag {
+                let raw_union_type = raw_union_type.unwrap();
+                let casted = this.push_instruction(Instruction::Transmute(result), raw_union_type);
+                let fields_with_tag = vec![Value::tag_value(tag), casted];
+                result = this.push_instruction(Instruction::MakeTuple(fields_with_tag), result_type);
+            }
+
+            this.terminate_block(TerminatorInstruction::Return(result));
         });
         self.name_to_id.insert(top_level_name, id);
     }

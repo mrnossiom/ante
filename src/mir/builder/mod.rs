@@ -247,7 +247,7 @@ where
             Literal::Unit => Value::Unit,
             Literal::Bool(x) => Value::Bool(*x),
             Literal::Integer(x, None) => {
-                Value::Integer(IntConstant::U32((*x).try_into().unwrap()))
+                Value::Integer(IntConstant::I32((*x).try_into().unwrap()))
                 // panic!("TODO: polymorphic integers")
             },
             Literal::Integer(x, Some(IntegerKind::I8)) => Value::Integer(IntConstant::I8((*x).try_into().unwrap())),

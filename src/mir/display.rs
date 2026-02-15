@@ -2,7 +2,7 @@ use std::fmt::{Display, Formatter, Result};
 
 use crate::{
     iterator_extensions::mapvec,
-    mir::{self, Block, BlockId, DefinitionId, FloatConstant, IntConstant, PrimitiveType, Type, Value},
+    mir::{self, Block, BlockId, Definition, DefinitionId, FloatConstant, InstructionId, IntConstant, PrimitiveType, Type, Value},
 };
 
 impl Display for mir::Mir {
@@ -21,6 +21,35 @@ impl Display for mir::Mir {
             writeln!(f, "\n")?;
         }
         Ok(())
+    }
+}
+
+impl Definition {
+    pub(crate) fn display<'a>(&'a self, mir: &'a mir::Mir) -> DefinitionDisplay<'a> {
+        DefinitionDisplay(self, mir)
+    }
+}
+
+pub struct DefinitionDisplay<'a>(&'a Definition, &'a mir::Mir);
+
+impl Display for DefinitionDisplay<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        fmt_function(self.0, self.1, f)
+    }
+}
+
+impl InstructionId {
+    pub(crate) fn display<'a>(self, definition: &'a Definition, mir: &'a mir::Mir) -> InstructionDisplay<'a> {
+        InstructionDisplay(self, definition, mir)
+    }
+}
+
+pub struct InstructionDisplay<'a>(InstructionId, &'a Definition, &'a mir::Mir);
+
+impl Display for InstructionDisplay<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        let data = &self.1.instructions[self.0];
+        fmt_instruction(self.0, data, self.2, self.1, f)
     }
 }
 

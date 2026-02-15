@@ -19,6 +19,7 @@ use std::sync::{
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::{
+    iterator_extensions::mapvec,
     lexer::token::{F64, FloatKind, IntegerKind},
     parser::cst::Name,
     vecmap::VecMap,
@@ -133,6 +134,10 @@ impl Definition {
         let mut clone = self.clone();
         clone.id = new_id;
         clone
+    }
+
+    pub fn entry_block(&self) -> &Block {
+        &self.blocks[BlockId::ENTRY_BLOCK]
     }
 
     pub fn type_of_value(&self, value: &Value) -> Type {
@@ -537,17 +542,18 @@ impl Type {
     }
 
     pub fn tuple(fields: Vec<Type>) -> Type {
-        if fields.is_empty() { Type::UNIT } else { Type::Tuple(Arc::new(fields)) }
+        //if fields.is_empty() { Type::UNIT } else { Type::Tuple(Arc::new(fields)) }
+        Type::Tuple(Arc::new(fields))
     }
 
-    pub fn union(mut variants: Vec<Type>) -> Type {
-        if variants.is_empty() {
-            Type::UNIT
-        } else if variants.len() == 1 {
-            variants.pop().unwrap()
-        } else {
-            Type::Union(Arc::new(variants))
-        }
+    pub fn union(variants: Vec<Type>) -> Type {
+        // if variants.is_empty() {
+        //     Type::UNIT
+        // } else if variants.len() == 1 {
+        //     variants.pop().unwrap()
+        // } else {
+        Type::Union(Arc::new(variants))
+        // }
     }
 
     fn function_return_type(&self) -> Option<&Type> {
@@ -563,6 +569,24 @@ impl Type {
         match self {
             Type::Tuple(fields) if fields.len() == 2 => fields.get(1).cloned(),
             _ => None,
+        }
+    }
+
+    /// Substitute in the given generic arguments. Replacing each `Generic(i)` with `generic_args[i]`.
+    fn substitute(&self, generic_args: &Vec<Type>) -> Type {
+        match self {
+            Type::Primitive(primitive) => Type::Primitive(*primitive),
+            Type::Generic(generic) if (generic.0 as usize) < generic_args.len() => {
+                generic_args[generic.0 as usize].clone()
+            },
+            Type::Generic(generic) => Type::Generic(*generic),
+            Type::Tuple(elements) => Type::Tuple(Arc::new(mapvec(elements.iter(), |typ| typ.substitute(generic_args)))),
+            Type::Function(function_type) => {
+                let parameters = mapvec(&function_type.parameters, |typ| typ.substitute(generic_args));
+                let return_type = function_type.return_type.substitute(generic_args);
+                Type::Function(Arc::new(FunctionType { parameters, return_type }))
+            },
+            Type::Union(variants) => Type::Union(Arc::new(mapvec(variants.iter(), |typ| typ.substitute(generic_args)))),
         }
     }
 }

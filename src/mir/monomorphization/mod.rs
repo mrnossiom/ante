@@ -63,7 +63,9 @@ where
         })
         .reduce(Mir::default, Mir::extend)
         .with_externals_and_names(initial_mir.external, initial_mir.names)
+        .select_largest_variants()
         .assert_fully_linked()
+        .assert_type_checks()
 }
 
 /// The entry point to monomorphization is any non-generic definition.

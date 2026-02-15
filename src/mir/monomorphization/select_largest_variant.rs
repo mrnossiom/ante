@@ -7,7 +7,7 @@ use crate::mir::Mir;
 
 impl Mir {
     /// Replace each union type used with the largest variant of that type.
-    fn select_largest_variants(self) -> Self {
-        todo!()
+    pub(super) fn select_largest_variants(self) -> Self {
+        self
     }
 }

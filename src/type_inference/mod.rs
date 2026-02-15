@@ -15,6 +15,7 @@ use crate::{
         ids::{ExprId, NameId, PathId, PatternId, TopLevelId, TopLevelName},
     },
     type_inference::{
+        dependency_graph::TypeCheckResult,
         errors::{Locateable, TypeErrorKind},
         fresh_expr::ExtendedTopLevelContext,
         generics::Generic,
@@ -514,6 +515,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     }
 }
 
+#[derive(Debug)]
 pub enum TypeBody {
     Product { type_name: Name, fields: Vec<(Name, Type)> },
     Sum(Vec<(Name, Vec<Type>)>),
@@ -548,9 +550,11 @@ impl TopLevelId {
         match &type_definition.body {
             cst::TypeDefinitionBody::Struct(fields) => {
                 // This'd be easier with an explicit type data field
-                let constructor_type = &result.result.generalized[&type_definition.name];
-                let constructor = maybe_apply_type(constructor_type, arguments);
+                let constructor_type = result.get_generalized(type_definition.name);
+                let constructor = maybe_apply_type(constructor_type, arguments, &result);
                 let field_types = constructor.function_parameter_types();
+
+                assert_eq!(fields.len(), field_types.len());
                 let fields = mapvec(fields.iter().zip(field_types), |((field_name, _), typ)| {
                     (item_context.names[*field_name].clone(), typ)
                 });
@@ -560,8 +564,8 @@ impl TopLevelId {
             },
             cst::TypeDefinitionBody::Enum(variants) => {
                 let variants = mapvec(variants, |(name, _)| {
-                    let constructor_type = &result.result.generalized[name];
-                    let constructor = maybe_apply_type(constructor_type, arguments);
+                    let constructor_type = result.get_generalized(*name);
+                    let constructor = maybe_apply_type(constructor_type, arguments, &result);
                     let fields = constructor.function_parameter_types().collect();
                     (item_context.names[*name].clone(), fields)
                 });
@@ -580,14 +584,16 @@ impl TopLevelId {
 
 /// Try to apply the given type to the given type arguments. Note that this assumes there are no
 /// bound type variables within `typ`!
-fn maybe_apply_type(typ: &Type, args: Option<&[Type]>) -> Type {
-    let expected_generic_count = match typ {
+fn maybe_apply_type(typ: &Type, args: Option<&[Type]>, types: &TypeCheckResult) -> Type {
+    let expected_generic_count = match typ.follow(&types.bindings) {
         Type::Forall(generics, _) => generics.len(),
         _ => 0,
     };
 
-    if args.map_or(0, |args| args.len()) != expected_generic_count {
+    let arg_len = args.map_or(0, |args| args.len());
+    if arg_len != expected_generic_count {
         // TODO: We should be issuing an error either here or above somewhere
+        eprintln!("WARNING: maybe_apply_type: arg len {arg_len} != expected_generic_count {expected_generic_count}")
     }
 
     let no_type_var_bindings = TypeBindings::default();
@@ -606,12 +612,13 @@ fn maybe_apply_type(typ: &Type, args: Option<&[Type]>) -> Type {
         },
         None if expected_generic_count == 0 => typ.clone(),
         None => {
-            // This should be an error in the future
-            let Type::Forall(generics, _) = typ else { unreachable!() };
+            // TODO: This should be an error in the future
+            let Type::Forall(generics, _) = typ.follow(&types.bindings) else { unreachable!() };
             let args = mapvec(generics.iter(), |_| Type::ERROR);
             typ.apply_type(&args, &no_type_var_bindings)
         },
     }
+    .follow_all(&types.bindings)
 }
 
 /// Returns each argument of the given function type.

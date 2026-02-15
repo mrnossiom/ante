@@ -26,15 +26,13 @@ pub fn get_type_impl(context: &GetType, compiler: &DbHandle) -> Type {
             let resolve = Resolve(context.0.top_level_item).get(compiler);
             try_get_type(definition, &item_context, &resolve).unwrap_or_else(|| {
                 let check = TypeCheck(context.0.top_level_item).get(compiler);
-                let typ = &check.result.generalized[&context.0.local_name_id];
+                let typ = check.get_generalized(context.0.local_name_id);
                 typ.follow_all(&check.bindings)
             })
         },
         _ => {
             let check = TypeCheck(context.0.top_level_item).get(compiler);
-            let typ = check.result.generalized.get(&context.0.local_name_id).unwrap_or_else(|| {
-                panic!("No generalized type entry for {} {}", item_context.names[context.0.local_name_id], context.0)
-            });
+            let typ = check.get_generalized(context.0.local_name_id);
             typ.follow_all(&check.bindings)
         },
     };

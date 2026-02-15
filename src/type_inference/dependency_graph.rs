@@ -10,8 +10,15 @@ use crate::{
         TypeCheckSCC,
     },
     iterator_extensions::mapvec,
-    parser::{cst::TopLevelItemKind, ids::TopLevelId},
-    type_inference::{IndividualTypeCheckResult, get_type::try_get_type, types::TypeBindings},
+    parser::{
+        cst::TopLevelItemKind,
+        ids::{NameId, TopLevelId},
+    },
+    type_inference::{
+        IndividualTypeCheckResult,
+        get_type::try_get_type,
+        types::{Type, TypeBindings},
+    },
 };
 
 #[derive(Serialize, Deserialize, PartialEq, Eq)]
@@ -147,4 +154,11 @@ pub fn type_check_impl(context: &TypeCheck, db: &DbHandle) -> Arc<TypeCheckResul
     let result = TypeCheckSCC(scc).get(db);
 
     Arc::new(TypeCheckResult { result: result.items[&context.0].clone(), bindings: result.bindings })
+}
+
+impl TypeCheckResult {
+    /// Retrieves the given generalized type of the given name
+    pub fn get_generalized(&self, name: NameId) -> &Type {
+        self.result.generalized[&name].follow(&self.bindings)
+    }
 }

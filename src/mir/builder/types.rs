@@ -8,7 +8,10 @@ use crate::{
     iterator_extensions::mapvec,
     mir::{FunctionType, Type, builder::Context},
     name_resolution::{Origin, builtin::Builtin},
-    type_inference::{TypeBody, types::{Type as TCType, TypeBindings}},
+    type_inference::{
+        TypeBody,
+        types::{Type as TCType, TypeBindings},
+    },
 };
 
 impl<'local, Db> Context<'local, Db>
@@ -34,7 +37,7 @@ where
 }
 
 /// Maps type inference generics to Mir generics
-type GenericsInScope = FxHashMap<crate::type_inference::generics::Generic, crate::mir::Generic>; 
+type GenericsInScope = FxHashMap<crate::type_inference::generics::Generic, crate::mir::Generic>;
 
 struct ConvertTypeContext<'a, Db> {
     compiler: &'a Db,
@@ -42,7 +45,10 @@ struct ConvertTypeContext<'a, Db> {
     generics_in_scope: &'a GenericsInScope,
 }
 
-impl<Db> ConvertTypeContext<'_, Db> where Db: DbGet<TypeCheck> + DbGet<GetItem> {
+impl<Db> ConvertTypeContext<'_, Db>
+where
+    Db: DbGet<TypeCheck> + DbGet<GetItem>,
+{
     /// TODO: The split of this from [Context::convert_type] ended up being unnecessary.
     pub(super) fn convert_type(&self, typ: &TCType, args: Option<&[TCType]>) -> Type {
         match typ.follow(self.type_bindings) {
@@ -125,8 +131,7 @@ impl<Db> ConvertTypeContext<'_, Db> where Db: DbGet<TypeCheck> + DbGet<GetItem> 
     }
 
     fn convert_primitive_type(
-        &self,
-        typ: crate::type_inference::types::PrimitiveType, args: Option<&[TCType]>
+        &self, typ: crate::type_inference::types::PrimitiveType, args: Option<&[TCType]>,
     ) -> Type {
         match typ {
             crate::type_inference::types::PrimitiveType::Error => Type::ERROR,

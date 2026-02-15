@@ -117,10 +117,7 @@ struct Context<'local, Db> {
     external: FxHashMap<DefinitionId, Type>,
 }
 
-impl<'local, Db> Context<'local, Db>
-where
-    Db: DbGet<TypeCheck> + DbGet<GetItem> + DbGet<GetItemRaw>,
-{
+impl<'local, Db> Context<'local, Db> {
     fn new(
         compiler: &'local Db, types: &'local TypeCheckResult, top_level_id: TopLevelId,
         name_mappings: &'local SharedIdsMap,
@@ -161,7 +158,12 @@ where
     fn context(&self) -> &'local ExtendedTopLevelContext {
         &self.types.result.context
     }
+}
 
+impl<'local, Db> Context<'local, Db>
+where
+    Db: DbGet<TypeCheck> + DbGet<GetItem> + DbGet<GetItemRaw>,
+{
     /// Push an instruction and return its result.
     fn push_instruction(&mut self, instruction: Instruction, result_type: Type) -> Value {
         let current_block = self.current_block;
@@ -355,7 +357,7 @@ where
         };
 
         if is_global {
-            let typ = &self.types.result.generalized[&name_id.unwrap()];
+            let typ = &self.types.get_generalized(name_id.unwrap());
             self.set_generics_in_scope(&typ);
         }
 
@@ -743,7 +745,7 @@ where
         };
 
         for (constructor_name, tag) in constructors {
-            let constructor_type = &self.types.result.generalized[&constructor_name];
+            let constructor_type = self.types.get_generalized(constructor_name);
             self.set_generics_in_scope(constructor_type);
 
             if let crate::type_inference::types::Type::Function(function) = constructor_type.ignore_forall() {
@@ -756,8 +758,7 @@ where
 
     fn define_type_constructor(
         &mut self, name_id: NameId, constructor_type: &TCType,
-        field_types: &[crate::type_inference::types::ParameterType],
-        tag: Option<u8>,
+        field_types: &[crate::type_inference::types::ParameterType], tag: Option<u8>,
     ) {
         let top_level_name = TopLevelName::new(self.top_level_id, name_id);
         let name = self.context()[name_id].clone();

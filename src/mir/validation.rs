@@ -1,5 +1,5 @@
 //! Various methods for validating the well-formedness of [Mir]
-use rayon::{iter::{IntoParallelRefIterator, ParallelIterator}};
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use rustc_hash::FxHashSet;
 
 use crate::mir::{Definition, Instruction, InstructionId, Mir, PrimitiveType, TerminatorInstruction, Type, Value};
@@ -84,7 +84,7 @@ impl Definition {
     /// is not well-formed.
     fn assert_type_checks(&self, mir: &Mir) {
         self.type_check_instructions(mir);
-        self.type_check_block_terminators();
+        self.type_check_block_terminators(mir);
 
         let parameters = match &self.typ {
             Type::Function(function_type) => &function_type.parameters,
@@ -92,7 +92,12 @@ impl Definition {
         };
 
         let entry_block = self.entry_block();
-        assert_eq!(*parameters, entry_block.parameter_types, "\n{}\n\nFunction parameters in type do not match entry block parameters", self.display(mir));
+        assert_eq!(
+            *parameters,
+            entry_block.parameter_types,
+            "\n{}\n\nFunction parameters in type do not match entry block parameters",
+            self.display(mir)
+        );
     }
 
     // The macro calls here are too long so rustfmt puts every argument on a different line, ruining readability
@@ -151,17 +156,17 @@ impl Definition {
         }
     }
 
-    fn type_check_block_terminators(&self) {
+    fn type_check_block_terminators(&self, mir: &Mir) {
         let block_arg_type_checks = |(target, arg): &(_, Option<Value>)| {
             let target_block = &self.blocks[*target];
             match arg {
                 Some(arg) => {
                     assert_eq!(target_block.parameter_types.len(), 1);
                     assert_eq!(target_block.parameter_types[0], self.type_of_value(arg));
-                }
+                },
                 None => {
                     assert_eq!(target_block.parameter_types.len(), 0);
-                }
+                },
             }
         };
 
@@ -191,7 +196,12 @@ impl Definition {
                         Some(return_type) => return_type,
                         None => &self.typ,
                     };
-                    assert_eq!(*return_type, self.type_of_value(value));
+                    assert_eq!(
+                        self.type_of_value(value),
+                        *return_type,
+                        "Returned value's type does not match function return type:\n{}",
+                        self.display(mir)
+                    );
                 },
                 None => panic!("type_check_block_terminators: {block_id} has no terminators!"),
             }

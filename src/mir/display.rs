@@ -2,7 +2,10 @@ use std::fmt::{Display, Formatter, Result};
 
 use crate::{
     iterator_extensions::mapvec,
-    mir::{self, Block, BlockId, Definition, DefinitionId, FloatConstant, InstructionId, IntConstant, PrimitiveType, Type, Value},
+    mir::{
+        self, Block, BlockId, Definition, DefinitionId, FloatConstant, InstructionId, IntConstant, PrimitiveType, Type,
+        Value,
+    },
 };
 
 impl Display for mir::Mir {

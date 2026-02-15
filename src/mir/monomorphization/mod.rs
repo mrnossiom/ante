@@ -98,11 +98,7 @@ fn monomorphize_non_generic_definition(
         }
     }
 
-    Mir {
-        definitions: context.finished_definitions,
-        external: Default::default(),
-        names: context.names,
-    }
+    Mir { definitions: context.finished_definitions, external: Default::default(), names: context.names }
 }
 
 struct FunctionContext<'local> {

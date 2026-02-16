@@ -1,14 +1,9 @@
 a: Int String = 3
 
 // args: --check
-// expected exit status: 101
 // expected stderr:
-// thread '<unnamed>' panicked at src/mir/validation.rs:209:21:
-// assertion `left == right` failed: Returned value's type does not match function return type:
-// fn a d19: error
-//   b0():
-//     return 3_i32
-//   left: Primitive(Int(I32))
-//  right: Primitive(Error)
-// note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+// examples/regressions/146_invalid_int_type.an:1:17	error: Expected (error) String but found I32
+// a: Int String = 3
+// 
+// Found 1 error and 0 warnings
 

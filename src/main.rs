@@ -31,7 +31,10 @@ use inc_complete::{Computation, StorageFor};
 use incremental::{Db, GetCrateGraph, Parse, Resolve};
 use name_resolution::namespace::{CrateId, LocalModuleId, SourceFileId};
 use std::{
-    collections::BTreeSet, os::unix::process::CommandExt, path::{Path, PathBuf}, process::Command, sync::Arc
+    collections::BTreeSet,
+    path::{Path, PathBuf},
+    process::Command,
+    sync::Arc,
 };
 
 use crate::{
@@ -138,6 +141,24 @@ fn display_diagnostics(diagnostics: BTreeSet<Diagnostic>, compiler: &Db) {
         let warnings = format!("{warning_count} warning{warning_s}");
         eprintln!("Compiled with {}", warnings.yellow());
     }
+}
+
+/// Check the entire program, collecting all diagnostics
+fn collect_all_diagnostics(compiler: &Db) -> BTreeSet<Diagnostic> {
+    let crates = GetCrateGraph.get(compiler);
+    let mut diagnostics = BTreeSet::new();
+
+    for crate_ in crates.values() {
+        for file in crate_.source_files.values() {
+            let parse = Parse(*file).get(compiler);
+
+            for item in &parse.cst.top_level_items {
+                let more_diagnostics: BTreeSet<_> = compiler.get_accumulated(TypeCheck(item.id));
+                diagnostics.extend(more_diagnostics);
+            }
+        }
+    }
+    diagnostics
 }
 
 fn display_tokens(compiler: &Db) {
@@ -250,12 +271,15 @@ fn display_mir_mono(compiler: &Db) -> BTreeSet<Diagnostic> {
 /// Codegen each item as a separate llvm module
 /// Returns (module strings, true if there are any errors, diagnostics)
 fn llvm_codegen_separate(compiler: &Db, display_ir: bool) -> (Vec<Arc<Vec<u8>>>, bool, BTreeSet<Diagnostic>) {
-    let crates = GetCrateGraph.get(compiler);
-    let mut diagnostics = BTreeSet::new();
-    crate::codegen::llvm::initialize_native_target();
+    let diagnostics = collect_all_diagnostics(compiler);
+    let (errors, _) = classify_diagnostics(&diagnostics);
+    if errors != 0 {
+        return (Vec::new(), true, diagnostics);
+    }
 
+    let crates = GetCrateGraph.get(compiler);
+    crate::codegen::llvm::initialize_native_target();
     let mut modules = Vec::new();
-    let mut has_errors = false;
 
     // TODO: This could be parallel
     for (crate_id, crate_) in crates.iter() {
@@ -263,31 +287,18 @@ fn llvm_codegen_separate(compiler: &Db, display_ir: bool) -> (Vec<Arc<Vec<u8>>>,
             let parse = Parse(*file).get(compiler);
 
             for item in &parse.cst.top_level_items {
-                let more_diagnostics: BTreeSet<_> = compiler.get_accumulated(TypeCheck(item.id));
-                let error_count = classify_diagnostics(&more_diagnostics).0;
-                has_errors |= error_count != 0;
-
-                // We can't codegen if there were errors
-                // TODO: We should have this check be inside the CodegenLlvm pass itself but we
-                // can't call get_accumulated with only a `DbHandle`. If this limitation in
-                // inc-complete can't be fixed then we'd need to add a `has_errors: bool` field
-                // onto most compiler passes.
-                if !has_errors {
-                    if let Some(result) = CodegenLlvm(item.id).get(compiler) {
-                        if display_ir && *crate_id == CrateId::LOCAL {
-                            let context = &parse.top_level_data[&item.id];
-                            let name = item.kind.name().to_string(context);
-                            display_llvm_bitcode(&result, name);
-                        }
-                        modules.push(result.module_bitcode);
+                if let Some(result) = CodegenLlvm(item.id).get(compiler) {
+                    if display_ir && *crate_id == CrateId::LOCAL {
+                        let context = &parse.top_level_data[&item.id];
+                        let name = item.kind.name().to_string(context);
+                        display_llvm_bitcode(&result, name);
                     }
+                    modules.push(result.module_bitcode);
                 }
-
-                diagnostics.extend(more_diagnostics);
             }
         }
     }
-    (modules, has_errors, diagnostics)
+    (modules, false, diagnostics)
 }
 
 fn display_llvm_bitcode(result: &CodegenLlvmResult, module_name: String) {

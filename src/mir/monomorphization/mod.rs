@@ -15,7 +15,7 @@ mod select_largest_variant;
 
 use crate::{
     definition_collection::collect_all_items,
-    incremental::{GetCrateGraph, GetItem, GetItemRaw, Parse, TypeCheck},
+    incremental::{GetCrateGraph, GetItem, GetItemRaw, Parse, TargetPointerSize, TypeCheck},
     mir::{
         self, Definition, DefinitionId, GenericBindings, Instruction, Mir, Type, Value,
         builder::build_initial_mir_with_shared_map, next_definition_id,
@@ -31,7 +31,7 @@ use crate::{
 /// definitions which were not monomorphized. `items` must contain every item in the program.
 pub(crate) fn monomorphize<Db>(compiler: &Db) -> Mir
 where
-    Db: DbGet<TypeCheck> + DbGet<GetItem> + DbGet<GetItemRaw> + DbGet<GetCrateGraph> + DbGet<Parse> + Sync,
+    Db: DbGet<TypeCheck> + DbGet<GetItem> + DbGet<GetItemRaw> + DbGet<GetCrateGraph> + DbGet<Parse> + DbGet<TargetPointerSize> + Sync,
 {
     let initial_mir = collect_all_items(compiler)
         .into_par_iter()
@@ -63,7 +63,7 @@ where
         })
         .reduce(Mir::default, Mir::extend)
         .with_externals_and_names(initial_mir.external, initial_mir.names)
-        .select_largest_variants()
+        .select_largest_variants(compiler)
         .assert_fully_linked()
         .assert_type_checks()
         .assert_no_unions_or_generics()

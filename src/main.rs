@@ -41,7 +41,7 @@ use crate::{
     codegen::llvm::CodegenLlvmResult,
     diagnostics::DiagnosticKind,
     files::{make_compiler, write_metadata},
-    incremental::{CodegenLlvm, DbStorage, TypeCheck},
+    incremental::{CodegenLlvm, DbStorage, TargetPointerSize, TypeCheck},
 };
 
 // All the compiler passes:
@@ -75,7 +75,10 @@ fn main() {
 }
 
 fn compile(args: Cli) {
-    let (compiler, metadata_file) = make_compiler(&args.files, args.incremental);
+    let (mut compiler, metadata_file) = make_compiler(&args.files, args.incremental);
+
+    // TODO: Pointer size should be configurable depending on the target machine
+    TargetPointerSize.set(&mut compiler, 8);
 
     let diagnostics = match args.emit {
         Some(EmitTarget::Tokens) => {

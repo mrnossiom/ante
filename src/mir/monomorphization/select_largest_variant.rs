@@ -3,39 +3,43 @@
 //! Traverses the Mir replacing each union type with the largest variant in the union,
 //! according to the current target machine.
 
-use crate::mir::{Definition, Mir, Type};
+use crate::{incremental::{TargetPointerSize}, mir::{Definition, Mir, Type}};
+use inc_complete::DbGet;
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 use std::sync::Arc;
 
-// TODO: Make this configurable. It could be an input to inc-complete.
-const PTR_SIZE: u32 = 8;
-
 impl Mir {
     /// Replace each union type used with the largest variant of that type.
-    pub(super) fn select_largest_variants(mut self) -> Self {
-        self.definitions.par_iter_mut().for_each(|(_, definition)| definition.select_largest_variants());
-        self.external.values_mut().for_each(|typ| typ.select_largest_variants(PTR_SIZE));
+    pub(super) fn select_largest_variants<Db>(mut self, db: &Db) -> Self
+        where Db: DbGet<TargetPointerSize>
+    {
+        let ptr_size = TargetPointerSize.get(db);
+
+        self.definitions.par_iter_mut().for_each(|(_, definition)| definition.select_largest_variants(ptr_size));
+        self.external.values_mut().for_each(|typ| typ.select_largest_variants(ptr_size));
         self
     }
 }
 
 impl Definition {
     /// Replaces each union type with the largest variant of that union
-    fn select_largest_variants(&mut self) {
-        self.typ.select_largest_variants(PTR_SIZE);
+    ///
+    /// `ptr_size` should be the size of a pointer in bytes.
+    fn select_largest_variants(&mut self, ptr_size: u32) {
+        self.typ.select_largest_variants(ptr_size);
 
         for typ in self.instruction_result_types.values_mut() {
-            typ.select_largest_variants(PTR_SIZE);
+            typ.select_largest_variants(ptr_size);
         }
 
         for block in self.blocks.values_mut() {
             for parameter in block.parameter_types.iter_mut() {
-                parameter.select_largest_variants(PTR_SIZE);
+                parameter.select_largest_variants(ptr_size);
             }
         }
 
         for definition_type in self.definition_types.values_mut() {
-            definition_type.select_largest_variants(PTR_SIZE);
+            definition_type.select_largest_variants(ptr_size);
         }
     }
 }

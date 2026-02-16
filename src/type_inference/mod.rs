@@ -593,7 +593,6 @@ fn maybe_apply_type(typ: &Type, args: Option<&[Type]>, types: &TypeCheckResult) 
     let arg_len = args.map_or(0, |args| args.len());
     if arg_len != expected_generic_count {
         // TODO: We should be issuing an error either here or above somewhere
-        eprintln!("WARNING: maybe_apply_type: arg len {arg_len} != expected_generic_count {expected_generic_count}")
     }
 
     let no_type_var_bindings = TypeBindings::default();

@@ -54,6 +54,8 @@ pub type DbHandle<'db> = inc_complete::DbHandle<'db, DbStorage>;
 pub struct DbStorage {
     files: HashMapStorage<SourceFileId>,
     crate_graph: SingletonStorage<GetCrateGraph>,
+    ptr_size: SingletonStorage<TargetPointerSize>,
+
     parse_results: HashMapStorage<Parse>,
     visible_definitions: HashMapStorage<VisibleDefinitions>,
     visible_types: HashMapStorage<VisibleTypes>,
@@ -119,6 +121,11 @@ impl SourceFile {
 // SourceFileIds map to a FileData which contains, among other things, the full
 // source text of the file.
 define_input!(100, SourceFileId -> Arc<SourceFile>, DbStorage);
+
+/// The size of a pointer for the target machine in bytes.
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+pub struct TargetPointerSize;
+define_input!(101, TargetPointerSize -> u32, DbStorage);
 
 #[derive(PartialEq, Eq, Serialize, Deserialize)]
 pub struct Crate {

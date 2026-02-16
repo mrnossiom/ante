@@ -140,6 +140,10 @@ impl Definition {
         &self.blocks[BlockId::ENTRY_BLOCK]
     }
 
+    pub fn instruction_result_type(&self, id: InstructionId) -> &Type {
+        &self.instruction_result_types[id]
+    }
+
     pub fn type_of_value(&self, value: &Value) -> Type {
         match value {
             Value::Error => Type::ERROR,

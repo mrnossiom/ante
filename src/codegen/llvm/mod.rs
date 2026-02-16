@@ -341,7 +341,7 @@ impl<'ctx> ModuleContext<'ctx> {
             },
             mir::Instruction::Transmute(value) => {
                 // Transmute the value by storing it in an alloca and loading it as a different type
-                let result_type = self.convert_type(&function.type_of_value(&mir::Value::InstructionResult(id)));
+                let result_type = self.convert_type(function.instruction_result_type(id));
                 let value = self.lookup_value(*value);
                 let alloca = self.builder.build_alloca(value.get_type(), "").unwrap();
                 self.builder.build_store(alloca, value).unwrap();

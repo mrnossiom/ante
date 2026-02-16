@@ -8,7 +8,7 @@ use inkwell::{
     module::Module,
     targets::{CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetMachine},
     types::{BasicType, BasicTypeEnum, IntType},
-    values::{AnyValue, BasicValueEnum, FunctionValue, GlobalValue},
+    values::{AggregateValue, AnyValue, BasicValue, BasicValueEnum, FunctionValue, GlobalValue},
 };
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
@@ -331,7 +331,15 @@ impl<'ctx> ModuleContext<'ctx> {
             },
             mir::Instruction::MakeTuple(fields) => {
                 let fields = mapvec(fields, |field| self.lookup_value(*field));
-                self.llvm.const_struct(&fields, false).into()
+                let const_fields = mapvec(&fields, |field| if field.is_const() { *field } else { Self::undef_value(field.get_type()) });
+                let mut tuple = self.llvm.const_struct(&const_fields, false).as_aggregate_value_enum();
+
+                for (i, field) in fields.into_iter().enumerate() {
+                    if !field.is_const() {
+                        tuple = self.builder.build_insert_value(tuple, field, i as u32, "").unwrap();
+                    }
+                }
+                tuple.as_basic_value_enum()
             },
             mir::Instruction::StackAlloc(value) => {
                 let value = self.lookup_value(*value);
@@ -353,6 +361,18 @@ impl<'ctx> ModuleContext<'ctx> {
             },
         };
         self.values.insert(mir::Value::InstructionResult(id), result);
+    }
+
+    fn undef_value(typ: BasicTypeEnum<'ctx>) -> BasicValueEnum<'ctx> {
+        match typ {
+            BasicTypeEnum::ArrayType(array) => array.get_undef().into(),
+            BasicTypeEnum::FloatType(float) => float.get_undef().into(),
+            BasicTypeEnum::IntType(int) => int.get_undef().into(),
+            BasicTypeEnum::PointerType(pointer) => pointer.get_undef().into(),
+            BasicTypeEnum::StructType(tuple) => tuple.get_undef().into(),
+            BasicTypeEnum::VectorType(vector) => vector.get_undef().into(),
+            BasicTypeEnum::ScalableVectorType(vector) => vector.get_undef().into(),
+        }
     }
 
     fn remember_incoming(&mut self, target: BlockId, argument: &Option<mir::Value>) {

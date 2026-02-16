@@ -1,6 +1,6 @@
 #![allow(mismatched_lifetime_syntaxes)]
 
-mod codegen;
+pub mod codegen;
 mod definition_collection;
 mod find_files;
 mod lexer;

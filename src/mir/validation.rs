@@ -21,6 +21,15 @@ impl Mir {
         });
         self
     }
+
+    /// Union and generic types should be lowered into more explicit forms before handing off the
+    /// Mir to the backend.
+    pub(crate) fn assert_no_unions_or_generics(self) -> Self {
+        self.definitions.par_iter().for_each(|(_, definition)| {
+            definition.assert_no_unions_or_generics(&self);
+        });
+        self
+    }
 }
 
 macro_rules! instr_panic {
@@ -150,7 +159,8 @@ impl Definition {
                     instr_assert_eq!(result_type, target_type, self, id, mir, "Result type `{result_type}` does not match manually substited type `{target_type}`");
                 },
                 Instruction::Id(value) => {
-                    instr_assert_eq!(*result_type, self.type_of_value(value), self, id, mir, "Value type != result type `{result_type}`");
+                    let value_type = self.type_of_value(value);
+                    instr_assert_eq!(*result_type, value_type, self, id, mir, "Value type `{value_type}` != result type `{result_type}`");
                 },
             }
         }
@@ -233,5 +243,38 @@ impl Definition {
         }
 
         panic!("{}", result_string);
+    }
+
+    #[rustfmt::skip]
+    fn assert_no_unions_or_generics(&self, mir: &Mir) {
+        if self.typ.contains_union_or_generic() {
+            panic!("{}\nDefinition type contains a union or generic", self.display(mir));
+        }
+
+        for (instruction_id, typ) in self.instruction_result_types.iter() {
+            instr_assert!(!typ.contains_union_or_generic(), self, instruction_id, mir, "Result type contains union or generic");
+        }
+
+        for (block_id, block) in self.blocks.iter() {
+            for parameter in block.parameter_types.iter() {
+                if parameter.contains_union_or_generic() {
+                    panic!("{}\nParameter to {block_id} contains a union or generic", self.display(mir));
+                }
+            }
+        }
+    }
+}
+
+impl Type {
+    fn contains_union_or_generic(&self) -> bool {
+        match self {
+            Type::Primitive(_) => false,
+            Type::Union(_) | Type::Generic(_) => true,
+            Type::Tuple(fields) => fields.iter().any(Type::contains_union_or_generic),
+            Type::Function(function) => {
+                function.parameters.iter().any(Type::contains_union_or_generic)
+                    || function.return_type.contains_union_or_generic()
+            },
+        }
     }
 }

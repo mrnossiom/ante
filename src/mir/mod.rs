@@ -589,6 +589,20 @@ impl Type {
             Type::Union(variants) => Type::Union(Arc::new(mapvec(variants.iter(), |typ| typ.substitute(generic_args)))),
         }
     }
+
+    /// Retrieves the size in bytes of this type. Result depends on the target machine.
+    ///
+    /// Panics if there is a generic within this type.
+    fn size_in_bytes(&self, ptr_size: u32) -> u32 {
+        match self {
+            Type::Primitive(primitive) => primitive.size_in_bytes(ptr_size),
+            Type::Tuple(fields) => fields.iter().map(|typ| typ.size_in_bytes(ptr_size)).sum(),
+            Type::Function(_) => ptr_size,
+            // This is a raw union so the tag isn't counted here
+            Type::Union(variants) => variants.iter().map(|typ| typ.size_in_bytes(ptr_size)).max().unwrap_or(0),
+            Type::Generic(_) => panic!("Type::size_in_bytes: Encountered generic"),
+        }
+    }
 }
 
 /// Generics are represented as their index into their function's generic_count
@@ -608,6 +622,20 @@ pub enum PrimitiveType {
     Char,
     Int(IntegerKind),
     Float(FloatKind),
+}
+
+impl PrimitiveType {
+    fn size_in_bytes(self, ptr_size: u32) -> u32 {
+        match self {
+            PrimitiveType::Error => 0,
+            PrimitiveType::Unit => 0,
+            PrimitiveType::Bool => 1,
+            PrimitiveType::Pointer => ptr_size,
+            PrimitiveType::Char => 4,
+            PrimitiveType::Int(kind) => kind.size_in_bytes(ptr_size),
+            PrimitiveType::Float(kind) => kind.size_in_bytes(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

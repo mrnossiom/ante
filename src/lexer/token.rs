@@ -60,9 +60,20 @@ pub enum IntegerKind {
 }
 
 impl IntegerKind {
-    pub(crate) fn is_signed(&self) -> bool {
+    pub fn is_signed(&self) -> bool {
         use IntegerKind::*;
         matches!(self, I8 | I16 | I32 | I64 | Isz)
+    }
+
+    pub fn size_in_bytes(self, ptr_size: u32) -> u32 {
+        use IntegerKind::*;
+        match self {
+            I8 | U8 => 1,
+            I16 | U16 => 2,
+            I32 | U32 => 4,
+            I64 | U64 => 8,
+            Isz | Usz => ptr_size,
+        }
     }
 }
 
@@ -119,6 +130,15 @@ impl Display for ClosingBracket {
 pub enum FloatKind {
     F32,
     F64,
+}
+
+impl FloatKind {
+    pub fn size_in_bytes(self) -> u32 {
+        match self {
+            FloatKind::F32 => 4,
+            FloatKind::F64 => 8,
+        }
+    }
 }
 
 /// Wrapper for `f64` providing `Eq` - we don't care about NaN values

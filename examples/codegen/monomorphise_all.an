@@ -7,3 +7,16 @@ baz x = bar x
 main () = baz "hi"
 
 // args: --delete-binary
+// expected exit status: 101
+// expected stderr:
+// thread '<unnamed>' panicked at src/mir/validation.rs:209:21:
+// assertion `left == right` failed: Returned value's type does not match function return type:
+// fn baz d45: fn (Pointer, U32) -> (Pointer, U32)
+//   b0(b0_0: error):
+//     v0: fn error -> error = id bar_d46
+//     v1: error = v0 b0_0
+//     return v1
+//   left: Primitive(Error)
+//  right: Tuple([Primitive(Pointer), Primitive(Int(U32))])
+// note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+

@@ -31,9 +31,7 @@ use inc_complete::{Computation, StorageFor};
 use incremental::{Db, GetCrateGraph, Parse, Resolve};
 use name_resolution::namespace::{CrateId, LocalModuleId, SourceFileId};
 use std::{
-    collections::BTreeSet,
-    path::{Path, PathBuf},
-    sync::Arc,
+    collections::BTreeSet, os::unix::process::CommandExt, path::{Path, PathBuf}, process::Command, sync::Arc
 };
 
 use crate::{
@@ -91,7 +89,7 @@ fn compile(args: Cli) {
         Some(EmitTarget::Mir) => display_mir(&compiler),
         Some(EmitTarget::MirMono) => display_mir_mono(&compiler),
         Some(EmitTarget::Ir) => llvm_codegen_separate(&compiler, true).2,
-        None => llvm_codegen_all(&compiler, &args.files),
+        None => llvm_codegen_all(&compiler, &args.files, args.delete_binary),
     };
 
     display_diagnostics(diagnostics, &compiler);
@@ -303,7 +301,7 @@ fn display_llvm_bitcode(result: &CodegenLlvmResult, module_name: String) {
 }
 
 /// Codegen everything, linking together each separate llvm module
-fn llvm_codegen_all(compiler: &Db, files: &[PathBuf]) -> BTreeSet<Diagnostic> {
+fn llvm_codegen_all(compiler: &Db, files: &[PathBuf], delete_binary: bool) -> BTreeSet<Diagnostic> {
     let (mut modules, has_errors, diagnostics) = llvm_codegen_separate(compiler, false);
     if has_errors {
         return diagnostics;
@@ -318,6 +316,13 @@ fn llvm_codegen_all(compiler: &Db, files: &[PathBuf]) -> BTreeSet<Diagnostic> {
     let module_name = module_name.to_string_lossy();
 
     codegen::llvm::link(modules, &module_name);
+
+    // Run the program
+    Command::new(module_name.as_ref()).spawn().unwrap().wait().unwrap();
+    if delete_binary {
+        std::fs::remove_file(module_name.as_ref()).unwrap();
+    }
+
     diagnostics
 }
 

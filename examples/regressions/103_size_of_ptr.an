@@ -5,7 +5,7 @@ _ = boom ()
 // args: --delete-binary
 // expected exit status: 101
 // expected stderr:
-// thread 'main' panicked at src/mir/builder/mod.rs:261:76:
+// thread '<unnamed>' panicked at src/mir/builder/mod.rs:307:76:
 // No cached variable for td
 // note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 

@@ -304,7 +304,9 @@ where
                     function
                 }
             },
-            Some(origin) => *self.variables.get(&origin).unwrap_or_else(|| panic!("No cached variable for {origin}")),
+            Some(origin) => *self.variables.get(&origin).unwrap_or_else(|| {
+                panic!("No cached variable for {} with origin {origin}", self.context()[path_id])
+            }),
             None => {
                 eprintln!("Warning: no origin for {path_id:?}: {}", self.context()[path_id]);
                 Value::Error

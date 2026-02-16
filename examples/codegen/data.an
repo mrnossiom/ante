@@ -24,17 +24,8 @@ main () =
 // examples/codegen/data.an:6:4	error: `printne` not found in scope
 //     printne (t.a)
 // 
-// examples/codegen/data.an:6:14	error: T has no field named `a`
-//     printne (t.a)
-// 
 // examples/codegen/data.an:7:4	error: `printne` not found in scope
 //     printne ", "
-// 
-// examples/codegen/data.an:9:10	error: T has no field named `b`
-//     puts t.b.c_string
-// 
-// examples/codegen/data.an:9:12	error: Object type must be known by this point to access its field
-//     puts t.b.c_string
 // 
 // examples/codegen/data.an:11:8	error: `Some` not found in scope
 //     s = Some 2
@@ -54,5 +45,5 @@ main () =
 // examples/codegen/data.an:17:14	error: `print` not found in scope
 //     | None -> print "s = None"
 // 
-// Found 12 errors and 0 warnings
+// Found 9 errors and 0 warnings
 

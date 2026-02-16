@@ -5,7 +5,7 @@ a: Int String = 3
 // expected stderr:
 // thread '<unnamed>' panicked at src/mir/validation.rs:209:21:
 // assertion `left == right` failed: Returned value's type does not match function return type:
-// fn a d34: error
+// fn a d19: error
 //   b0():
 //     return 3_i32
 //   left: Primitive(Int(I32))

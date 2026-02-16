@@ -3,3 +3,5 @@ main () =
     ()
 
 // args: --delete-binary
+// expected stdout: Hello, World!
+

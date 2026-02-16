@@ -47,10 +47,10 @@ for filtered print
 // examples/regressions/217_filter.an:29:4	error: `filter` not found in scope
 //     filter zero_to_nine (fn x -> x % 2 == 0)
 // 
-// examples/regressions/217_filter.an:29:35	error: `%` not found in scope
+// examples/regressions/217_filter.an:29:35	error: No implicit found for type Mod _ required by parameter 3 of %
 //     filter zero_to_nine (fn x -> x % 2 == 0)
 // 
-// examples/regressions/217_filter.an:29:39	error: `==` not found in scope
+// examples/regressions/217_filter.an:29:39	error: No implicit found for type Eq _ required by parameter 3 of ==
 //     filter zero_to_nine (fn x -> x % 2 == 0)
 // 
 // examples/regressions/217_filter.an:31:0	error: Expected a top-level item but found `for`

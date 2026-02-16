@@ -322,6 +322,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             },
         };
 
+        self.push_scope();
         self.check_function_parameter_count(&function_type.parameters, lambda.parameters.len(), expr);
         let parameter_lengths_match = function_type.parameters.len() == lambda.parameters.len();
 
@@ -329,6 +330,10 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             // Avoid extra errors if the parameter length isn't as expected
             let expected_type = if parameter_lengths_match { &expected_type.typ } else { &Type::ERROR };
             self.check_pattern(parameter.pattern, expected_type);
+
+            if parameter.is_implicit {
+                self.add_implicit(parameter.pattern);
+            }
         }
 
         // Required in case `function_type` has fewer parameters, to ensure we check all of `lambda.parameters`
@@ -345,7 +350,6 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             Cow::Borrowed(&function_type.return_type)
         };
 
-        self.push_scope();
         self.check_expr(lambda.body, &return_type);
         self.pop_scope();
     }

@@ -32,11 +32,11 @@ add_one x =
 // 
 // (x: Maybe I32) = (Maybe.Some: fn I32 -> Maybe I32 pure) 10_I32
 // 
-// (add_one: fn (Maybe _) -> Maybe _ can _) (x: Maybe _) =
-//     (bind: fn (Maybe _) (fn _ -> Maybe _ can _) -> Maybe _ can _) (x: Maybe _) (fn (x: _) -> (ret: fn _ -> Maybe _ can _) ((x: _) (+: (error)) 1_I32))
+// (add_one: fn (Maybe I32) -> Maybe I32 can _) (x: Maybe I32) =
+//     (bind: fn (Maybe I32) (fn I32 -> Maybe I32 can _) -> Maybe I32 can _) (x: Maybe I32) (fn (x: I32) -> (ret: fn I32 -> Maybe I32 can _) ((fn (p5: I32) (p6: I32) -> (+: fn I32 I32 {Add I32} -> I32 pure) (p5: I32) (p6: I32) {(error)}) (x: I32) 1_I32))
 
 // expected stderr:
-// examples/typechecking/bind.an:15:27	error: `+` not found in scope
+// examples/typechecking/bind.an:15:27	error: No implicit found for type Add _ required by parameter 3 of +
 //     bind x (fn x -> ret (x + 1i32))
 // 
 // Found 1 error and 0 warnings

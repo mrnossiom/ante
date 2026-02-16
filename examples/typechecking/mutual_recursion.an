@@ -16,40 +16,43 @@ main () = is_even 4
 
 // args: -e ast-t
 // expected stdout:
-// (is_even: fn _ -> Bool can _) (n: _) =
-//     if (n: _) (==: (error)) 0 then true else 
-//         (print: (error)) (n: _)
-//         (not: (error)) (is_odd: fn _ -> _ can _)
+// (is_even: Bool) (n: I32) =
+//     if (fn (p6: I32) (p7: I32) -> (==: fn I32 I32 {Eq I32} -> Bool pure) (p6: I32) (p7: I32) {(error)}) (n: I32) 0 then true else 
+//         (print: (error)) (n: I32)
+//         (not: fn Bool -> Bool can _) (is_odd: fn I32 -> _ can _)
 // 
-// (is_odd: fn _ -> _ can _) (n: _) =
-//     (or: (error)) ((n: _) (==: (error)) 1) ((not: (error)) (is_even: fn _ -> Bool can _))
+// (is_odd: fn I32 -> _ can _) (n: I32) =
+//     (or: (error)) ((fn (p5: I32) (p6: I32) -> (==: fn I32 I32 {Eq I32} -> Bool pure) (p5: I32) (p6: I32) {(error)}) (n: I32) 1) ((not: fn Bool -> Bool can _) (is_even: Bool))
 // 
-// (main: fn Unit -> Bool can _) () = (is_even: fn I32 -> Bool can _) 4
+// (main: fn Unit -> _ can _) () = (is_even: Bool) 4
 
 // expected stderr:
-// examples/typechecking/mutual_recursion.an:4:9	error: `==` not found in scope
+// examples/typechecking/mutual_recursion.an:3:0	error: Expected a function with 1 parameter, but found Bool
+// is_even n =
+// 
+// examples/typechecking/mutual_recursion.an:4:9	error: No implicit found for type Eq _ required by parameter 3 of ==
 //     if n == 0 then true else
 // 
 // examples/typechecking/mutual_recursion.an:5:8	error: `print` not found in scope
 //         print n
 // 
-// examples/typechecking/mutual_recursion.an:6:8	error: `not` not found in scope
+// examples/typechecking/mutual_recursion.an:6:12	error: Expected Bool but found fn I32 -> _ can _
 //         not is_odd (n - 1)
 // 
 // examples/typechecking/mutual_recursion.an:6:19	error: Expected an unindent but found `(`
 //         not is_odd (n - 1)
 // 
-// examples/typechecking/mutual_recursion.an:9:6	error: `==` not found in scope
+// examples/typechecking/mutual_recursion.an:9:6	error: No implicit found for type Eq _ required by parameter 3 of ==
 //     n == 1 or not is_even (n - 1)
 // 
 // examples/typechecking/mutual_recursion.an:9:11	error: `or` not found in scope
 //     n == 1 or not is_even (n - 1)
 // 
-// examples/typechecking/mutual_recursion.an:9:14	error: `not` not found in scope
-//     n == 1 or not is_even (n - 1)
-// 
 // examples/typechecking/mutual_recursion.an:9:26	error: Expected an unindent but found `(`
 //     n == 1 or not is_even (n - 1)
 // 
-// Found 8 errors and 0 warnings
+// examples/typechecking/mutual_recursion.an:11:10	error: Expected fn _ -> _ can _ but found Bool
+// main () = is_even 4
+// 
+// Found 9 errors and 0 warnings
 

@@ -41,7 +41,7 @@ does_use x =
 // 
 // (does_use: fn _ -> _ can _) (x: _) =
 //     (y: _) = (get: (error)) ()
-//     (set: (error)) ((y: _) (+: (error)) (x: _))
+//     (set: (error)) ((fn (p5: _) (p6: _) -> (+: fn _ _ {Add _} -> _ pure) (p5: _) (p6: _) {(error)}) (y: _) (x: _))
 
 // expected stderr:
 // examples/typechecking/effects.an:10:4	error: Effects and handle expressions are currently unimplemented
@@ -56,7 +56,7 @@ does_use x =
 // examples/typechecking/effects.an:22:4	error: `set` not found in scope
 //     set (y + x)
 // 
-// examples/typechecking/effects.an:22:11	error: `+` not found in scope
+// examples/typechecking/effects.an:22:11	error: No implicit found for type Add _ required by parameter 3 of +
 //     set (y + x)
 // 
 // Found 5 errors and 0 warnings

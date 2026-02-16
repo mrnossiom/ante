@@ -22,13 +22,13 @@ main ()
 
 // args: --delete-binary
 // expected stderr:
-// examples/regressions/85_type_defaulting_rules.an:7:9	error: `>` not found in scope
+// examples/regressions/85_type_defaulting_rules.an:7:9	error: No implicit found for type Cmp _ required by parameter 3 of >
 //     if n > 0 then
 // 
-// examples/regressions/85_type_defaulting_rules.an:9:22	error: `-` not found in scope
+// examples/regressions/85_type_defaulting_rules.an:9:22	error: No implicit found for type Sub _ required by parameter 3 of -
 //         count_down (n - 1) f
 // 
-// examples/regressions/85_type_defaulting_rules.an:14:4	error: Expected fn _ -> _ can _ but found fn _ (fn _ -> _ can _) -> Unit can _
+// examples/regressions/85_type_defaulting_rules.an:14:4	error: Expected fn _ -> _ can _ but found fn I32 (fn I32 -> _ can _) -> Unit can _
 //     count_down 3 fn x ->
 // 
 // examples/regressions/85_type_defaulting_rules.an:14:17	error: Expected an unindent but found `fn`

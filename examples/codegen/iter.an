@@ -22,10 +22,10 @@ main () = my_iter 10 print
 // examples/codegen/iter.an:3:27	error: `elem` not found in scope
 //     mynext: fn it -> Maybe (elem, it)
 // 
-// examples/codegen/iter.an:8:13	error: `<=` not found in scope
+// examples/codegen/iter.an:8:13	error: No implicit found for type Cmp _ required by parameter 3 of <=
 //         if x <= 0 then None
 // 
-// examples/codegen/iter.an:9:24	error: `-` not found in scope
+// examples/codegen/iter.an:9:24	error: No implicit found for type Sub _ required by parameter 3 of -
 //         else Some (x, x - 1)
 // 
 // examples/codegen/iter.an:12:10	error: `mynext` not found in scope

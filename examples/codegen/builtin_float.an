@@ -34,16 +34,16 @@ main () =
 
 // args: --delete-binary
 // expected stderr:
-// examples/codegen/builtin_float.an:4:18	error: `+` not found in scope
+// examples/codegen/builtin_float.an:4:18	error: No implicit found for type Add _ required by parameter 3 of +
 //     add_f64 = 3.0 + 4.0
 // 
-// examples/codegen/builtin_float.an:5:18	error: `-` not found in scope
+// examples/codegen/builtin_float.an:5:18	error: No implicit found for type Sub _ required by parameter 3 of -
 //     sub_f64 = 7.0 - 8.0
 // 
-// examples/codegen/builtin_float.an:6:19	error: `*` not found in scope
+// examples/codegen/builtin_float.an:6:19	error: No implicit found for type Mul _ required by parameter 3 of *
 //     mul_f64 = 11.0 * 12.0
 // 
-// examples/codegen/builtin_float.an:7:19	error: `/` not found in scope
+// examples/codegen/builtin_float.an:7:19	error: No implicit found for type Div _ required by parameter 3 of /
 //     div_f64 = 15.0 / 16.0
 // 
 // examples/codegen/builtin_float.an:10:4	error: `print` not found in scope

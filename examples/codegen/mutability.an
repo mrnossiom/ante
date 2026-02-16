@@ -30,7 +30,7 @@ double x = x * 2
 // examples/codegen/mutability.an:11:15	error: `@` not found in scope
 //     x = double @n
 // 
-// examples/codegen/mutability.an:14:13	error: `*` not found in scope
+// examples/codegen/mutability.an:14:13	error: No implicit found for type Mul _ required by parameter 3 of *
 // double x = x * 2
 // 
 // Found 6 errors and 0 warnings

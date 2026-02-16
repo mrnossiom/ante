@@ -7,19 +7,24 @@ ex2: a -> b =
     fn x -> x
 
 // args: -e ast-t
-// expected stdout: (ex1: forall _2 _3. fn a -> b pure) ((x: a)) : b = (x: a) (+: (error)) 1_U32
-
-
+// expected stdout:
+// (ex1: forall _2 _3. fn a -> b pure) ((x: a)) : b = (fn (p2: b) (p3: b) -> (+: fn b b {Add b} -> b pure) (p2: b) (p3: b) {(error)}) (x: a) 1_U32
 
 // expected stderr:
 // examples/typechecking/rigid.an:2:0	error: Expected a function with 1 parameter, but found forall _2 _3. fn a -> b pure
 // ex1 (x: a): b = x + 1u32
 // 
-// examples/typechecking/rigid.an:2:18	error: `+` not found in scope
+// examples/typechecking/rigid.an:2:16	error: Expected b but found a
+// ex1 (x: a): b = x + 1u32
+// 
+// examples/typechecking/rigid.an:2:18	error: No implicit found for type Add _ required by parameter 3 of +
+// ex1 (x: a): b = x + 1u32
+// 
+// examples/typechecking/rigid.an:2:20	error: Expected b but found U32
 // ex1 (x: a): b = x + 1u32
 // 
 // examples/typechecking/rigid.an:6:7	error: Expected `=` to begin the function body but found `->`
 // ex2: a -> b =
 // 
-// Found 3 errors and 0 warnings
+// Found 5 errors and 0 warnings
 

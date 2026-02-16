@@ -15,9 +15,9 @@ map l f =
 // expected stdout:
 // // id = c1m743_1986
 // recursion_c1m743_1986_0 n_1 f_2 =
-//     if n_1 >_? 0 then 
+//     if n_1 >_c0m12_4222_0 0 then 
 //         f_2 ()
-//         recursion_c1m743_1986_0 (n_1 -_? 1) f_2
+//         recursion_c1m743_1986_0 (n_1 -_c0m12_3431_1 1) f_2
 // 
 // // id = c1m743_838
 // shared type List_c1m743_838_0 a_1 =
@@ -29,13 +29,4 @@ map l f =
 //     match l_1
 //     | Nil_td -> Nil_td
 //     | Cons_td x_3 xs_4 -> Cons_td (f_2 x_3) (map_c1m743_4625_0 xs_4 f_2)
-
-// expected stderr:
-// examples/nameresolution/functions.an:3:9	error: `>` not found in scope
-//     if n > 0 then
-// 
-// examples/nameresolution/functions.an:5:21	error: `-` not found in scope
-//         recursion (n - 1) f
-// 
-// Found 2 errors and 0 warnings
 

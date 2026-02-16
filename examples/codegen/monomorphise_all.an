@@ -11,9 +11,9 @@ main () = baz "hi"
 // expected stderr:
 // thread '<unnamed>' panicked at src/mir/validation.rs:209:21:
 // assertion `left == right` failed: Returned value's type does not match function return type:
-// fn baz d45: fn (Pointer, U32) -> (Pointer, U32)
+// fn baz d68: fn (Pointer, U32) -> (Pointer, U32)
 //   b0(b0_0: error):
-//     v0: fn error -> error = id bar_d46
+//     v0: fn error -> error = id bar_d69
 //     v1: error = v0 b0_0
 //     return v1
 //   left: Primitive(Error)

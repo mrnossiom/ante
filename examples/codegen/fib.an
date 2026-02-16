@@ -6,16 +6,16 @@ main () = print (fib 10)
 
 // args: --delete-binary
 // expected stderr:
-// examples/codegen/fib.an:2:9	error: `<` not found in scope
+// examples/codegen/fib.an:2:9	error: No implicit found for type Cmp _ required by parameter 3 of <
 //     if n < 2 then n
 // 
-// examples/codegen/fib.an:3:16	error: `-` not found in scope
+// examples/codegen/fib.an:3:16	error: No implicit found for type Sub _ required by parameter 3 of -
 //     else fib (n - 2) + fib (n - 1)
 // 
-// examples/codegen/fib.an:3:21	error: `+` not found in scope
+// examples/codegen/fib.an:3:21	error: No implicit found for type Add _ required by parameter 3 of +
 //     else fib (n - 2) + fib (n - 1)
 // 
-// examples/codegen/fib.an:3:30	error: `-` not found in scope
+// examples/codegen/fib.an:3:30	error: No implicit found for type Sub _ required by parameter 3 of -
 //     else fib (n - 2) + fib (n - 1)
 // 
 // examples/codegen/fib.an:5:10	error: `print` not found in scope

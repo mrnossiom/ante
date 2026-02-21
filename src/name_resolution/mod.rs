@@ -284,6 +284,12 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
             Ok(Origin::TypeResolution)
         } else if let Some(origin) = self.lookup_builtin_name(name, is_type) {
             Ok(origin)
+        // Ad-hoc check to define `intrinsic` only within the stdlib for compiler intrinsics
+        } else if namespace == Namespace::Local
+            && self.item.source_file.crate_id == CrateId::STDLIB
+            && name == "intrinsic"
+        {
+            Ok(Origin::Builtin(Builtin::Intrinsic))
         } else {
             let location = location.clone();
             let name = Arc::new(name.clone());

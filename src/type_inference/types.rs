@@ -400,7 +400,7 @@ impl Type {
                     Builtin::String => Type::STRING,
                     Builtin::Ptr => Type::POINTER,
                     Builtin::PairType => Type::PAIR,
-                    Builtin::PairConstructor => {
+                    Builtin::PairConstructor | Builtin::Intrinsic => {
                         // TODO: Error
                         Type::ERROR
                     },
@@ -613,8 +613,10 @@ impl std::fmt::Display for PrimitiveType {
             PrimitiveType::String => write!(f, "String"),
             PrimitiveType::Char => write!(f, "Char"),
             PrimitiveType::Pair => write!(f, ","),
-            PrimitiveType::Reference(mutability, Sharedness::Shared) => write!(f, "{mutability}"),
-            PrimitiveType::Reference(mutability, Sharedness::Owned) => write!(f, "{mutability}own"),
+            PrimitiveType::Reference(Mutability::Immutable, Sharedness::Shared) => write!(f, "ref"),
+            PrimitiveType::Reference(Mutability::Immutable, Sharedness::Owned) => write!(f, "imm"),
+            PrimitiveType::Reference(Mutability::Mutable, Sharedness::Shared) => write!(f, "mut"),
+            PrimitiveType::Reference(Mutability::Mutable, Sharedness::Owned) => write!(f, "uniq"),
         }
     }
 }

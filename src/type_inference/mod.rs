@@ -95,6 +95,14 @@ pub struct IndividualTypeCheckResult {
     pub generalized: BTreeMap<NameId, Type>,
 }
 
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TypeMaps {
+    pub name_types: BTreeMap<NameId, Type>,
+    pub path_types: BTreeMap<PathId, Type>,
+    pub expr_types: BTreeMap<ExprId, Type>,
+    pub pattern_types: BTreeMap<PatternId, Type>,
+}
+
 /// The TypeChecker is responsible for checking for type errors inside of an
 /// inference group. An inference group is a set of top-level items which form
 /// an SCC in the type inference dependency graph. Usually each group is only
@@ -129,20 +137,44 @@ struct TypeChecker<'local, 'inner> {
     /// extend each [TopLevelContext] with these new ids.
     id_contexts: FxHashMap<TopLevelId, ExtendedTopLevelContext>,
 
+    /// The current top-level item being type checked. This is empty upon initialization, but
+    /// while type checking, this should always be non-empty.
     current_item: Option<TopLevelId>,
 
     /// Types of each top-level item in the current SCC being worked on
     item_types: Rc<FxHashMap<TopLevelName, Type>>,
 
-    implicits_in_scope: Vec<Vec<NameId>>,
+    /// The outer Vec represents each scope (roughly each block of code),
+    /// while the inner Vec is the implicits context for that scope. This contains
+    implicits: Vec<ImplicitsContext>,
 }
 
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct TypeMaps {
-    pub name_types: BTreeMap<NameId, Type>,
-    pub path_types: BTreeMap<PathId, Type>,
-    pub expr_types: BTreeMap<ExprId, Type>,
-    pub pattern_types: BTreeMap<PatternId, Type>,
+#[derive(Default, Clone)]
+struct ImplicitsContext {
+    /// Any implicits introduced in the current scope. To find all implicits in scope, it is
+    /// necessary to traverse all levels of `TypeChecker::implicits`, in addition to querying
+    /// implicits in global scope separately.
+    implicits_in_scope: Vec<NameId>,
+
+    /// Contains implicits for which we need to delay checking for a value for until the end of the
+    /// current item when more types are inferred. Without this, for example, we'd see `0i32 < 3`
+    /// and would fail searching for an implicit for `Cmp _` since we'd check `<` before its
+    /// arguments while its type is still unknown.
+    delayed_implicits: Vec<DelayedImplicit>,
+}
+
+#[derive(Clone)]
+struct DelayedImplicit {
+    /// The [ExprId] which originally requested an implicit value.
+    /// This is often a trait function like `cast` or `+`
+    source: ExprId,
+
+    /// The destination to emplace the implicit value into
+    destination: ExprId,
+
+    /// The parameter index the implicit should slot into on the `self.source` expr.
+    /// Used in error messages.
+    parameter_index: usize,
 }
 
 /// Map from each TopLevelId to a tuple of (the item, parse context, resolution context)
@@ -167,7 +199,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             current_item: None,
             item_contexts,
             id_contexts,
-            implicits_in_scope: vec![Vec::new()],
+            implicits: vec![Default::default()],
         };
 
         let mut item_types = FxHashMap::default();
@@ -194,14 +226,6 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 (*item_id, (item, item_context, resolve))
             })
             .collect()
-    }
-
-    fn push_scope(&mut self) {
-        self.implicits_in_scope.push(Vec::new());
-    }
-
-    fn pop_scope(&mut self) {
-        self.implicits_in_scope.pop();
     }
 
     /// Returns the context of the current item, containing mappings for IDs set during parsing.

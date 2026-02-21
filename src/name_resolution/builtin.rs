@@ -24,12 +24,17 @@ pub enum Builtin {
     PairType,
     /// The Pair value constructor with type `fn a b -> (a, b)`
     PairConstructor,
+    /// The core `intrinsic` function used in the stdlib as a placeholder for compiler intrinsics
+    Intrinsic,
 }
 
 impl Builtin {
     /// Return the builtin of the same name, if there is one.
     /// An `is_type` disambiguator is required to distinguish between
     /// the pair type `,` and the value-level pair constructor `,`.
+    ///
+    /// This should only be implemented for builtins which should be exposed to each module
+    /// automatically as if exposed by the Prelude.
     pub fn from_name(name: &str, is_type: bool) -> Option<Builtin> {
         use Builtin::*;
         match name {
@@ -42,6 +47,8 @@ impl Builtin {
             "Ptr" => Some(Ptr),
             "," if is_type => Some(PairType),
             "," => Some(PairConstructor),
+            // `Intrinsic` is excluded here since it should not be imported into
+            // modules outside the stdlib
             _ => None,
         }
     }
@@ -59,6 +66,7 @@ impl Builtin {
             Builtin::Ptr => Some(Type::POINTER),
             Builtin::PairType => Some(Type::PAIR),
             Builtin::PairConstructor => None,
+            Builtin::Intrinsic => None,
         }
     }
 
@@ -76,6 +84,7 @@ impl Builtin {
             | Builtin::Float
             | Builtin::String
             | Builtin::Ptr
+            | Builtin::Intrinsic
             | Builtin::PairType => None,
 
             Builtin::PairConstructor => Some((Type::PAIR, 0)),
@@ -102,6 +111,7 @@ impl std::fmt::Display for Builtin {
             Builtin::Ptr => write!(f, "Ptr"),
             Builtin::PairType => write!(f, ","),
             Builtin::PairConstructor => write!(f, ","),
+            Builtin::Intrinsic => write!(f, "intrinsic"),
         }
     }
 }

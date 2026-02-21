@@ -9,7 +9,6 @@ use inc_complete::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    codegen::llvm::{self, CodegenLlvmResult},
     definition_collection,
     diagnostics::{Diagnostic, Location},
     find_files::CrateGraph,
@@ -71,7 +70,6 @@ pub struct DbStorage {
     type_checks: HashMapStorage<TypeCheck>,
     type_dependency_graph: SingletonStorage<TypeCheckDependencyGraph>,
     get_type_check_sccs: HashMapStorage<GetTypeCheckSCC>,
-    compiled_files: HashMapStorage<CodegenLlvm>,
 
     #[inc_complete(accumulate)]
     diagnostics: Accumulator<Diagnostic>,
@@ -343,9 +341,3 @@ define_intermediate!(1700, assume_changed TypeCheckDependencyGraph -> Arc<TypeCh
 #[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GetTypeCheckSCC(pub TopLevelId);
 define_intermediate!(1800, GetTypeCheckSCC -> SCC, DbStorage, type_inference::dependency_graph::get_type_check_scc_impl);
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-/// Codegen a single file to an llvm module to be linked later
-#[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
-pub struct CodegenLlvm(pub TopLevelId);
-define_intermediate!(1900, CodegenLlvm -> Option<CodegenLlvmResult>, DbStorage, llvm::codegen_llvm_impl);

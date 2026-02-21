@@ -39,10 +39,10 @@ use std::{
 
 use crate::{
     cli::EmitTarget,
-    codegen::llvm::CodegenLlvmResult,
+    codegen::llvm::{CodegenLlvmResult, codegen_llvm},
     diagnostics::DiagnosticKind,
     files::{make_compiler, write_metadata},
-    incremental::{CodegenLlvm, DbStorage, TargetPointerSize, TypeCheck},
+    incremental::{DbStorage, TargetPointerSize, TypeCheck},
 };
 
 // All the compiler passes:
@@ -277,32 +277,19 @@ fn llvm_codegen_separate(compiler: &Db, display_ir: bool) -> (Vec<Arc<Vec<u8>>>,
         return (Vec::new(), true, diagnostics);
     }
 
-    let crates = GetCrateGraph.get(compiler);
-    crate::codegen::llvm::initialize_native_target();
-    let mut modules = Vec::new();
-
-    // TODO: This could be parallel
-    for (crate_id, crate_) in crates.iter() {
-        for file in crate_.source_files.values() {
-            let parse = Parse(*file).get(compiler);
-
-            for item in &parse.cst.top_level_items {
-                if let Some(result) = CodegenLlvm(item.id).get(compiler) {
-                    if display_ir && *crate_id == CrateId::LOCAL {
-                        let context = &parse.top_level_data[&item.id];
-                        let name = item.kind.name().to_string(context);
-                        display_llvm_bitcode(&result, name);
-                    }
-                    modules.push(result.module_bitcode);
-                }
-            }
+    let modules = if let Some(result) = codegen_llvm(compiler) {
+        if display_ir {
+            display_llvm_bitcode(&result, "program");
         }
-    }
+        vec![result.module_bitcode]
+    } else {
+        Vec::new()
+    };
     (modules, false, diagnostics)
 }
 
-fn display_llvm_bitcode(result: &CodegenLlvmResult, module_name: String) {
-    let buffer = inkwell::memory_buffer::MemoryBuffer::create_from_memory_range(&result.module_bitcode, &module_name);
+fn display_llvm_bitcode(result: &CodegenLlvmResult, module_name: &str) {
+    let buffer = inkwell::memory_buffer::MemoryBuffer::create_from_memory_range(&result.module_bitcode, module_name);
     let context = inkwell::context::Context::create();
     let new_module = inkwell::module::Module::parse_bitcode_from_buffer(&buffer, &context)
         .expect("Failed to parse llvm module bitcode");

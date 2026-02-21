@@ -126,7 +126,8 @@ where
             Builtin::String => Type::string(),
             Builtin::Ptr => Type::POINTER,
             Builtin::PairType => self.convert_pair_type(args),
-            Builtin::PairConstructor => unreachable!("This is a constructor, not a type"),
+            Builtin::PairConstructor => unreachable!("Builtin::PairConstructor is not a type"),
+            Builtin::Intrinsic => unreachable!("Builtin::Intrinsic is not a type"),
         }
     }
 

@@ -501,7 +501,12 @@ impl<'a> CstDisplay<'a> {
     }
 
     fn fmt_reference_type(&self, mutable: Mutability, shared: Sharedness, f: &mut Formatter) -> std::fmt::Result {
-        write!(f, "{mutable}{shared}")
+        match (mutable, shared) {
+            (Mutability::Immutable, Sharedness::Shared) => write!(f, "ref"),
+            (Mutability::Mutable, Sharedness::Shared) => write!(f, "mut"),
+            (Mutability::Immutable, Sharedness::Owned) => write!(f, "imm"),
+            (Mutability::Mutable, Sharedness::Owned) => write!(f, "uniq"),
+        }
     }
 
     fn fmt_type_application(
@@ -959,10 +964,8 @@ impl<'a> CstDisplay<'a> {
     }
 
     fn fmt_reference(&mut self, reference: &Reference, context: &impl IdStore, f: &mut Formatter) -> std::fmt::Result {
-        write!(f, "{}{}", reference.mutability, reference.sharedness)?;
-        if reference.sharedness != Sharedness::Shared {
-            write!(f, " ")?;
-        }
+        self.fmt_reference_type(reference.mutability, reference.sharedness, f)?;
+        write!(f, " ")?;
         self.fmt_expr(reference.rhs, context, f)
     }
 
@@ -1120,24 +1123,6 @@ enum FmtOperatorKind {
     Infix,
     Index,
     NotAnOperator,
-}
-
-impl Display for Mutability {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        match self {
-            Mutability::Immutable => write!(f, "&"),
-            Mutability::Mutable => write!(f, "!"),
-        }
-    }
-}
-
-impl Display for Sharedness {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        match self {
-            Sharedness::Shared => Ok(()),
-            Sharedness::Owned => write!(f, "own"),
-        }
-    }
 }
 
 impl Display for Origin {

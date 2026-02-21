@@ -14,11 +14,7 @@ use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    incremental::{CodegenLlvm, DbHandle},
-    iterator_extensions::mapvec,
-    lexer::token::{FloatKind, IntegerKind},
-    mir::{self, BlockId, DefinitionId, FloatConstant, PrimitiveType, TerminatorInstruction},
-    vecmap::VecMap,
+    incremental::Db, iterator_extensions::mapvec, lexer::token::{FloatKind, IntegerKind}, mir::{self, BlockId, DefinitionId, FloatConstant, PrimitiveType, TerminatorInstruction}, vecmap::VecMap
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -32,9 +28,9 @@ pub fn initialize_native_target() {
     Target::initialize_native(&config).unwrap();
 }
 
-pub fn codegen_llvm_impl(_context: &CodegenLlvm, compiler: &DbHandle) -> Option<CodegenLlvmResult> {
-    // TODO: Cache monomorphization result. This is extremely inefficient:
-    // we're remonomorphizing the whole program on every llvm codegen call
+pub fn codegen_llvm(compiler: &Db) -> Option<CodegenLlvmResult> {
+    // Monomorphize everything - ideally we could only monomorphize some items so that the
+    // `CodegenLlvmResult` later can be split up and combined but for now it is whole program only.
     let mir = mir::monomorphization::monomorphize(compiler);
     let name = &mir.definitions.iter().next().map_or("_", |(_, function)| &function.name);
 

@@ -48,12 +48,12 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             Expr::Call(call) => self.check_call(call, expected),
             Expr::Lambda(lambda) => self.check_lambda(lambda, expected, id),
             Expr::Sequence(items) => {
-                self.push_scope();
+                self.push_implicits_scope();
                 for (i, item) in items.iter().enumerate() {
                     let expected_type = if i == items.len() - 1 { expected } else { &self.next_type_variable() };
                     self.check_expr(item.expr, expected_type);
                 }
-                self.pop_scope();
+                self.pop_implicits_scope();
             },
             Expr::Definition(definition) => {
                 self.check_definition(definition);
@@ -285,6 +285,10 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                     effects: Type::UNIT,
                 }))
             },
+            // This needs to match various different function types generally in the form
+            // `fn String ... -> a`. For simplicity a type variable is issued here, those working
+            // on the stdlib should take care to only use intrinsics with the proper types.
+            Builtin::Intrinsic => self.next_type_variable(),
         }
     }
 
@@ -322,7 +326,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             },
         };
 
-        self.push_scope();
+        self.push_implicits_scope();
         self.check_function_parameter_count(&function_type.parameters, lambda.parameters.len(), expr);
         let parameter_lengths_match = function_type.parameters.len() == lambda.parameters.len();
 
@@ -351,7 +355,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         };
 
         self.check_expr(lambda.body, &return_type);
-        self.pop_scope();
+        self.pop_implicits_scope();
     }
 
     /// Check a function's parameter count using the given parameter types as the expected count.
@@ -399,16 +403,16 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             Cow::Owned(self.next_type_variable())
         };
 
-        self.push_scope();
+        self.push_implicits_scope();
         self.check_expr(if_.then, &expected);
-        self.pop_scope();
+        self.pop_implicits_scope();
 
         // TODO: No way to identify if `then_type != else_type`. This would be useful to point out
         // for error messages.
         if let Some(else_) = if_.else_ {
-            self.push_scope();
+            self.push_implicits_scope();
             self.check_expr(else_, &expected);
-            self.pop_scope();
+            self.pop_implicits_scope();
         }
     }
 
@@ -419,9 +423,9 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         for (pattern, branch) in match_.cases.iter() {
             self.check_pattern(*pattern, &expr_type);
             // TODO: Specify if branch_type != type of first branch for better error messages
-            self.push_scope();
+            self.push_implicits_scope();
             self.check_expr(*branch, expected);
-            self.pop_scope();
+            self.pop_implicits_scope();
         }
 
         // Now compile the match into a decision tree. The `match expr | ...` expression will be

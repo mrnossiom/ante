@@ -1,7 +1,7 @@
 use std::{cell::Cell, collections::BTreeMap, path::PathBuf, sync::Arc};
 
 use inc_complete::{
-    Storage,
+    DebugWithDb, Storage,
     accumulate::Accumulator,
     define_input, define_intermediate,
     storage::{HashMapStorage, SingletonStorage},
@@ -302,9 +302,16 @@ define_intermediate!(1300, GetItem -> (Arc<TopLevelItem>, Arc<TopLevelContext>),
 /// the variable's type is inferred however, we need to  call `TypeCheck` to get the type which
 /// will in turn depend on not just the types of any names used in any expressions but also the
 /// name resolution results of those names.
-#[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GetType(pub TopLevelName);
 define_intermediate!(1400, GetType -> type_inference::types::Type, DbStorage, type_inference::get_type_impl);
+
+impl DebugWithDb<DbStorage> for GetType {
+    fn fmt_with_db(&self, db: &inc_complete::Db<DbStorage>, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let (_, ctx) = GetItemRaw(self.0.top_level_item).get(db);
+        write!(f, "GetType(`{}`)", ctx.names[self.0.local_name_id])
+    }
+}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// Type check the contents of one or more top-level items. This isn't always necessary just to get
@@ -314,16 +321,38 @@ define_intermediate!(1400, GetType -> type_inference::types::Type, DbStorage, ty
 /// edges leading to definitions without type annotations. A cycle in the graph represents mutually
 /// recursive definitions without type annotations, which must be inferred and generalized in one
 /// group. Hence the rare case where `TypeCheckSCC` may be given more than one `TopLevelId`.
-#[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TypeCheckSCC(pub SCC);
 define_intermediate!(1500, assume_changed TypeCheckSCC -> TypeCheckSCCResult, DbStorage, type_inference::type_check_impl);
+
+impl DebugWithDb<DbStorage> for TypeCheckSCC {
+    fn fmt_with_db(&self, db: &inc_complete::Db<DbStorage>, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "TypeCheckSCC(")?;
+
+        for (i, item) in self.0.iter().enumerate() {
+            if i != 0 {
+                write!(f, ", ")?;
+            }
+            let (item, ctx) = GetItemRaw(*item).get(db);
+            write!(f, "`{}`", item.kind.name().to_string(&ctx))?;
+        }
+        write!(f, ")")
+    }
+}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// Type checks a given TopLevelId. Internally defers to GetTypeCheckSCC and TypeCheckSCC to
 /// correctly handle the order of type inference.
-#[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TypeCheck(pub TopLevelId);
 define_intermediate!(1600, assume_changed TypeCheck -> Arc<TypeCheckResult>, DbStorage, type_inference::dependency_graph::type_check_impl);
+
+impl DebugWithDb<DbStorage> for TypeCheck {
+    fn fmt_with_db(&self, db: &inc_complete::Db<DbStorage>, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let (item, ctx) = GetItemRaw(self.0).get(db);
+        write!(f, "TypeCheck(`{}`)", item.kind.name().to_string(&ctx))
+    }
+}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// Type checks a given TopLevelId by constructing a dependency graph used to determine the order

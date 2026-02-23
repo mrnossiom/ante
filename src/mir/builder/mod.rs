@@ -37,6 +37,7 @@ use crate::{
     },
 };
 
+mod intrinsics;
 mod types;
 
 /// Maps each TopLevelName to a unique DefinitionId
@@ -255,7 +256,9 @@ where
             Literal::Integer(x, Some(IntegerKind::I8)) => Value::Integer(IntConstant::I8((*x).try_into().unwrap())),
             Literal::Integer(x, Some(IntegerKind::I16)) => Value::Integer(IntConstant::I16((*x).try_into().unwrap())),
             Literal::Integer(x, Some(IntegerKind::I32)) => Value::Integer(IntConstant::I32((*x).try_into().unwrap())),
-            Literal::Integer(x, Some(IntegerKind::I64)) => Value::Integer(IntConstant::I64((*x).try_into().unwrap())),
+            Literal::Integer(x, Some(IntegerKind::I64)) => Value::Integer(IntConstant::I64(
+                (*x).try_into().unwrap_or_else(|_| panic!("`{x}` is out of the range for I64")),
+            )),
             Literal::Integer(x, Some(IntegerKind::Isz)) => Value::Integer(IntConstant::Isz((*x).try_into().unwrap())),
             Literal::Integer(x, Some(IntegerKind::U8)) => Value::Integer(IntConstant::U8((*x).try_into().unwrap())),
             Literal::Integer(x, Some(IntegerKind::U16)) => Value::Integer(IntConstant::U16((*x).try_into().unwrap())),
@@ -304,9 +307,10 @@ where
                     function
                 }
             },
-            Some(origin) => *self.variables.get(&origin).unwrap_or_else(|| {
-                panic!("No cached variable for {} with origin {origin}", self.context()[path_id])
-            }),
+            Some(origin) => *self
+                .variables
+                .get(&origin)
+                .unwrap_or_else(|| panic!("No cached variable for {} with origin {origin}", self.context()[path_id])),
             None => {
                 eprintln!("Warning: no origin for {path_id:?}: {}", self.context()[path_id]);
                 Value::Error
@@ -407,6 +411,14 @@ where
     }
 
     fn call(&mut self, call: &cst::Call, id: ExprId) -> Value {
+        // Intrinsics in the stdlib are written as a call `intrinsic "Name" arg1 ... argN`
+        // We check for this case here since the arguments are required to lower to concrete
+        // instructions rather than a function wrapper (which would be needed if this was handled
+        // in the recursive `cst::Variable` case when lowering the function expression)
+        if let Some(result) = self.try_lower_intrinsic(call, id) {
+            return result;
+        }
+
         let function = self.expression(call.function);
         let arguments = mapvec(&call.arguments, |expr| self.expression(expr.expr));
         let result_type = self.expr_type(id);

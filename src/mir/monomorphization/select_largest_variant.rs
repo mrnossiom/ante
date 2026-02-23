@@ -3,7 +3,10 @@
 //! Traverses the Mir replacing each union type with the largest variant in the union,
 //! according to the current target machine.
 
-use crate::{incremental::{TargetPointerSize}, mir::{Definition, Mir, Type}};
+use crate::{
+    incremental::TargetPointerSize,
+    mir::{Definition, Mir, Type},
+};
 use inc_complete::DbGet;
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 use std::sync::Arc;
@@ -11,7 +14,8 @@ use std::sync::Arc;
 impl Mir {
     /// Replace each union type used with the largest variant of that type.
     pub(super) fn select_largest_variants<Db>(mut self, db: &Db) -> Self
-        where Db: DbGet<TargetPointerSize>
+    where
+        Db: DbGet<TargetPointerSize>,
     {
         let ptr_size = TargetPointerSize.get(db);
 

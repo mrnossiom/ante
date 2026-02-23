@@ -309,9 +309,9 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "inc-complete"
-version = "0.8.2"
+version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9078d85a2673a4da6a70028bb587663769d7b1ed6c4da2ac90c279ba299e33b7"
+checksum = "f4ce973eeaa18194eacbc761b40ae2424f839806b3de051c5707e6324ace3949"
 dependencies = [
  "dashmap",
  "inc-complete-derive",

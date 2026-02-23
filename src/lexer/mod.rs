@@ -267,6 +267,9 @@ impl<'contents> Lexer<'contents> {
             self.lex_number().map(|(token, location)| {
                 let token = match token {
                     Token::IntegerLiteral(x, kind) => {
+                        // We cannot parse the raw source here if the user used `_` separators.
+                        // In the future we could check for that case to avoid an allocation in the
+                        // common case where no underscores were used.
                         let x = format!("-{}", x).parse::<i64>().unwrap();
                         Token::IntegerLiteral(x as u64, kind)
                     },

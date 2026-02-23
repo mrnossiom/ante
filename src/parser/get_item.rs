@@ -54,8 +54,15 @@ fn desugar_impl(impl_: &TraitImpl, context: &mut TopLevelContext) -> TopLevelIte
         trait_type = Type::Application(Box::new(trait_type), impl_.trait_arguments.clone());
     }
 
-    let pattern = context.patterns.push(Pattern::TypeAnnotation(variable, trait_type.clone()));
-    assert_eq!(pattern, context.pattern_locations.push(location.clone()));
+    // If this is not a function we need to put the type annotation on the name itself rather than
+    // the return type of the lambda.
+    let pattern = if impl_.parameters.is_empty() {
+        let pattern = context.patterns.push(Pattern::TypeAnnotation(variable, trait_type.clone()));
+        assert_eq!(pattern, context.pattern_locations.push(location.clone()));
+        pattern
+    } else {
+        variable
+    };
 
     let fields = impl_.body.clone();
     let constructor = Expr::Constructor(Constructor { fields, typ: trait_type.clone() });

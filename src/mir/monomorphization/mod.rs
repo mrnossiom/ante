@@ -31,7 +31,13 @@ use crate::{
 /// definitions which were not monomorphized. `items` must contain every item in the program.
 pub(crate) fn monomorphize<Db>(compiler: &Db) -> Mir
 where
-    Db: DbGet<TypeCheck> + DbGet<GetItem> + DbGet<GetItemRaw> + DbGet<GetCrateGraph> + DbGet<Parse> + DbGet<TargetPointerSize> + Sync,
+    Db: DbGet<TypeCheck>
+        + DbGet<GetItem>
+        + DbGet<GetItemRaw>
+        + DbGet<GetCrateGraph>
+        + DbGet<Parse>
+        + DbGet<TargetPointerSize>
+        + Sync,
 {
     let initial_mir = collect_all_items(compiler)
         .into_par_iter()

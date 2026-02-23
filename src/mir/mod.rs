@@ -352,10 +352,52 @@ pub enum Instruction {
 
     /// Returns the given value as-is. Used by monomorphization to replace `Instantiate` instructions.
     Id(Value),
+
+    // Arithmetic ops
+    AddInt(Value, Value),
+    AddFloat(Value, Value),
+    SubInt(Value, Value),
+    SubFloat(Value, Value),
+    MulInt(Value, Value),
+    MulFloat(Value, Value),
+    DivSigned(Value, Value),
+    DivUnsigned(Value, Value),
+    DivFloat(Value, Value),
+    ModSigned(Value, Value),
+    ModUnsigned(Value, Value),
+    ModFloat(Value, Value),
+    LessSigned(Value, Value),
+    LessUnsigned(Value, Value),
+    LessFloat(Value, Value),
+    EqInt(Value, Value),
+    EqFloat(Value, Value),
+
+    BitwiseAnd(Value, Value),
+    BitwiseOr(Value, Value),
+    BitwiseXor(Value, Value),
+    BitwiseNot(Value),
+
+    // Casting
+    SignExtend(Value),
+    ZeroExtend(Value),
+    SignedToFloat(Value),
+    UnsignedToFloat(Value),
+    FloatToSigned(Value),
+    FloatToUnsigned(Value),
+    FloatPromote(Value),
+    FloatDemote(Value),
+
+    Truncate(Value),
+    Deref(Value),
+    SizeOf(Value),
 }
 
 impl Instruction {
     pub fn for_each_value(&self, mut f: impl FnMut(&Value)) {
+        let mut two = |a, b| {
+            f(a);
+            f(b);
+        };
         match self {
             Instruction::Call { function, arguments } => {
                 f(function);
@@ -368,6 +410,38 @@ impl Instruction {
             Instruction::Transmute(value) => f(value),
             Instruction::Instantiate(_, _) => (),
             Instruction::Id(value) => f(value),
+            Instruction::AddInt(a, b) => two(a, b),
+            Instruction::AddFloat(a, b) => two(a, b),
+            Instruction::SubInt(a, b) => two(a, b),
+            Instruction::SubFloat(a, b) => two(a, b),
+            Instruction::MulInt(a, b) => two(a, b),
+            Instruction::MulFloat(a, b) => two(a, b),
+            Instruction::DivSigned(a, b) => two(a, b),
+            Instruction::DivUnsigned(a, b) => two(a, b),
+            Instruction::DivFloat(a, b) => two(a, b),
+            Instruction::ModSigned(a, b) => two(a, b),
+            Instruction::ModUnsigned(a, b) => two(a, b),
+            Instruction::ModFloat(a, b) => two(a, b),
+            Instruction::LessSigned(a, b) => two(a, b),
+            Instruction::LessUnsigned(a, b) => two(a, b),
+            Instruction::LessFloat(a, b) => two(a, b),
+            Instruction::EqInt(a, b) => two(a, b),
+            Instruction::EqFloat(a, b) => two(a, b),
+            Instruction::BitwiseAnd(a, b) => two(a, b),
+            Instruction::BitwiseOr(a, b) => two(a, b),
+            Instruction::BitwiseXor(a, b) => two(a, b),
+            Instruction::BitwiseNot(value) => f(value),
+            Instruction::SignExtend(value) => f(value),
+            Instruction::ZeroExtend(value) => f(value),
+            Instruction::SignedToFloat(value) => f(value),
+            Instruction::UnsignedToFloat(value) => f(value),
+            Instruction::FloatToSigned(value) => f(value),
+            Instruction::FloatToUnsigned(value) => f(value),
+            Instruction::FloatPromote(value) => f(value),
+            Instruction::FloatDemote(value) => f(value),
+            Instruction::Truncate(value) => f(value),
+            Instruction::Deref(value) => f(value),
+            Instruction::SizeOf(value) => f(value),
         }
     }
 }
@@ -605,6 +679,28 @@ impl Type {
             // This is a raw union so the tag isn't counted here
             Type::Union(variants) => variants.iter().map(|typ| typ.size_in_bytes(ptr_size)).max().unwrap_or(0),
             Type::Generic(_) => panic!("Type::size_in_bytes: Encountered generic"),
+        }
+    }
+
+    fn is_int(&self) -> bool {
+        matches!(self, Type::Primitive(PrimitiveType::Int(_)))
+    }
+
+    fn is_float(&self) -> bool {
+        matches!(self, Type::Primitive(PrimitiveType::Float(_)))
+    }
+
+    fn is_unsigned_int(&self) -> bool {
+        match self {
+            Type::Primitive(PrimitiveType::Int(kind)) => !kind.is_signed(),
+            _ => false,
+        }
+    }
+
+    fn is_signed_int(&self) -> bool {
+        match self {
+            Type::Primitive(PrimitiveType::Int(kind)) => kind.is_signed(),
+            _ => false,
         }
     }
 }

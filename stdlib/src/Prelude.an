@@ -88,11 +88,11 @@ impl cast_ptr_usz: Cast (Ptr a) Usz with
 impl cast_usz_ptr: Cast Usz (Ptr a) with
     cast address = transmute address
 
-impl cast_maybe_string {Cast m String}: Cast (Maybe m) String with
-    cast maybe =
-        match maybe
-        | Some val -> "Some (" ++ cast val ++ ")"
-        | None -> "None"
+// impl cast_maybe_string {Cast m String}: Cast (Maybe m) String with
+//     cast maybe =
+//         match maybe
+//         | Some val -> "Some (" ++ cast val ++ ")"
+//         | None -> "None"
 
 // Begin wall of casts
 // TODO: Perhaps we should only expose infallible casts, forcing users to explicitly truncate otherwise
@@ -299,9 +299,9 @@ impl eq_usz: Eq Usz with (==) x y = intrinsic "EqInt" x y
 // impl eq_int: Eq (Int a) with (==) x y = intrinsic "EqInt" x y
 // impl eq_float: Eq (Float a) with (==) x y = intrinsic "EqFloat" x y
 // 
-// impl eq_char: Eq Char with (==) (x: Char) (y: Char): Bool = intrinsic "EqChar" x y
-// impl eq_bool: Eq Bool with (==) (x: Bool) (y: Bool): Bool = intrinsic "EqBool" x y
-// 
+impl eq_char: Eq Char with (==) (x: Char) (y: Char): Bool = intrinsic "EqInt" x y
+impl eq_bool: Eq Bool with (==) (x: Bool) (y: Bool): Bool = intrinsic "EqInt" x y
+
 (==) = Eq.(==)
 (!=) (l: t) (r: t) {Eq t} = not (l == r)
 (not) a = if a then false else true
@@ -374,12 +374,15 @@ trait Append a with
 // 
 // size_of (v: Type t): Usz = intrinsic "SizeOf" v
 // 
-// // addr: Usz = transmute ptr
-// // new_addr = addr + index * size_of (MkType: Type t)
-// // transmute new_addr
 // offset (ptr: Ptr t) (index: Usz): Ptr t =
-//     intrinsic "Offset" ptr index
-// 
+//     addr: Usz = transmute ptr
+//     new_addr = addr + index * size_of (MkType: Type t)
+//     transmute new_addr
+
+offset_bytes (ptr: Ptr t) (index: Usz): Ptr t =
+    addr: Usz = transmute ptr
+    transmute (addr + index)
+
 deref (x: ref t): t =
     intrinsic "Deref" x
 // 
@@ -473,7 +476,7 @@ impl print_char: Print Char with print x = putchar x
 //         // Show up to 5 decimal places
 //         print_unsigned (cast (f2 * 10_000.0))
 
-impl print_string: Print String with print s = _print_string s
+impl print_string: Print String with print s = _print_string s 0u32
 impl print_ptr_char: Print (Ptr Char) with print s = print_c_string s
 
 impl print_maybe {Print a}: Print (Maybe a) with
@@ -501,20 +504,18 @@ print_signed (x: I64) (min: I64) (min_string: String): Unit =
     else
         print_unsigned (unwrap (try_cast x))
 
-_print_string (s: String): Unit =
-    loop s (i = 0) ->
-        if i < s.length then
-            off = offset (s.c_string) i
-            c = deref_ptr off
-            putchar c
-            recur s (i + 1)
+_print_string (s: String) (i: U32): Unit =
+    if i < s.length then
+        off = offset_bytes (s.c_string) (cast i)
+        c = deref_ptr off
+        putchar c
+        _print_string s (i + 1u32)
 
 print_c_string (s: Ptr Char): Unit =
-    loop s (i = 0) ->
-        c = deref_ptr (offset s i)
-        if c != c"\0" then
-            putchar c
-            recur s (i + 1)
+    c = deref_ptr s
+    if c != c"\0" then
+        putchar c
+        print_c_string (offset_bytes s 1usz)
 
 impl print_bool: Print Bool with
     print b =
@@ -613,21 +614,21 @@ impl print_bool: Print Bool with
 // //                 return false
 // //         true
 
-impl append_string: Append String with
-    (++) s1 s2 =
-        if s1.length == 0u32 then return s2
-        if s2.length == 0u32 then return s1
-
-        len = s1.length + s2.length
-        buf = malloc (cast len + 1usz)
-
-        memcpy buf (s1.c_string) (cast s1.length)
-
-        buf_offset = cast (cast buf + s1.length)
-
-        //copy terminating null too
-        memcpy buf_offset (s2.c_string) (cast s2.length + 1usz)
-        String buf len
+// impl append_string: Append String with
+//     (++) s1 s2 =
+//         if s1.length == 0u32 then return s2
+//         if s2.length == 0u32 then return s1
+// 
+//         len = s1.length + s2.length
+//         buf = malloc (cast len + 1usz)
+// 
+//         memcpy buf (s1.c_string) (cast s1.length)
+// 
+//         buf_offset = cast (cast buf + s1.length)
+// 
+//         //copy terminating null too
+//         memcpy buf_offset (s2.c_string) (cast s2.length + 1usz)
+//         String buf len
 
 panic (msg: t) {Print t} =
     print msg

@@ -86,10 +86,10 @@ fn compile(args: Cli) {
             display_tokens(&compiler);
             BTreeSet::new()
         },
-        Some(EmitTarget::Ast) => display_parse_tree(&compiler),
-        Some(EmitTarget::AstR) => display_name_resolution(&compiler),
-        Some(EmitTarget::AstT) => display_type_checking(&compiler, true),
-        Some(EmitTarget::Mir) => display_mir(&compiler),
+        Some(EmitTarget::Ast) => display_parse_tree(&compiler, args.emit_all),
+        Some(EmitTarget::AstR) => display_name_resolution(&compiler, args.emit_all),
+        Some(EmitTarget::AstT) => display_type_checking(&compiler, true, args.emit_all),
+        Some(EmitTarget::Mir) => display_mir(&compiler, args.emit_all),
         Some(EmitTarget::MirMono) => display_mir_mono(&compiler),
         Some(EmitTarget::Ir) => llvm_codegen_separate(&compiler, true).2,
         None => llvm_codegen_all(&compiler, &args.files, args.delete_binary),
@@ -174,75 +174,85 @@ fn display_tokens(compiler: &Db) {
     }
 }
 
-fn display_parse_tree(compiler: &Db) -> BTreeSet<Diagnostic> {
+fn display_parse_tree(compiler: &Db, emit_all: bool) -> BTreeSet<Diagnostic> {
     let crates = GetCrateGraph.get(compiler);
-    let local_crate = &crates[&CrateId::LOCAL];
     let mut diagnostics = BTreeSet::new();
 
-    for file in local_crate.source_files.values() {
-        let result = Parse(*file).get(compiler);
-        println!("{}", result.cst.display(&result.top_level_data));
+    for (crate_id, crate_) in crates.iter() {
+        if emit_all || *crate_id == CrateId::LOCAL {
+            for file in crate_.source_files.values() {
+                let result = Parse(*file).get(compiler);
+                println!("{}", result.cst.display(&result.top_level_data));
 
-        let parse_diagnostics: BTreeSet<_> = compiler.get_accumulated(Parse(*file));
-        diagnostics.extend(parse_diagnostics);
-    }
-    diagnostics
-}
-
-fn display_name_resolution(compiler: &Db) -> BTreeSet<Diagnostic> {
-    let crates = GetCrateGraph.get(compiler);
-    let local_crate = &crates[&CrateId::LOCAL];
-    let mut diagnostics = BTreeSet::new();
-
-    for file in local_crate.source_files.values() {
-        let parse = Parse(*file).get(compiler);
-
-        for item in &parse.cst.top_level_items {
-            let resolve_diagnostics: BTreeSet<_> = compiler.get_accumulated(Resolve(item.id));
-            diagnostics.extend(resolve_diagnostics);
-        }
-
-        println!("{}", parse.cst.display_resolved(&parse.top_level_data, compiler))
-    }
-    diagnostics
-}
-
-fn display_type_checking(compiler: &Db, show_types: bool) -> BTreeSet<Diagnostic> {
-    let crates = GetCrateGraph.get(compiler);
-    let local_crate = &crates[&CrateId::LOCAL];
-    let mut diagnostics = BTreeSet::new();
-
-    for file in local_crate.source_files.values() {
-        let parse = Parse(*file).get(compiler);
-
-        for item in &parse.cst.top_level_items {
-            let more_diagnostics: BTreeSet<_> = compiler.get_accumulated(TypeCheck(item.id));
-            diagnostics.extend(more_diagnostics);
-        }
-
-        if show_types {
-            println!("{}", parse.cst.display_typed(&parse.top_level_data, compiler))
+                let parse_diagnostics: BTreeSet<_> = compiler.get_accumulated(Parse(*file));
+                diagnostics.extend(parse_diagnostics);
+            }
         }
     }
     diagnostics
 }
 
-fn display_mir(compiler: &Db) -> BTreeSet<Diagnostic> {
+fn display_name_resolution(compiler: &Db, emit_all: bool) -> BTreeSet<Diagnostic> {
     let crates = GetCrateGraph.get(compiler);
-    //let local_crate = &crates[&CrateId::LOCAL];
     let mut diagnostics = BTreeSet::new();
 
-    for crate_ in crates.values() {
-        for file in crate_.source_files.values() {
-            let parse = Parse(*file).get(compiler);
+    for (crate_id, crate_) in crates.iter() {
+        if emit_all || *crate_id == CrateId::LOCAL {
+            for file in crate_.source_files.values() {
+                let parse = Parse(*file).get(compiler);
 
-            for item in &parse.cst.top_level_items {
-                let mir = mir::builder::build_initial_mir_with_shared_map(compiler, item.id);
-                if let Some(mir) = mir {
-                    print!("{mir}");
+                for item in &parse.cst.top_level_items {
+                    let resolve_diagnostics: BTreeSet<_> = compiler.get_accumulated(Resolve(item.id));
+                    diagnostics.extend(resolve_diagnostics);
                 }
-                let more_diagnostics: BTreeSet<_> = compiler.get_accumulated(TypeCheck(item.id));
-                diagnostics.extend(more_diagnostics);
+
+                println!("{}", parse.cst.display_resolved(&parse.top_level_data, compiler))
+            }
+        }
+    }
+    diagnostics
+}
+
+fn display_type_checking(compiler: &Db, show_types: bool, emit_all: bool) -> BTreeSet<Diagnostic> {
+    let crates = GetCrateGraph.get(compiler);
+    let mut diagnostics = BTreeSet::new();
+
+    for (crate_id, crate_) in crates.iter() {
+        if emit_all || *crate_id == CrateId::LOCAL {
+            for file in crate_.source_files.values() {
+                let parse = Parse(*file).get(compiler);
+
+                for item in &parse.cst.top_level_items {
+                    let more_diagnostics: BTreeSet<_> = compiler.get_accumulated(TypeCheck(item.id));
+                    diagnostics.extend(more_diagnostics);
+                }
+
+                if show_types {
+                    println!("{}", parse.cst.display_typed(&parse.top_level_data, compiler))
+                }
+            }
+        }
+    }
+    diagnostics
+}
+
+fn display_mir(compiler: &Db, emit_all: bool) -> BTreeSet<Diagnostic> {
+    let crates = GetCrateGraph.get(compiler);
+    let mut diagnostics = BTreeSet::new();
+
+    for (crate_id, crate_) in crates.iter() {
+        if emit_all || *crate_id == CrateId::LOCAL {
+            for file in crate_.source_files.values() {
+                let parse = Parse(*file).get(compiler);
+
+                for item in &parse.cst.top_level_items {
+                    let mir = mir::builder::build_initial_mir_with_shared_map(compiler, item.id);
+                    if let Some(mir) = mir {
+                        print!("{mir}");
+                    }
+                    let more_diagnostics: BTreeSet<_> = compiler.get_accumulated(TypeCheck(item.id));
+                    diagnostics.extend(more_diagnostics);
+                }
             }
         }
     }

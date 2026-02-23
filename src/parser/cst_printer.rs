@@ -350,7 +350,7 @@ impl<'a> CstDisplay<'a> {
     fn fmt_function(
         &mut self, definition: &Definition, lambda: &Lambda, context: &impl IdStore, f: &mut Formatter,
     ) -> std::fmt::Result {
-        self.fmt_pattern(definition.pattern, context, f)?;
+        self.fmt_pattern_atom(definition.pattern, context, f)?;
         self.fmt_lambda_inner(lambda, context, f, false)
     }
 
@@ -914,16 +914,20 @@ impl<'a> CstDisplay<'a> {
     ) -> std::fmt::Result {
         self.fmt_name(pattern.function, context, f)?;
         for arg in pattern.args.iter() {
-            if self.is_pattern_atom(*arg, context) {
-                write!(f, " ")?;
-                self.fmt_pattern(*arg, context, f)?;
-            } else {
-                write!(f, " (")?;
-                self.fmt_pattern(*arg, context, f)?;
-                write!(f, ")")?;
-            }
+            write!(f, " ")?;
+            self.fmt_pattern_atom(*arg, context, f)?;
         }
         Ok(())
+    }
+
+    fn fmt_pattern_atom(&mut self, id: PatternId, context: &impl IdStore, f: &mut Formatter) -> std::fmt::Result {
+        if self.is_pattern_atom(id, context) {
+            self.fmt_pattern(id, context, f)
+        } else {
+            write!(f, " (")?;
+            self.fmt_pattern(id, context, f)?;
+            write!(f, ")")
+        }
     }
 
     fn fmt_pattern(&mut self, id: PatternId, context: &impl IdStore, f: &mut Formatter) -> std::fmt::Result {
@@ -933,14 +937,8 @@ impl<'a> CstDisplay<'a> {
             Pattern::Constructor(path, args) => {
                 self.fmt_path(*path, context, f)?;
                 for arg in args {
-                    if self.is_pattern_atom(*arg, context) {
-                        write!(f, " ")?;
-                        self.fmt_pattern(*arg, context, f)?;
-                    } else {
-                        write!(f, " (")?;
-                        self.fmt_pattern(*arg, context, f)?;
-                        write!(f, ")")?;
-                    }
+                    write!(f, " ")?;
+                    self.fmt_pattern_atom(*arg, context, f)?;
                 }
                 Ok(())
             },

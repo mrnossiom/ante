@@ -162,6 +162,129 @@ impl Definition {
                     let value_type = self.type_of_value(value);
                     instr_assert_eq!(*result_type, value_type, self, id, mir, "Value type `{value_type}` != result type `{result_type}`");
                 },
+                Instruction::AddInt(a, b)
+                | Instruction::SubInt(a, b)
+                | Instruction::MulInt(a, b)
+                | Instruction::BitwiseAnd(a, b)
+                | Instruction::BitwiseOr(a, b)
+                | Instruction::BitwiseXor(a, b) => {
+                    let a_type = self.type_of_value(a);
+                    let b_type = self.type_of_value(b);
+                    instr_assert!(a_type.is_int(), self, id, mir, "Argument type is not an integer");
+                    instr_assert_eq!(a_type, b_type, self, id, mir, "Argument types do not match: {a_type} != {b_type}");
+                    instr_assert_eq!(a_type, *result_type, self, id, mir, "Argument type does not match result type `{a_type}` != `{result_type}`");
+                },
+
+                Instruction::AddFloat(a, b)
+                | Instruction::SubFloat(a, b)
+                | Instruction::MulFloat(a, b)
+                | Instruction::DivFloat(a, b)
+                | Instruction::ModFloat(a, b) => {
+                    let a_type = self.type_of_value(a);
+                    let b_type = self.type_of_value(b);
+                    instr_assert!(a_type.is_float(), self, id, mir, "Argument type is not a float");
+                    instr_assert_eq!(a_type, b_type, self, id, mir, "Argument types do not match: {a_type} != {b_type}");
+                    instr_assert_eq!(a_type, *result_type, self, id, mir, "Argument type does not match result type `{a_type}` != `{result_type}`");
+                },
+
+                Instruction::DivSigned(a, b) | Instruction::ModSigned(a, b) => {
+                    let a_type = self.type_of_value(a);
+                    let b_type = self.type_of_value(b);
+                    instr_assert!(a_type.is_signed_int(), self, id, mir, "Argument type is not a signed int");
+                    instr_assert_eq!(a_type, b_type, self, id, mir, "Argument types do not match: {a_type} != {b_type}");
+                    instr_assert_eq!(a_type, *result_type, self, id, mir, "Argument type does not match result type `{a_type}` != `{result_type}`");
+                },
+
+                Instruction::DivUnsigned(a, b) | Instruction::ModUnsigned(a, b) => {
+                    let a_type = self.type_of_value(a);
+                    let b_type = self.type_of_value(b);
+                    instr_assert!(a_type.is_signed_int(), self, id, mir, "Argument type is not an unsigned int");
+                    instr_assert_eq!(a_type, b_type, self, id, mir, "Argument types do not match: {a_type} != {b_type}");
+                    instr_assert_eq!(a_type, *result_type, self, id, mir, "Argument type does not match result type `{a_type}` != `{result_type}`");
+                }
+
+                Instruction::LessSigned(a, b) => {
+                    let a_type = self.type_of_value(a);
+                    let b_type = self.type_of_value(b);
+                    instr_assert!(a_type.is_signed_int(), self, id, mir, "Argument type is not a signed int");
+                    instr_assert_eq!(a_type, b_type, self, id, mir, "Argument types do not match: {a_type} != {b_type}");
+                    instr_assert_eq!(*result_type, Type::BOOL, self, id, mir, "Result type `{result_type}` is not a Bool");
+                },
+
+                Instruction::LessUnsigned(a, b) => {
+                    let a_type = self.type_of_value(a);
+                    let b_type = self.type_of_value(b);
+                    instr_assert!(a_type.is_signed_int(), self, id, mir, "Argument type is not an unsigned int");
+                    instr_assert_eq!(a_type, b_type, self, id, mir, "Argument types do not match: {a_type} != {b_type}");
+                    instr_assert_eq!(*result_type, Type::BOOL, self, id, mir, "Result type `{result_type}` is not a Bool");
+                },
+
+                Instruction::LessFloat(a, b) | Instruction::EqFloat(a, b) => {
+                    let a_type = self.type_of_value(a);
+                    let b_type = self.type_of_value(b);
+                    instr_assert!(a_type.is_float(), self, id, mir, "Argument type is not a float");
+                    instr_assert_eq!(a_type, b_type, self, id, mir, "Argument types do not match: {a_type} != {b_type}");
+                    instr_assert_eq!(*result_type, Type::BOOL, self, id, mir, "Result type `{result_type}` is not a Bool");
+                },
+
+                Instruction::EqInt(a, b) => {
+                    let a_type = self.type_of_value(a);
+                    let b_type = self.type_of_value(b);
+                    let valid = a_type.is_int() || a_type == Type::BOOL || a_type == Type::CHAR;
+                    instr_assert!(valid, self, id, mir, "Argument type is not an integer, bool, or char");
+                    instr_assert_eq!(a_type, b_type, self, id, mir, "Argument types do not match: {a_type} != {b_type}");
+                    instr_assert_eq!(*result_type, Type::BOOL, self, id, mir, "Result type `{result_type}` is not a Bool");
+                },
+
+                Instruction::BitwiseNot(value) => {
+                    let value_type = self.type_of_value(value);
+                    instr_assert!(value_type.is_int(), self, id, mir, "Argument type is not an integer");
+                    instr_assert_eq!(value_type, *result_type, self, id, mir, "Argument type does not match result type `{value_type}` != `{result_type}`");
+                },
+
+                Instruction::SignExtend(value) => {
+                    let value_type = self.type_of_value(value);
+                    instr_assert!(value_type.is_signed_int(), self, id, mir, "Argument type is not a signed integer");
+                    instr_assert!(result_type.is_int(), self, id, mir, "Result type is not an integer");
+                },
+                Instruction::ZeroExtend(value) => {
+                    let value_type = self.type_of_value(value);
+                    instr_assert!(value_type.is_unsigned_int(), self, id, mir, "Argument type is not an unsigned integer");
+                    instr_assert!(result_type.is_int(), self, id, mir, "Result type is not an integer");
+                },
+                Instruction::SignedToFloat(value) => {
+                    instr_assert!(self.type_of_value(value).is_signed_int(), self, id, mir, "Argument type is not a signed integer");
+                    instr_assert!(result_type.is_float(), self, id, mir, "Result type is not a float");
+                },
+                Instruction::UnsignedToFloat(value) => {
+                    instr_assert!(self.type_of_value(value).is_unsigned_int(), self, id, mir, "Argument type is not an unsigned integer");
+                    instr_assert!(result_type.is_float(), self, id, mir, "Result type is not a float");
+                },
+                Instruction::FloatToSigned(value) => {
+                    instr_assert!(self.type_of_value(value).is_float(), self, id, mir, "Argument type is not a float");
+                    instr_assert!(result_type.is_signed_int(), self, id, mir, "Result type is not a signed integer");
+                },
+                Instruction::FloatToUnsigned(value) => {
+                    instr_assert!(self.type_of_value(value).is_float(), self, id, mir, "Argument type is not a float");
+                    instr_assert!(result_type.is_unsigned_int(), self, id, mir, "Result type is not an unsigned integer");
+                },
+                Instruction::FloatPromote(value) => {
+                    instr_assert!(self.type_of_value(value).is_float(), self, id, mir, "Argument type is not a float");
+                    instr_assert!(result_type.is_float(), self, id, mir, "Result type is not a float");
+                },
+                Instruction::FloatDemote(value) => {
+                    instr_assert!(self.type_of_value(value).is_float(), self, id, mir, "Argument type is not a float");
+                    instr_assert!(result_type.is_float(), self, id, mir, "Result type is not a float");
+                },
+                Instruction::Truncate(value) => {
+                    instr_assert!(self.type_of_value(value).is_int(), self, id, mir, "Argument type is not an integer");
+                    instr_assert!(result_type.is_int(), self, id, mir, "Result type is not an integer");
+                },
+                Instruction::Deref(value) => {
+                    let value_type = self.type_of_value(value);
+                    instr_assert!(matches!(value_type, Type::POINTER), self, id, mir, "Argument type is not a pointer");
+                },
+                Instruction::SizeOf(_) => (),
             }
         }
     }

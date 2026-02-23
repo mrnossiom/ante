@@ -32,6 +32,10 @@ pub struct Cli {
     #[arg(long, short, group = "compile_mode")]
     pub emit: Option<EmitTarget>,
 
+    /// If set, all crates will be included in the `emit` output rather than just the local crate
+    #[arg(long)]
+    pub emit_all: bool,
+
     /// Specify the backend to use ('llvm' or 'cranelift'). Note that cranelift is only for debug builds.
     /// Ante will use cranelift by default for debug builds and llvm by default for optimized builds,
     /// unless overridden by this flag

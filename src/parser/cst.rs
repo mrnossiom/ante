@@ -68,22 +68,24 @@ impl ItemName {
     pub fn to_string(&self, context: &TopLevelContext) -> String {
         match self {
             ItemName::Single(name) => context.names[*name].to_string(),
-            ItemName::Pattern(pattern) => pattern_name(*pattern, context),
+            ItemName::Pattern(pattern) => pattern.name(context),
             ItemName::None => "no-name".to_string(),
         }
     }
 }
 
-fn pattern_name(pattern: PatternId, context: &TopLevelContext) -> String {
-    match &context.patterns[pattern] {
-        Pattern::Error => "#error".to_string(),
-        Pattern::Variable(name) => context.names[*name].to_string(),
-        Pattern::Literal(_) => "#literal".to_string(),
-        Pattern::Constructor(..) => "#constructor".to_string(),
-        Pattern::TypeAnnotation(pattern, _) => pattern_name(*pattern, context),
-        Pattern::MethodName { type_name, item_name } => {
-            format!("{}.{}", context.names[*type_name], context.names[*item_name])
-        },
+impl PatternId {
+    pub fn name(self, context: &TopLevelContext) -> String {
+        match &context.patterns[self] {
+            Pattern::Error => "#error".to_string(),
+            Pattern::Variable(name) => context.names[*name].to_string(),
+            Pattern::Literal(_) => "#literal".to_string(),
+            Pattern::Constructor(..) => "#constructor".to_string(),
+            Pattern::TypeAnnotation(pattern, _) => pattern.name(context),
+            Pattern::MethodName { type_name, item_name } => {
+                format!("{}.{}", context.names[*type_name], context.names[*item_name])
+            },
+        }
     }
 }
 

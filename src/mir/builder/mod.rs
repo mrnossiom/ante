@@ -250,15 +250,20 @@ where
             Literal::Unit => Value::Unit,
             Literal::Bool(x) => Value::Bool(*x),
             Literal::Integer(x, None) => {
-                Value::Integer(IntConstant::I32((*x).try_into().unwrap()))
+                let x = *x as i32;
+                Value::Integer(IntConstant::I32(x))
                 // panic!("TODO: polymorphic integers")
             },
-            Literal::Integer(x, Some(IntegerKind::I8)) => Value::Integer(IntConstant::I8((*x).try_into().unwrap())),
-            Literal::Integer(x, Some(IntegerKind::I16)) => Value::Integer(IntConstant::I16((*x).try_into().unwrap())),
-            Literal::Integer(x, Some(IntegerKind::I32)) => Value::Integer(IntConstant::I32((*x).try_into().unwrap())),
-            Literal::Integer(x, Some(IntegerKind::I64)) => Value::Integer(IntConstant::I64(
-                (*x).try_into().unwrap_or_else(|_| panic!("`{x}` is out of the range for I64")),
-            )),
+            Literal::Integer(x, Some(IntegerKind::I8)) => {
+                Value::Integer(IntConstant::I8((*x as i64).try_into().unwrap()))
+            },
+            Literal::Integer(x, Some(IntegerKind::I16)) => {
+                Value::Integer(IntConstant::I16((*x as i64).try_into().unwrap()))
+            },
+            Literal::Integer(x, Some(IntegerKind::I32)) => {
+                Value::Integer(IntConstant::I32((*x as i64).try_into().unwrap()))
+            },
+            Literal::Integer(x, Some(IntegerKind::I64)) => Value::Integer(IntConstant::I64(*x as i64)),
             Literal::Integer(x, Some(IntegerKind::Isz)) => Value::Integer(IntConstant::Isz((*x).try_into().unwrap())),
             Literal::Integer(x, Some(IntegerKind::U8)) => Value::Integer(IntConstant::U8((*x).try_into().unwrap())),
             Literal::Integer(x, Some(IntegerKind::U16)) => Value::Integer(IntConstant::U16((*x).try_into().unwrap())),

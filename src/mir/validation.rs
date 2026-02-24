@@ -198,7 +198,7 @@ impl Definition {
                 Instruction::DivUnsigned(a, b) | Instruction::ModUnsigned(a, b) => {
                     let a_type = self.type_of_value(a);
                     let b_type = self.type_of_value(b);
-                    instr_assert!(a_type.is_signed_int(), self, id, mir, "Argument type is not an unsigned int");
+                    instr_assert!(a_type.is_unsigned_int(), self, id, mir, "Argument type is not an unsigned int");
                     instr_assert_eq!(a_type, b_type, self, id, mir, "Argument types do not match: {a_type} != {b_type}");
                     instr_assert_eq!(a_type, *result_type, self, id, mir, "Argument type does not match result type `{a_type}` != `{result_type}`");
                 }
@@ -214,7 +214,7 @@ impl Definition {
                 Instruction::LessUnsigned(a, b) => {
                     let a_type = self.type_of_value(a);
                     let b_type = self.type_of_value(b);
-                    instr_assert!(a_type.is_signed_int(), self, id, mir, "Argument type is not an unsigned int");
+                    instr_assert!(a_type.is_unsigned_int(), self, id, mir, "Argument type is not an unsigned int");
                     instr_assert_eq!(a_type, b_type, self, id, mir, "Argument types do not match: {a_type} != {b_type}");
                     instr_assert_eq!(*result_type, Type::BOOL, self, id, mir, "Result type `{result_type}` is not a Bool");
                 },
@@ -249,7 +249,7 @@ impl Definition {
                 },
                 Instruction::ZeroExtend(value) => {
                     let value_type = self.type_of_value(value);
-                    instr_assert!(value_type.is_unsigned_int(), self, id, mir, "Argument type is not an unsigned integer");
+                    instr_assert!(value_type.is_unsigned_int() || value_type == Type::BOOL || value_type == Type::CHAR, self, id, mir, "Argument type is not an unsigned integer");
                     instr_assert!(result_type.is_int(), self, id, mir, "Result type is not an integer");
                 },
                 Instruction::SignedToFloat(value) => {
@@ -277,8 +277,9 @@ impl Definition {
                     instr_assert!(result_type.is_float(), self, id, mir, "Result type is not a float");
                 },
                 Instruction::Truncate(value) => {
-                    instr_assert!(self.type_of_value(value).is_int(), self, id, mir, "Argument type is not an integer");
-                    instr_assert!(result_type.is_int(), self, id, mir, "Result type is not an integer");
+                    let typ = self.type_of_value(value);
+                    instr_assert!(typ.can_be_used_as_integer(), self, id, mir, "Argument type is not an integer");
+                    instr_assert!(result_type.can_be_used_as_integer(), self, id, mir, "Result type is not an integer");
                 },
                 Instruction::Deref(value) => {
                     let value_type = self.type_of_value(value);
@@ -342,6 +343,7 @@ impl Definition {
     }
 
     /// Helper to show the error annotated under the actual failing instruction
+    #[track_caller]
     fn annotate_error(&self, instruction_id: InstructionId, mir: &Mir, message: &str) {
         let mir_string = self.display(mir).to_string();
         let instruction_string = instruction_id.display(self, mir).to_string();

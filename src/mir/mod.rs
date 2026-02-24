@@ -682,6 +682,12 @@ impl Type {
         }
     }
 
+    /// True if the underlying representation of this type can be treated as an integer,
+    /// often for casting intrinsics.
+    fn can_be_used_as_integer(&self) -> bool {
+        matches!(self, Type::Primitive(PrimitiveType::Int(_) | PrimitiveType::Bool | PrimitiveType::Char))
+    }
+
     fn is_int(&self) -> bool {
         matches!(self, Type::Primitive(PrimitiveType::Int(_)))
     }

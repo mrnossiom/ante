@@ -207,7 +207,10 @@ impl ExtendedTopLevelContext {
     /// TODO: Restructure type checking so we don't have to clone internally here
     pub(crate) fn extend_from_resolution_result(&mut self, resolution_result: &ResolutionResult) {
         self.name_origins.extend(resolution_result.name_origins.iter().map(|(name, origin)| (*name, *origin)));
-        self.path_origins.extend(resolution_result.path_origins.iter().map(|(path, origin)| (*path, *origin)));
+
+        for (path, origin) in resolution_result.path_origins.iter() {
+            self.path_origins.entry(*path).or_insert(*origin);
+        }
     }
 
     pub(crate) fn insert_path_origin(&mut self, path_id: PathId, origin: Origin) {

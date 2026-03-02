@@ -106,16 +106,11 @@ struct Context<'local, Db> {
 
     variables: FxHashMap<Origin, Value>,
 
-    /// Contains the name of every [DefinitionId] referenced in each of the `self.finished_functions`
-    referenced_names: FxHashMap<DefinitionId, Name>,
-
     finished_functions: FxHashMap<DefinitionId, Definition>,
     name_to_id: &'local SharedIdsMap,
 
-    definition_types: FxHashMap<DefinitionId, Type>,
-
-    /// Any external items will have their type stored here and name stored in `self.referenced_names`
-    external: FxHashMap<DefinitionId, Type>,
+    /// Any external items will have their name & type stored here
+    external: FxHashMap<DefinitionId, super::Extern>,
 }
 
 impl<'local, Db> Context<'local, Db> {
@@ -133,8 +128,6 @@ impl<'local, Db> Context<'local, Db> {
             current_function: None,
             finished_functions: Default::default(),
             name_to_id: name_mappings,
-            definition_types: Default::default(),
-            referenced_names: Default::default(),
             external: Default::default(),
         }
     }
@@ -145,10 +138,7 @@ impl<'local, Db> Context<'local, Db> {
     }
 
     fn type_of_value(&self, value: &Value) -> Type {
-        match value {
-            Value::Definition(id) => self.definition_types[id].clone(),
-            other => self.current_function.as_ref().unwrap().type_of_value(other),
-        }
+        self.current_function.as_ref().unwrap().type_of_value(value, &self.external, &self.finished_functions)
     }
 
     /// Returns the current block being inserted into. Panics if there is no current function.
@@ -220,9 +210,14 @@ where
     }
 
     fn make_definition_value(&mut self, id: DefinitionId, name: Name, typ: Type) -> Value {
-        self.referenced_names.insert(id, name);
-        self.definition_types.insert(id, typ);
+        self.reference_definition(id, name, typ);
         Value::Definition(id)
+    }
+
+    fn reference_definition(&mut self, id: DefinitionId, name: Name, typ: Type) {
+        if !self.finished_functions.contains_key(&id) && self.current_function.as_ref().is_none_or(|def| def.id != id) {
+            self.external.insert(id, super::Extern { name, typ });
+        }
     }
 
     fn expression(&mut self, expr: ExprId) -> Value {
@@ -234,7 +229,7 @@ where
             cst::Expr::Definition(definition) => self.definition(definition, false),
             cst::Expr::MemberAccess(member_access) => self.member_access(member_access, expr),
             cst::Expr::Call(call) => self.call(call, expr),
-            cst::Expr::Lambda(lambda) => self.lambda(lambda, None, None, expr),
+            cst::Expr::Lambda(lambda) => self.lambda(lambda, None, None, expr, false),
             cst::Expr::If(if_) => self.if_(if_, expr),
             cst::Expr::Match(_) => self.match_(expr),
             cst::Expr::Handle(handle) => self.handle(handle),
@@ -284,24 +279,12 @@ where
         // Deliberately allow us to reference variables not in the context.
         // This allows us to convert all definitions to MIR in parallel, trusting
         // that the links will work out later.
-        match self.context().path_origin(path_id) {
+        let mut value = match self.context().path_origin(path_id) {
             Some(Origin::TopLevelDefinition(name)) => {
                 let id = self.get_definition_id(&name);
                 let name = self.get_definition_name(&name);
                 let typ = self.convert_type(&self.types.result.maps.path_types[&path_id], None);
-
-                // If this type was instantiated, then we need to recover the pre-instantiated
-                // type and make an explicit [Instruction::Instantiate].
-                let value = if let Some(bindings) = self.types.result.context.get_instantiation(path_id) {
-                    self.referenced_names.insert(id, name);
-                    let bindings = Arc::new(mapvec(bindings, |typ| self.convert_type(typ, None)));
-                    let instruction = Instruction::Instantiate(id, bindings);
-                    self.push_instruction(instruction, typ)
-                } else {
-                    self.make_definition_value(id, name, typ.clone())
-                };
-
-                value
+                self.make_definition_value(id, name, typ)
             },
             Some(origin @ Origin::Builtin(Builtin::PairConstructor)) => {
                 if let Some(existing) = self.variables.get(&origin) {
@@ -320,7 +303,22 @@ where
                 eprintln!("Warning: no origin for {path_id:?}: {}", self.context()[path_id]);
                 Value::Error
             },
+        };
+
+        // If this type was instantiated, then we need to recover the pre-instantiated
+        // type and make an explicit [Instruction::Instantiate]. We cannot check this only in the
+        // `Origin::TopLevelDefinition` case because local lambdas may also be polymorphic.
+        // TODO: Closures may be wrapped in an Instruction result which would break this check
+        if let Value::Definition(id) = value
+            && let Some(bindings) = self.types.result.context.get_instantiation(path_id)
+        {
+            let typ = self.convert_type(&self.types.result.maps.path_types[&path_id], None);
+            let bindings = Arc::new(mapvec(bindings, |typ| self.convert_type(typ, None)));
+            let instruction = Instruction::Instantiate(id, bindings);
+            value = self.push_instruction(instruction, typ);
         }
+
+        value
     }
 
     /// Defines:
@@ -382,7 +380,7 @@ where
         let mut value = match &self.context()[definition.rhs] {
             cst::Expr::Lambda(lambda) => {
                 let name = self.try_find_name(definition.pattern).map(|(name, _)| name);
-                self.lambda(lambda, name_id, name, definition.rhs)
+                self.lambda(lambda, name_id, name, definition.rhs, is_global)
             },
             _ => self.expression(definition.rhs),
         };
@@ -394,7 +392,7 @@ where
         self.bind_pattern(definition.pattern, value);
 
         if let Some(state) = previous_state {
-            self.terminate_block(TerminatorInstruction::Return(value));
+            self.terminate_block(TerminatorInstruction::Result(value));
             self.end_global(state);
         }
         Value::Unit
@@ -461,20 +459,20 @@ where
         let previous_block = std::mem::replace(&mut self.current_block, BlockId::ENTRY_BLOCK);
 
         let definition_id = if let Some(name_id) = name_id {
-            self.get_definition_id(&TopLevelName::new(self.top_level_id, name_id))
+            let id = self.get_definition_id(&TopLevelName::new(self.top_level_id, name_id));
+            self.external.remove(&id);
+            id
         } else {
             next_definition_id()
         };
 
-        self.referenced_names.insert(definition_id, name.clone());
         self.current_function = Some(Definition::new(name, definition_id, generic_count, typ));
         (previous_function, previous_block)
     }
 
     fn end_global(&mut self, start_global_state: (Option<Definition>, BlockId)) -> DefinitionId {
         // Safety: This function must always be paired with [Self::start_global]
-        let mut finished_function = std::mem::replace(&mut self.current_function, start_global_state.0).unwrap();
-        finished_function.definition_types = std::mem::take(&mut self.definition_types);
+        let finished_function = std::mem::replace(&mut self.current_function, start_global_state.0).unwrap();
 
         let definition_id = finished_function.id;
         self.current_block = start_global_state.1;
@@ -483,12 +481,16 @@ where
         definition_id
     }
 
-    fn lambda(&mut self, lambda: &cst::Lambda, name_id: Option<NameId>, name: Option<Name>, expr: ExprId) -> Value {
+    fn lambda(
+        &mut self, lambda: &cst::Lambda, name_id: Option<NameId>, name: Option<Name>, expr: ExprId, is_global: bool,
+    ) -> Value {
         let name = name.unwrap_or_else(|| Arc::new("lambda".to_string()));
         let typ = self.convert_type(&self.types.result.maps.expr_types[&expr], None);
 
         // Lambdas aren't really generic but they may capture generics from their containing
         // function. Marking them as generic here effectively hoists out the generic parameters.
+        // It also means we have to instantiate lambdas when they're used with the current generic
+        // parameters.
         let generics_count = self.generics_in_scope.len() as u32;
 
         let id = self.new_definition(name.clone(), name_id, generics_count, typ.clone(), |this| {
@@ -503,7 +505,15 @@ where
             let return_value = this.expression(lambda.body);
             this.terminate_block(TerminatorInstruction::Return(return_value));
         });
-        self.make_definition_value(id, name, typ)
+
+        // If this is a generic lambda, it will have generics forward from the currenty context
+        // which we need to manually instantiate.
+        let mut value = self.make_definition_value(id, name, typ.clone());
+        if !is_global && !self.generics_in_scope.is_empty() {
+            let bindings = Arc::new(mapvec(0..self.generics_in_scope.len() as u32, |i| Type::Generic(Generic(i))));
+            value = self.push_instruction(Instruction::Instantiate(id, bindings), typ);
+        }
+        value
     }
 
     fn if_(&mut self, if_: &cst::If, expr: ExprId) -> Value {
@@ -737,7 +747,7 @@ where
     }
 
     fn finish(self) -> Mir {
-        Mir { definitions: self.finished_functions, external: self.external, names: self.referenced_names }
+        Mir { definitions: self.finished_functions, externals: self.external }.remove_internal_externs()
     }
 
     /// Sets [self.generics_in_scope] to a map mapping each generic from the given type to a
@@ -772,6 +782,14 @@ where
             } else {
                 self.define_type_constructor(constructor_name, constructor_type, &[], tag)
             }
+        }
+
+        // Traits are sugar for a struct of function-typed fields, however each "field" is treated
+        // as a function by the frontend so we must generate actual functions for each field such
+        // that `Cast.cast` is an actual function accepting a `Cast` instance and forwarding the
+        // appropriate arguments to the `cast` field.
+        if type_definition.is_trait {
+            self.define_trait_methods(type_definition);
         }
     }
 
@@ -819,13 +837,77 @@ where
         self.name_to_id.insert(top_level_name, id);
     }
 
-    /// For an extern item, we only have to store its name in `self.referenced_names` and type in `self.external`
+    fn define_trait_methods(&mut self, type_definition: &cst::TypeDefinition) {
+        if let cst::TypeDefinitionBody::Struct(fields) = &type_definition.body {
+            let constructor_type = self.types.get_generalized(type_definition.name);
+            self.set_generics_in_scope(constructor_type);
+            let generic_count = self.generics_in_scope.len() as u32;
+            let constructor_mir_type = self.convert_type(constructor_type, None);
+
+            // The struct's type is the return type of the constructor
+            let struct_type =
+                constructor_mir_type.function_return_type().cloned().unwrap_or_else(|| constructor_mir_type.clone());
+
+            // The field types are the parameter types of the constructor
+            let field_mir_types: Vec<Type> =
+                if let Type::Function(fn_type) = &constructor_mir_type { fn_type.parameters.clone() } else { vec![] };
+
+            for (i, (field_name_id, _)) in fields.iter().enumerate() {
+                let Some(field_type) = field_mir_types.get(i) else { continue };
+
+                // Only generate wrappers for fields whose type is a function (all trait methods)
+                // TODO: We should still generate wrappers for other types
+                let Type::Function(field_fn_type) = field_type else { continue };
+
+                // Wrapper: fn <value_args...> (struct_type) -> return_type
+                let mut wrapper_params = field_fn_type.parameters.clone();
+                wrapper_params.push(struct_type.clone());
+                let return_type = field_fn_type.return_type.clone();
+                let wrapper_type = Type::Function(Arc::new(super::FunctionType {
+                    parameters: wrapper_params.clone(),
+                    return_type: return_type.clone(),
+                }));
+
+                let name = self.context()[*field_name_id].clone();
+                let top_level_name = TopLevelName::new(self.top_level_id, *field_name_id);
+                let field_fn_type_clone = field_fn_type.clone();
+                let n_params = wrapper_params.len();
+
+                let id = self.new_definition(name.clone(), Some(*field_name_id), generic_count, wrapper_type, |this| {
+                    for pt in &wrapper_params {
+                        this.push_parameter(pt.clone());
+                    }
+                    // Last parameter is the struct (implicit receiver)
+                    let struct_param = Value::Parameter(BlockId::ENTRY_BLOCK, n_params as u32 - 1);
+                    // Extract the method function stored at field index i inside the struct tuple
+                    let extracted_fn_type = Type::Function(Arc::new(super::FunctionType {
+                        parameters: field_fn_type_clone.parameters.clone(),
+                        return_type: field_fn_type_clone.return_type.clone(),
+                    }));
+                    let extracted_fn = this.push_instruction(
+                        Instruction::IndexTuple { tuple: struct_param, index: i as u32 },
+                        extracted_fn_type,
+                    );
+                    // Call the extracted function with the value arguments (all params except last)
+                    let value_args = mapvec(0..n_params - 1, |j| Value::Parameter(BlockId::ENTRY_BLOCK, j as u32));
+                    let result = this.push_instruction(
+                        Instruction::Call { function: extracted_fn, arguments: value_args },
+                        return_type.clone(),
+                    );
+                    this.terminate_block(TerminatorInstruction::Return(result));
+                });
+                self.name_to_id.insert(top_level_name, id);
+            }
+        }
+    }
+
+    /// For an extern item, we only have to store its name and type in `self.external`
     fn external(&mut self, extern_: &Extern, item_id: TopLevelId) {
         let name_id = TopLevelName::new(item_id, extern_.declaration.name);
         let id = self.get_definition_id(&name_id);
         let typ = &self.types.result.maps.name_types[&extern_.declaration.name];
         let typ = self.convert_type(&typ, None);
-        self.external.insert(id, typ);
-        self.referenced_names.insert(id, self.context()[extern_.declaration.name].clone());
+        let name = self.context()[extern_.declaration.name].clone();
+        self.reference_definition(id, name, typ);
     }
 }

@@ -201,12 +201,12 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     fn instantiate(&mut self, typ: Type) -> (Type, Option<Vec<Type>>) {
         match typ {
             Type::Forall(generics, old_type) => {
+                assert!(!generics.is_empty());
                 let substitutions = generics.iter().map(|generic| (*generic, self.next_type_variable())).collect();
                 let typ = old_type.substitute(&substitutions, &self.bindings);
 
-                let bindings = (!substitutions.is_empty())
-                    .then(|| mapvec(generics.iter(), |generic| substitutions[generic].clone()));
-                (typ, bindings)
+                let bindings = mapvec(generics.iter(), |generic| substitutions[generic].clone());
+                (typ, Some(bindings))
             },
             other => (other, None),
         }

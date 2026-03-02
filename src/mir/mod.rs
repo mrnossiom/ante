@@ -33,13 +33,14 @@ mod validation;
 pub(crate) struct Mir {
     pub(crate) definitions: Definitions,
 
-    /// Any extern symbols. Each symbol's name is stored separately in `self.names`.
-    pub(crate) external: FxHashMap<DefinitionId, Type>,
+    /// Any extern symbols used but not defined in this [Mir]
+    pub(crate) externals: FxHashMap<DefinitionId, Extern>,
+}
 
-    /// Maps the DefinitionId of any externally referenced DefinitionId to its name.
-    /// This includes ids in `self.external` as well as ids referenced from instructions
-    /// in `self.definitions` but not present in the definitions map itself.
-    names: FxHashMap<DefinitionId, Name>,
+#[derive(Debug)]
+pub(crate) struct Extern {
+    pub(crate) name: Name,
+    pub(crate) typ: Type,
 }
 
 pub(crate) type Definitions = FxHashMap<DefinitionId, Definition>;
@@ -47,8 +48,7 @@ pub(crate) type Definitions = FxHashMap<DefinitionId, Definition>;
 impl Mir {
     pub fn extend(mut self, other: Mir) -> Mir {
         self.definitions.extend(other.definitions);
-        self.external.extend(other.external);
-        self.names.extend(other.names);
+        self.externals.extend(other.externals);
         self
     }
 
@@ -57,14 +57,24 @@ impl Mir {
     }
 
     pub fn get_name(&self, id: DefinitionId) -> Option<&Name> {
-        self.get(id).map(|def| &def.name).or_else(|| self.names.get(&id))
+        self.get(id).map(|def| &def.name).or_else(|| self.externals.get(&id).map(|ext| &ext.name))
     }
 
-    fn with_externals_and_names(
-        mut self, external: FxHashMap<DefinitionId, Type>, names: FxHashMap<DefinitionId, Arc<String>>,
-    ) -> Mir {
-        self.external = external;
-        self.names.extend(names);
+    fn with_externals(mut self, externals: FxHashMap<DefinitionId, Extern>) -> Mir {
+        self.externals = externals;
+        self
+    }
+
+    /// Returns the type of the given value given that the value originates in the given [Definition].
+    pub fn type_of_value(&self, value: &Value, definition: &Definition) -> Type {
+        definition
+            .try_type_of_value(value, &self.externals, &self.definitions)
+            .unwrap_or_else(|| panic!("\n{self}\n\nNo type for {value} in definition {}", definition.id))
+    }
+
+    /// Remove any entries in `self.externals` which are also present in `self.definitions`
+    pub fn remove_internal_externs(mut self) -> Self {
+        self.externals.retain(|k, _| !self.definitions.contains_key(k));
         self
     }
 }
@@ -79,7 +89,8 @@ impl std::ops::Index<DefinitionId> for Mir {
 
 /// A Definition may be a function or global. Globals are represented
 /// as single blocks with no parameters to account for them needing to
-/// construct tuples which are instructions in this IR.
+/// construct tuples which are instructions in this IR. Additionally, the
+/// terminator of a global's block is always `Result`.
 #[derive(Clone)]
 pub(crate) struct Definition {
     pub(crate) name: Name,
@@ -90,7 +101,7 @@ pub(crate) struct Definition {
     /// The number of generic type arguments of this definition
     pub(crate) generic_count: u32,
 
-    /// The type of this Definition. This is lazily computed from [Self::function_type].
+    /// The type of this Definition.
     pub(crate) typ: Type,
 
     /// A function's blocks are always non-empty, consisting of at least an entry
@@ -105,10 +116,6 @@ pub(crate) struct Definition {
 
     /// The result type of each instruction in this function
     instruction_result_types: VecMap<InstructionId, Type>,
-
-    /// Types of any definition ids used in this [Definition]. This may include
-    /// external definitions not included in this [Mir] as well.
-    definition_types: FxHashMap<DefinitionId, Type>,
 }
 
 impl Definition {
@@ -125,8 +132,13 @@ impl Definition {
             generic_count,
             instructions: VecMap::default(),
             instruction_result_types: VecMap::default(),
-            definition_types: Default::default(),
         }
+    }
+
+    /// True if this [Definition] is a global value rather than a function.
+    /// Note that this includes globals whose types are functions.
+    pub fn is_global(&self) -> bool {
+        self.blocks.len() == 1 && matches!(&self.entry_block().terminator, Some(TerminatorInstruction::Result(_)))
     }
 
     /// Clone this definition but with a new id
@@ -144,8 +156,19 @@ impl Definition {
         &self.instruction_result_types[id]
     }
 
-    pub fn type_of_value(&self, value: &Value) -> Type {
-        match value {
+    pub fn type_of_value(
+        &self, value: &Value, externals: &FxHashMap<DefinitionId, Extern>,
+        definitions: &FxHashMap<DefinitionId, Definition>,
+    ) -> Type {
+        self.try_type_of_value(value, externals, definitions)
+            .unwrap_or_else(|| panic!("\n{}\nexterns = {externals:?}\n\nNo type for {value}", self.display(None)))
+    }
+
+    fn try_type_of_value(
+        &self, value: &Value, externals: &FxHashMap<DefinitionId, Extern>,
+        definitions: &FxHashMap<DefinitionId, Definition>,
+    ) -> Option<Type> {
+        Some(match value {
             Value::Error => Type::ERROR,
             Value::Unit => Type::UNIT,
             Value::Bool(_) => Type::BOOL,
@@ -154,14 +177,20 @@ impl Definition {
             Value::Float(constant) => Type::float(constant.kind()),
             Value::InstructionResult(instruction_id) => self.instruction_result_types[*instruction_id].clone(),
             Value::Parameter(block_id, parameter_index) => {
-                self.blocks[*block_id].parameter_types[*parameter_index as usize].clone()
+                self.blocks.get(*block_id)?.parameter_types.get(*parameter_index as usize)?.clone()
             },
-            Value::Definition(definition_id) => self
-                .definition_types
-                .get(&definition_id)
-                .cloned()
-                .unwrap_or_else(|| panic!("No definition type for {definition_id}")),
-        }
+            Value::Definition(definition_id) => {
+                if let Some(definition) = definitions.get(definition_id) {
+                    definition.typ.clone()
+                } else if let Some(external) = externals.get(definition_id) {
+                    external.typ.clone()
+                } else if *definition_id == self.id {
+                    self.typ.clone()
+                } else {
+                    return None;
+                }
+            },
+        })
     }
 
     /// Returns a topological sort of the blocks in this function.
@@ -219,6 +248,7 @@ impl Definition {
                 },
                 Some(TerminatorInstruction::Unreachable) => (),
                 Some(TerminatorInstruction::Return(_)) => (),
+                Some(TerminatorInstruction::Result(_)) => (),
                 None => unreachable!("Function::topological_sort: block {block} has no terminator"),
             }
         }
@@ -469,6 +499,10 @@ pub enum TerminatorInstruction {
     #[allow(unused)]
     Unreachable,
     Return(Value),
+
+    /// Similar to `Return` but for non-function globals. Such globals do not correspond to an
+    /// actual return instruction. Instead, they result in a value that is put into storage.
+    Result(Value),
 }
 
 impl TerminatorInstruction {
@@ -512,6 +546,7 @@ impl TerminatorInstruction {
             },
             TerminatorInstruction::Unreachable => (),
             TerminatorInstruction::Return(value) => f(value),
+            TerminatorInstruction::Result(value) => f(value),
         }
     }
 }
@@ -678,7 +713,7 @@ impl Type {
             Type::Function(_) => ptr_size,
             // This is a raw union so the tag isn't counted here
             Type::Union(variants) => variants.iter().map(|typ| typ.size_in_bytes(ptr_size)).max().unwrap_or(0),
-            Type::Generic(_) => panic!("Type::size_in_bytes: Encountered generic"),
+            Type::Generic(_) => 100, //panic!("Type::size_in_bytes: Encountered generic"),
         }
     }
 

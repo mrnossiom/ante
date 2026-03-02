@@ -45,7 +45,7 @@ pub fn codegen_llvm(compiler: &Db) -> Option<CodegenLlvmResult> {
         module.codegen_function(function, *id);
     }
 
-    for (id, typ) in &mir.external {
+    for (id, typ) in &mir.externals {
         module.codegen_extern(*id, typ);
     }
 
@@ -289,7 +289,8 @@ impl<'ctx> ModuleContext<'ctx> {
                     return value.as_pointer_value().into();
                 }
 
-                let typ = self.try_get_function(self.current_function.unwrap()).unwrap().type_of_value(&value);
+                let function = self.try_get_function(self.current_function.unwrap()).unwrap();
+                let typ = self.mir.type_of_value(&value, function);
                 let typ = self.convert_function_type(&typ).unwrap();
 
                 let name = self.get_name(function_id);
@@ -304,7 +305,7 @@ impl<'ctx> ModuleContext<'ctx> {
     fn codegen_instruction(&mut self, function: &mir::Definition, id: mir::InstructionId) {
         let result = match &function.instructions[id] {
             mir::Instruction::Call { function: function_value, arguments } => {
-                let typ = self.convert_function_type(&function.type_of_value(function_value)).unwrap();
+                let typ = self.convert_function_type(&self.mir.type_of_value(function_value, function)).unwrap();
                 let function = self.lookup_value(*function_value).into_pointer_value();
                 let arguments = mapvec(arguments, |arg| self.lookup_value(*arg).into());
                 self.builder
@@ -592,13 +593,14 @@ impl<'ctx> ModuleContext<'ctx> {
                 let value = self.lookup_value(*value);
                 self.builder.build_return(Some(&value)).unwrap();
             },
+            TerminatorInstruction::Result(_) => todo!("llvm codegen for result terminator"),
         }
     }
 
-    fn codegen_extern(&mut self, id: DefinitionId, typ: &mir::Type) {
+    fn codegen_extern(&mut self, id: DefinitionId, external: &mir::Extern) {
         if !self.values.contains_key(&mir::Value::Definition(id)) {
-            let function_type = self.convert_function_type(typ).unwrap();
-            let name = self.get_name(id);
+            let function_type = self.convert_function_type(&external.typ).unwrap();
+            let name = &external.name;
             let function_value = self.module.add_function(name, function_type, None);
             self.values.insert(mir::Value::Definition(id), function_value.as_global_value().as_pointer_value().into());
         }

@@ -10,17 +10,16 @@ use crate::{
 
 impl Display for mir::Mir {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        for (id, typ) in self.external.iter() {
-            let name = self.names.get(id).map(|s| s.as_str()).unwrap_or_else(|| "#no-name");
-            writeln!(f, "extern {name}: {typ}")?;
+        for (id, extern_) in self.externals.iter() {
+            writeln!(f, "extern {} {id}: {}", extern_.name, extern_.typ)?;
         }
 
-        if !self.external.is_empty() {
+        if !self.externals.is_empty() {
             writeln!(f)?;
         }
 
         for function in self.definitions.values() {
-            fmt_function(function, self, f)?;
+            fmt_function(function, Some(self), f)?;
             writeln!(f, "\n")?;
         }
         Ok(())
@@ -28,12 +27,14 @@ impl Display for mir::Mir {
 }
 
 impl Definition {
-    pub(crate) fn display<'a>(&'a self, mir: &'a mir::Mir) -> DefinitionDisplay<'a> {
+    /// Create a wrapper that can display this [Definition]. The optional [mir::Mir], if provided, allows
+    /// definition names to be printed instead of just their ids.
+    pub(crate) fn display<'a>(&'a self, mir: Option<&'a mir::Mir>) -> DefinitionDisplay<'a> {
         DefinitionDisplay(self, mir)
     }
 }
 
-pub struct DefinitionDisplay<'a>(&'a Definition, &'a mir::Mir);
+pub struct DefinitionDisplay<'a>(&'a Definition, Option<&'a mir::Mir>);
 
 impl Display for DefinitionDisplay<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
@@ -42,12 +43,14 @@ impl Display for DefinitionDisplay<'_> {
 }
 
 impl InstructionId {
-    pub(crate) fn display<'a>(self, definition: &'a Definition, mir: &'a mir::Mir) -> InstructionDisplay<'a> {
+    /// Create a wrapper that can display this instruction. The optional [mir::Mir], if provided, allows
+    /// definition names to be printed instead of just their ids.
+    pub(crate) fn display<'a>(self, definition: &'a Definition, mir: Option<&'a mir::Mir>) -> InstructionDisplay<'a> {
         InstructionDisplay(self, definition, mir)
     }
 }
 
-pub struct InstructionDisplay<'a>(InstructionId, &'a Definition, &'a mir::Mir);
+pub struct InstructionDisplay<'a>(InstructionId, &'a Definition, Option<&'a mir::Mir>);
 
 impl Display for InstructionDisplay<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
@@ -162,7 +165,7 @@ impl Display for PrimitiveType {
     }
 }
 
-fn fmt_function(function: &mir::Definition, mir: &mir::Mir, f: &mut Formatter) -> Result {
+fn fmt_function(function: &mir::Definition, mir: Option<&mir::Mir>, f: &mut Formatter) -> Result {
     write!(f, "fn {} {}: ", function.name, function.id)?;
 
     if function.generic_count != 0 {
@@ -182,7 +185,9 @@ fn fmt_function(function: &mir::Definition, mir: &mir::Mir, f: &mut Formatter) -
     Ok(())
 }
 
-fn fmt_block(id: BlockId, mir: &mir::Mir, function: &mir::Definition, block: &Block, f: &mut Formatter) -> Result {
+fn fmt_block(
+    id: BlockId, mir: Option<&mir::Mir>, function: &mir::Definition, block: &Block, f: &mut Formatter,
+) -> Result {
     write!(f, "  b{}(", id.0)?;
     let v = |value: &Value| ValueDisplay { value: *value, mir };
 
@@ -207,7 +212,7 @@ fn fmt_block(id: BlockId, mir: &mir::Mir, function: &mir::Definition, block: &Bl
     Ok(())
 }
 
-fn fmt_terminator(terminator: &mir::TerminatorInstruction, mir: &mir::Mir, f: &mut Formatter<'_>) -> Result {
+fn fmt_terminator(terminator: &mir::TerminatorInstruction, mir: Option<&mir::Mir>, f: &mut Formatter<'_>) -> Result {
     let v = |value: &Value| ValueDisplay { value: *value, mir };
     write!(f, "    ")?;
 
@@ -232,6 +237,7 @@ fn fmt_terminator(terminator: &mir::TerminatorInstruction, mir: &mir::Mir, f: &m
         },
         mir::TerminatorInstruction::Unreachable => write!(f, "unreachable"),
         mir::TerminatorInstruction::Return(value) => write!(f, "return {}", v(value)),
+        mir::TerminatorInstruction::Result(value) => write!(f, "result {}", v(value)),
         mir::TerminatorInstruction::Switch { int_value, cases, else_, end } => {
             writeln!(f, "switch {}", v(int_value))?;
             for (i, (case_block, case_arg)) in cases.iter().enumerate() {
@@ -255,8 +261,8 @@ fn fmt_terminator(terminator: &mir::TerminatorInstruction, mir: &mir::Mir, f: &m
 }
 
 fn fmt_instruction(
-    instruction_id: mir::InstructionId, instruction: &mir::Instruction, mir: &mir::Mir, function: &mir::Definition,
-    f: &mut Formatter<'_>,
+    instruction_id: mir::InstructionId, instruction: &mir::Instruction, mir: Option<&mir::Mir>,
+    function: &mir::Definition, f: &mut Formatter<'_>,
 ) -> Result {
     let v = |value: &Value| ValueDisplay { value: *value, mir };
 
@@ -319,13 +325,13 @@ fn fmt_instruction(
     writeln!(f)
 }
 
-fn comma_separated(items: &[Value], mir: &mir::Mir) -> String {
+fn comma_separated(items: &[Value], mir: Option<&mir::Mir>) -> String {
     items.iter().map(|v| ValueDisplay { value: *v, mir }.to_string()).collect::<Vec<_>>().join(", ")
 }
 
 struct ValueDisplay<'local> {
     value: Value,
-    mir: &'local mir::Mir,
+    mir: Option<&'local mir::Mir>,
 }
 
 impl<'local> Display for ValueDisplay<'local> {
@@ -340,7 +346,7 @@ impl<'local> Display for ValueDisplay<'local> {
             Value::InstructionResult(instruction_id) => write!(f, "v{}", instruction_id.0),
             Value::Parameter(block_id, i) => write!(f, "b{}_{}", block_id.0, i),
             Value::Definition(id) => {
-                if let Some(name) = self.mir.get_name(*id) {
+                if let Some(name) = self.mir.as_ref().and_then(|mir| mir.get_name(*id)) {
                     write!(f, "{name}_")?;
                 }
                 write!(f, "{id}")

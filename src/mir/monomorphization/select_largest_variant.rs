@@ -8,7 +8,6 @@ use crate::{
     mir::{Definition, Mir, Type},
 };
 use inc_complete::DbGet;
-use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 use std::sync::Arc;
 
 impl Mir {
@@ -19,8 +18,9 @@ impl Mir {
     {
         let ptr_size = TargetPointerSize.get(db);
 
-        self.definitions.par_iter_mut().for_each(|(_, definition)| definition.select_largest_variants(ptr_size));
-        self.external.values_mut().for_each(|typ| typ.select_largest_variants(ptr_size));
+        //self.definitions.par_iter_mut().for_each(|(_, definition)| definition.select_largest_variants(ptr_size));
+        self.definitions.iter_mut().for_each(|(_, definition)| definition.select_largest_variants(ptr_size));
+        self.externals.values_mut().for_each(|extern_| extern_.typ.select_largest_variants(ptr_size));
         self
     }
 }
@@ -40,10 +40,6 @@ impl Definition {
             for parameter in block.parameter_types.iter_mut() {
                 parameter.select_largest_variants(ptr_size);
             }
-        }
-
-        for definition_type in self.definition_types.values_mut() {
-            definition_type.select_largest_variants(ptr_size);
         }
     }
 }

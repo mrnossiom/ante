@@ -4,12 +4,11 @@
 //! The monomorphizer starts from the entry point to the program and from there builds a queue
 //! of functions which need to be monomorphized. This queue can be processed concurrently with
 //! each individual function being handled by a single [FunctionContext] object.
-use std::{collections::hash_map::Entry, sync::Arc};
+use std::sync::Arc;
 
 use dashmap::DashMap;
 use inc_complete::DbGet;
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 
 mod select_largest_variant;
 
@@ -20,7 +19,6 @@ use crate::{
         self, Definition, DefinitionId, GenericBindings, Instruction, Mir, Type, Value,
         builder::build_initial_mir_with_shared_map, next_definition_id,
     },
-    parser::cst::Name,
 };
 
 /// Monomorphize the whole program, returning a MIR function if the item refers to a function.
@@ -40,9 +38,11 @@ where
         + Sync,
 {
     let initial_mir = collect_all_items(compiler)
-        .into_par_iter()
+        .into_iter()
+        //.into_par_iter()
         .flat_map(|item| build_initial_mir_with_shared_map(compiler, item))
-        .reduce(Mir::default, Mir::extend);
+        .fold(Mir::default(), Mir::extend);
+    //.reduce(Mir::default, Mir::extend);
 
     let shared = SharedDefinitions::default();
 
@@ -62,13 +62,15 @@ where
     // TODO: Switch to a concurrent queue to better utilize each thread instead of having each
     // thread compile each function reachable from each monomorphic function.
     monomorphic_definitions
-        .into_par_iter()
-        .fold(Mir::default, |acc, definition| {
+        //.into_par_iter()
+        .into_iter()
+        .fold(Mir::default(), |acc, definition| {
             let monomorphized = monomorphize_non_generic_definition(definition, &shared, &initial_mir);
             acc.extend(monomorphized)
         })
-        .reduce(Mir::default, Mir::extend)
-        .with_externals_and_names(initial_mir.external, initial_mir.names)
+        //.reduce(Mir::default, Mir::extend)
+        .with_externals(initial_mir.externals)
+        .remove_internal_externs()
         .select_largest_variants(compiler)
         .assert_fully_linked()
         .assert_type_checks()
@@ -83,15 +85,14 @@ fn monomorphize_non_generic_definition(
     definition: Definition, definitions: &SharedDefinitions, initial_mir: &Mir,
 ) -> Mir {
     let mut context = FunctionContext::new(definitions);
-    context.monomorphize_definition(definition, initial_mir);
+    context.monomorphize_definition(definition);
 
     while let Some(item) = context.queue.pop() {
         let Some(original_definition) = initial_mir.get(item.old_id) else {
-            eprintln!(
+            panic!(
                 "Monomorphization: no definition for id {}, was monomorphize not given every top-level-item in a single invocation?",
                 item.old_id
             );
-            continue;
         };
 
         // If the original definition is already monomorphic, it will be covered by a different
@@ -101,11 +102,11 @@ fn monomorphize_non_generic_definition(
             definition.generic_count = 0;
             definition.typ = item.monomorphized_type;
             context.generic_mapping = item.bindings.clone();
-            context.monomorphize_definition(definition, initial_mir);
+            context.monomorphize_definition(definition);
         }
     }
 
-    Mir { definitions: context.finished_definitions, external: Default::default(), names: context.names }
+    Mir { definitions: context.finished_definitions, externals: Default::default() }
 }
 
 struct FunctionContext<'local> {
@@ -117,8 +118,6 @@ struct FunctionContext<'local> {
 
     /// This is shared between all concurrent monomorphize calls
     definitions: &'local SharedDefinitions,
-
-    names: FxHashMap<DefinitionId, Name>,
 }
 
 struct DefinitionToMonomorphize {
@@ -141,26 +140,26 @@ impl<'local> FunctionContext<'local> {
             generic_mapping: Default::default(),
             queue: Default::default(),
             finished_definitions: Default::default(),
-            names: Default::default(),
         }
     }
 
-    fn monomorphize_definition(&mut self, mut definition: mir::Definition, initial_mir: &Mir) {
+    fn monomorphize_definition(&mut self, mut definition: mir::Definition) {
         if !self.generic_mapping.is_empty() {
             self.update_value_types(&mut definition);
         }
-
-        let mut removed_ids = FxHashSet::default();
 
         // We can skip the blocks and go right to the instructions themselves. There shouldn't be
         // any that aren't used in a block.
         for (instruction_id, instruction) in definition.instructions.iter_mut() {
             if let Instruction::Instantiate(id, bindings) = instruction {
+                assert!(!bindings.is_empty());
+                if !self.generic_mapping.is_empty() {
+                    self.specialize_bindings(bindings);
+                }
+
                 let new_id = *self.definitions.entry((*id, bindings.clone())).or_insert_with(|| {
                     let new_id = next_definition_id();
-                    removed_ids.insert(*id);
                     let typ = definition.instruction_result_types[instruction_id].clone();
-                    self.names.insert(new_id, initial_mir.names[id].clone());
                     self.queue.push(DefinitionToMonomorphize {
                         old_id: *id,
                         new_id,
@@ -170,17 +169,8 @@ impl<'local> FunctionContext<'local> {
                     new_id
                 });
 
-                if let Entry::Vacant(entry) = definition.definition_types.entry(new_id) {
-                    let typ = definition.instruction_result_types[instruction_id].clone();
-                    entry.insert(typ);
-                }
-
                 *instruction = Instruction::Id(Value::Definition(new_id));
             }
-        }
-
-        for id in removed_ids {
-            definition.definition_types.remove(&id);
         }
 
         self.finished_definitions.insert(definition.id, definition);
@@ -191,15 +181,18 @@ impl<'local> FunctionContext<'local> {
             self.specialize_type(result_type);
         }
 
-        for definition_type in definition.definition_types.values_mut() {
-            self.specialize_type(definition_type);
-        }
-
         for block in definition.blocks.values_mut() {
             for parameter in block.parameter_types.iter_mut() {
                 self.specialize_type(parameter);
             }
         }
+    }
+
+    fn specialize_bindings(&self, bindings: &mut Arc<Vec<Type>>) {
+        // There shouldn't be any external refs to Instruction::Instantiate bindings so this should
+        // always succeed.
+        let bindings = Arc::make_mut(bindings);
+        bindings.iter_mut().for_each(|typ| self.specialize_type(typ));
     }
 
     /// Replace any instances of generics in `self.generic_mapping` of the given type with their mapping.
@@ -212,6 +205,8 @@ impl<'local> FunctionContext<'local> {
             Type::Tuple(fields) => {
                 let mut new_fields = fields.to_vec();
                 new_fields.iter_mut().for_each(recur);
+                // TODO: It may be faster if we avoid calling `specialize_type`
+                // on types without generics to avoid creating new Arcs everywhere
                 *fields = Arc::new(new_fields);
             },
             Type::Function(function) => {

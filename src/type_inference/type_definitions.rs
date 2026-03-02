@@ -118,6 +118,8 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     /// ```
     /// The name `Eq.eq` is publically visible. We want to give it the type:
     /// `Eq.eq: fn t t {Eq t} -> Bool`
+    ///
+    /// It should be generalized to `forall t. fn t t {Eq t} -> Bool` later.
     fn build_trait_method_types(
         &mut self, id: TopLevelId, definition: &cst::TypeDefinition, fields: &[(NameId, cst::Type)],
     ) {

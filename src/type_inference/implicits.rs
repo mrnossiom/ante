@@ -141,7 +141,6 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         // TODO: Make this more efficient so we don't need to go through every single implicit
         if let Some(item) = self.current_item {
             for (name, name_id) in VisibleImplicits(item.source_file).get(self.compiler).iter() {
-                // TODO: Need to store generic instantiations
                 let (name_type, bindings) = self.type_and_bindings_of_top_level_name(name_id);
                 if self.try_unify(&name_type, &target_type).is_ok() {
                     let origin = Origin::TopLevelDefinition(*name_id);
@@ -309,7 +308,8 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         let body_type = Type::ERROR;
         let body = self.push_expr(body, body_type, location);
 
-        Some(cst::Expr::Lambda(cst::Lambda { parameters, body, return_type: None, effects: None }))
+        // TODO: This should have the same effects as `function`
+        Some(cst::Expr::Lambda(cst::Lambda { parameters, body, return_type: None, effects: Some(Vec::new()) }))
     }
 
     /// Creates a new expression referring to the given implicit value.

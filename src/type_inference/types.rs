@@ -43,6 +43,12 @@ pub enum Type {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct FunctionType {
     pub parameters: Vec<ParameterType>,
+
+    /// Closures and functions are unified by all having an environment type.
+    /// Free functions will have an environment of [Type::UNIT] while closures will
+    /// have non-unit environment types and will be subject to closure conversion.
+    pub environment: Type,
+
     pub return_type: Type,
     pub effects: Type,
 }
@@ -233,6 +239,7 @@ impl Type {
 
                 Type::Function(Arc::new(FunctionType {
                     parameters,
+                    environment: function.environment.follow_all(bindings),
                     return_type: function.return_type.follow_all(bindings),
                     effects: function.effects.follow_all(bindings),
                 }))
@@ -273,9 +280,10 @@ impl Type {
                     let typ = param.typ.substitute(bindings_to_substitute, bindings_in_scope);
                     ParameterType::new(typ, param.is_implicit)
                 });
+                let environment = function.environment.substitute(bindings_to_substitute, bindings_in_scope);
                 let return_type = function.return_type.substitute(bindings_to_substitute, bindings_in_scope);
                 let effects = function.effects.substitute(bindings_to_substitute, bindings_in_scope);
-                Type::Function(Arc::new(FunctionType { parameters, return_type, effects }))
+                Type::Function(Arc::new(FunctionType { parameters, environment, return_type, effects }))
             },
             Type::Application(constructor, args) => {
                 let (constructor, args) = (constructor.clone(), args.clone());
@@ -369,10 +377,15 @@ impl Type {
                     let typ = Self::from_cst_type(&param.typ, resolve);
                     ParameterType::new(typ, param.is_implicit)
                 });
+                let environment = if let Some(environment) = function.environment.as_ref() {
+                    Self::from_cst_type(environment, resolve)
+                } else {
+                    Type::UNIT
+                };
                 let return_type = Self::from_cst_type(&function.return_type, resolve);
                 // TODO: Effects
                 let effects = Type::UNIT;
-                Type::Function(Arc::new(FunctionType { parameters, return_type, effects }))
+                Type::Function(Arc::new(FunctionType { parameters, environment, return_type, effects }))
             },
             crate::parser::cst::Type::Error => Type::ERROR,
             crate::parser::cst::Type::Unit => Type::UNIT,
@@ -535,6 +548,13 @@ where
                         self.fmt_type(&parameter.typ, true, f)?;
                     }
                 }
+
+                if *function.environment.follow(&self.bindings) != Type::UNIT {
+                    write!(f, " [")?;
+                    self.fmt_type(&function.environment, false, f)?;
+                    write!(f, "]")?;
+                }
+
                 write!(f, " -> ")?;
                 self.fmt_type(&function.return_type, false, f)?;
 

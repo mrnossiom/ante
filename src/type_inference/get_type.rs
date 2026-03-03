@@ -69,7 +69,11 @@ pub(super) fn try_get_type(
             })
             .collect::<Option<Vec<_>>>()?;
 
-        let cst_function_type = cst::FunctionType { parameters, return_type, effects: lambda.effects.clone() };
+        // Any lambda at global scope shouldn't be able to capture any local variables
+        let environment = None;
+
+        let cst_function_type =
+            cst::FunctionType { parameters, environment, return_type, effects: lambda.effects.clone() };
 
         // We construct a function type to convert wholesale instead of converting as we go
         // to avoid repeating logic in [Type::from_cst_type], namely handling of effect types.

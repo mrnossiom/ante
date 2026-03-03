@@ -122,6 +122,8 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 } else {
                     Type::Function(Arc::new(types::FunctionType {
                         parameters: parameters.clone(),
+                        // Any type constructor we can match on shouldn't be a closure
+                        environment: Type::UNIT,
                         return_type: expected.clone(),
                         effects: self.next_type_variable(),
                     }))
@@ -282,6 +284,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 let pair = Type::Application(Arc::new(Type::PAIR), Arc::new(vec![a.clone(), b.clone()]));
                 Type::Function(Arc::new(types::FunctionType {
                     parameters: vec![types::ParameterType::explicit(a), types::ParameterType::explicit(b)],
+                    environment: Type::UNIT,
                     return_type: pair,
                     effects: Type::UNIT,
                 }))
@@ -299,9 +302,10 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
 
         let expected_function_type = {
             let parameters = expected_parameter_types.clone();
+            let environment = self.next_type_variable();
             let effects = self.next_type_variable();
             let return_type = expected.clone();
-            Type::Function(Arc::new(types::FunctionType { parameters, return_type, effects }))
+            Type::Function(Arc::new(types::FunctionType { parameters, environment, return_type, effects }))
         };
 
         self.check_expr(call.function, &expected_function_type);
@@ -318,9 +322,10 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                     types::ParameterType::new(self.next_type_variable(), param.is_implicit)
                 });
                 let expected_parameter_count = parameters.len();
+                let environment = self.next_type_variable();
                 let return_type = self.next_type_variable();
                 let effects = self.next_type_variable();
-                let new_type = Arc::new(types::FunctionType { parameters, return_type, effects });
+                let new_type = Arc::new(types::FunctionType { parameters, environment, return_type, effects });
                 let function_type = Type::Function(new_type.clone());
                 self.unify(expected, &function_type, TypeErrorKind::Lambda { expected_parameter_count }, expr);
                 new_type
@@ -356,6 +361,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         };
 
         self.check_expr(lambda.body, &return_type);
+        self.check_for_closure(lambda, expr, &function_type.environment);
         self.pop_implicits_scope();
     }
 

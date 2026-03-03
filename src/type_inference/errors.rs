@@ -35,12 +35,14 @@ pub enum TypeErrorKind {
     /// produce references.
     /// NOTE: `actual` will be arbitrary in this case and should not be displayed
     ExpectedNonReference,
+    /// A closure's actual captured variables does not match its expected type
+    ClosureEnv,
 }
 
 impl TypeErrorKind {
-    pub fn message(self, actual: &str, expected: &str) -> String {
-        let actual = actual.blue();
-        let expected = expected.blue();
+    pub fn message(self, actual_type: &str, expected_type: &str) -> String {
+        let actual = actual_type.blue();
+        let expected = expected_type.blue();
         match self {
             TypeErrorKind::General => format!("Expected {expected} but found {actual}"),
             TypeErrorKind::TypeAnnotationMismatch => {
@@ -67,6 +69,17 @@ impl TypeErrorKind {
             },
             TypeErrorKind::ExpectedNonReference => {
                 format!("Expected non-reference type {expected}, but this expression always produces a reference")
+            },
+            TypeErrorKind::ClosureEnv => {
+                if expected_type == "Unit" {
+                    format!(
+                        "Expected a free function, but this closure captures variable(s) in the outer scope. The captured environment is of type {actual}"
+                    )
+                } else {
+                    format!(
+                        "Expected the closure environment {expected}, but the actual environment was of type {actual}"
+                    )
+                }
             },
         }
     }

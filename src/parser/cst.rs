@@ -116,6 +116,8 @@ pub struct FunctionType {
     pub parameters: Vec<ParameterType>,
     pub return_type: Box<Type>,
 
+    pub environment: Option<Box<Type>>,
+
     /// Any effects that were specified on this function.
     /// - `None` means none were specified
     /// - `Some(Vec::new())` means it was specified to be `pure`

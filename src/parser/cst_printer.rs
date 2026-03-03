@@ -570,6 +570,12 @@ impl<'a> CstDisplay<'a> {
             }
         }
 
+        if let Some(environment) = function_type.environment.as_ref() {
+            write!(f, " [")?;
+            self.fmt_type(environment, context, f)?;
+            write!(f, "]")?;
+        }
+
         write!(f, " -> ")?;
         self.fmt_type(&function_type.return_type, context, f)?;
         self.fmt_effect_clause(&function_type.effects, context, f)

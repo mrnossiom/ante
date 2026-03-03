@@ -804,6 +804,14 @@ impl<'tokens> Parser<'tokens> {
             parameters.push(ParameterType::explicit(Type::Unit));
         }
 
+        let environment = if self.accept(Token::BraceLeft) {
+            let typ = self.parse_type()?;
+            self.expect(Token::BraceRight, "`]` to terminate the closure's `[` from the environment parameter")?;
+            Some(Box::new(typ))
+        } else {
+            None
+        };
+
         // Temporarily allow the closure arrow as well
         if !self.accept(Token::FatArrow) {
             self.expect(Token::RightArrow, "`->` to separate this function type's parameters from its return type")?;
@@ -812,7 +820,7 @@ impl<'tokens> Parser<'tokens> {
         let return_type = Box::new(self.parse_type()?);
         let effects = self.parse_effects_clause();
 
-        Ok(Type::Function(cst::FunctionType { parameters, return_type, effects }))
+        Ok(Type::Function(cst::FunctionType { parameters, environment, return_type, effects }))
     }
 
     /// The effect clause on a function or function type.

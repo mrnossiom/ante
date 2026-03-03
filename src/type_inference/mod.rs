@@ -26,6 +26,7 @@ use crate::{
 mod cst_traversal;
 pub mod dependency_graph;
 pub mod errors;
+mod free_variables;
 pub mod fresh_expr;
 pub mod generics;
 mod get_type;

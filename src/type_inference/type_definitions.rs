@@ -108,7 +108,12 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             types::ParameterType::explicit(param)
         });
 
-        Type::Function(Arc::new(types::FunctionType { parameters, return_type: data_type, effects: Type::UNIT }))
+        Type::Function(Arc::new(types::FunctionType {
+            parameters,
+            environment: Type::UNIT,
+            return_type: data_type,
+            effects: Type::UNIT,
+        }))
     }
 
     /// Given a desugared trait definition like:

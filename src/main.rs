@@ -27,7 +27,6 @@ use clap::{CommandFactory, Parser};
 use cli::{Cli, Completions};
 use colored::Colorize;
 use diagnostics::Diagnostic;
-use inc_complete::{Computation, StorageFor};
 use incremental::{Db, GetCrateGraph, Parse, Resolve};
 use name_resolution::namespace::{CrateId, LocalModuleId, SourceFileId};
 use std::{
@@ -42,7 +41,7 @@ use crate::{
     codegen::llvm::{CodegenLlvmResult, codegen_llvm},
     diagnostics::DiagnosticKind,
     files::{make_compiler, write_metadata},
-    incremental::{DbStorage, TargetPointerSize, TypeCheck},
+    incremental::{TargetPointerSize, TypeCheck},
 };
 
 // All the compiler passes:
@@ -153,7 +152,7 @@ fn collect_all_diagnostics(compiler: &Db) -> BTreeSet<Diagnostic> {
             let parse = Parse(*file).get(compiler);
 
             for item in &parse.cst.top_level_items {
-                let more_diagnostics: BTreeSet<_> = compiler.get_accumulated(TypeCheck(item.id));
+                let more_diagnostics = compiler.get_accumulated(TypeCheck(item.id));
                 diagnostics.extend(more_diagnostics);
             }
         }
@@ -184,7 +183,7 @@ fn display_parse_tree(compiler: &Db, emit_all: bool) -> BTreeSet<Diagnostic> {
                 let result = Parse(*file).get(compiler);
                 println!("{}", result.cst.display(&result.top_level_data));
 
-                let parse_diagnostics: BTreeSet<_> = compiler.get_accumulated(Parse(*file));
+                let parse_diagnostics = compiler.get_accumulated(Parse(*file));
                 diagnostics.extend(parse_diagnostics);
             }
         }
@@ -202,7 +201,7 @@ fn display_name_resolution(compiler: &Db, emit_all: bool) -> BTreeSet<Diagnostic
                 let parse = Parse(*file).get(compiler);
 
                 for item in &parse.cst.top_level_items {
-                    let resolve_diagnostics: BTreeSet<_> = compiler.get_accumulated(Resolve(item.id));
+                    let resolve_diagnostics = compiler.get_accumulated(Resolve(item.id));
                     diagnostics.extend(resolve_diagnostics);
                 }
 
@@ -223,7 +222,7 @@ fn display_type_checking(compiler: &Db, show_types: bool, emit_all: bool) -> BTr
                 let parse = Parse(*file).get(compiler);
 
                 for item in &parse.cst.top_level_items {
-                    let more_diagnostics: BTreeSet<_> = compiler.get_accumulated(TypeCheck(item.id));
+                    let more_diagnostics = compiler.get_accumulated(TypeCheck(item.id));
                     diagnostics.extend(more_diagnostics);
                 }
 
@@ -250,7 +249,7 @@ fn display_mir(compiler: &Db, emit_all: bool) -> BTreeSet<Diagnostic> {
                     if let Some(mir) = mir {
                         print!("{mir}");
                     }
-                    let more_diagnostics: BTreeSet<_> = compiler.get_accumulated(TypeCheck(item.id));
+                    let more_diagnostics = compiler.get_accumulated(TypeCheck(item.id));
                     diagnostics.extend(more_diagnostics);
                 }
             }
@@ -270,7 +269,7 @@ fn display_mir_mono(compiler: &Db) -> BTreeSet<Diagnostic> {
             let parse = Parse(*file).get(compiler);
 
             for item in parse.cst.top_level_items.iter() {
-                let more_diagnostics: BTreeSet<_> = compiler.get_accumulated(TypeCheck(item.id));
+                let more_diagnostics = compiler.get_accumulated(TypeCheck(item.id));
                 diagnostics.extend(more_diagnostics);
             }
         }
@@ -337,14 +336,4 @@ fn llvm_codegen_all(compiler: &Db, files: &[PathBuf], delete_binary: bool) -> BT
 pub fn path_to_id(crate_id: CrateId, path: &Path) -> SourceFileId {
     let local_module_id = LocalModuleId(parser::ids::hash(path) as u32);
     SourceFileId { crate_id, local_module_id }
-}
-
-/// Retrieve all diagnostics emitted after running the given compiler step
-#[allow(unused)]
-fn get_diagnostics_at_step<C>(compiler: &Db, step: C) -> BTreeSet<Diagnostic>
-where
-    C: Computation + std::fmt::Debug,
-    DbStorage: StorageFor<C>,
-{
-    compiler.get_accumulated(step)
 }

@@ -2,7 +2,7 @@ use std::{cell::Cell, collections::BTreeMap, path::PathBuf, sync::Arc};
 
 use inc_complete::{
     DebugWithDb, Storage,
-    accumulate::Accumulator,
+    accumulate::{Accumulated, Accumulator},
     define_input, define_intermediate,
     storage::{HashMapStorage, SingletonStorage},
 };
@@ -73,6 +73,7 @@ pub struct DbStorage {
 
     #[inc_complete(accumulate)]
     diagnostics: Accumulator<Diagnostic>,
+    diagnostics_storage: HashMapStorage<Accumulated<Diagnostic>>,
 }
 
 std::thread_local! {

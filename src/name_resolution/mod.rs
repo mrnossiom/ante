@@ -608,6 +608,9 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
                 for parameter in &function.parameters {
                     self.resolve_type(&parameter.typ, declare_type_vars);
                 }
+                if let Some(environment) = function.environment.as_ref() {
+                    self.resolve_type(environment, declare_type_vars);
+                }
                 self.resolve_type(&function.return_type, declare_type_vars);
 
                 if let Some(effects) = function.effects.as_ref() {

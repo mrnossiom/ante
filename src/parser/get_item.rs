@@ -6,8 +6,7 @@ use crate::{
     parser::{
         context::TopLevelContext,
         cst::{
-            Constructor, Definition, Expr, Lambda, Pattern, TopLevelItem, TopLevelItemKind, TraitDefinition, TraitImpl,
-            Type, TypeDefinitionBody,
+            self, Constructor, Definition, Expr, Lambda, Pattern, TopLevelItem, TopLevelItemKind, TraitDefinition, TraitImpl, Type, TypeDefinitionBody
         },
     },
 };
@@ -17,9 +16,10 @@ pub fn get_item_impl(context: &GetItem, db: &DbHandle) -> (Arc<TopLevelItem>, Ar
 
     match &item.kind {
         TopLevelItemKind::TraitDefinition(trait_definition) => {
-            let new_kind = desugar_trait(trait_definition);
+            let mut new_context = context.as_ref().clone();
+            let new_kind = desugar_trait(trait_definition, &mut new_context);
             let new_item = Arc::new(TopLevelItem { comments: item.comments.clone(), kind: new_kind, id: item.id });
-            (new_item, context)
+            (new_item, Arc::new(new_context))
         },
         TopLevelItemKind::TraitImpl(trait_impl) => {
             // TODO: Reduce cloning costs for context, comments
@@ -89,26 +89,46 @@ fn desugar_impl(impl_: &TraitImpl, context: &mut TopLevelContext) -> TopLevelIte
 /// Desugars
 /// ```ante
 /// trait Foo args with
-///     declaration1: Type1
+///     declaration1: fn Arg1_1 ... ArgN_1 -> Ret_1
 ///     ...
-///     declarationN: TypeN
+///     declarationN: fn Arg1_N ... ArgN_N -> Ret_N
 /// ```
 /// Into
 /// ```ante
-/// type Foo args =
-///     declaration1: Type1
+/// type Foo args env =
+///     declaration1: fn Arg1_1 ... ArgN_1 [env] -> Ret_1
 ///     ...
-///     declarationN: TypeN
+///     declarationN: fn Arg1_N ... ArgN_N [env] -> Ret_N
 /// ```
-fn desugar_trait(trait_: &TraitDefinition) -> TopLevelItemKind {
-    // TODO: handle trait_.functional_dependencies
-    let fields = mapvec(&trait_.body, |decl| (decl.name, decl.typ.clone()));
+fn desugar_trait(trait_: &TraitDefinition, context: &mut TopLevelContext) -> TopLevelItemKind {
+    let name_location = context.name_locations[trait_.name].clone();
+
+    // TODO: Can this be done more cleanly without resorting to strings users cannot type?
+    let env = context.names.push(Arc::new("[env]".into()));
+    context.name_locations.push(name_location.clone());
+
+    // Add the `env` generic to the trait type itself
+    let mut generics = trait_.generics.clone();
+    generics.push(env);
+
+    // Add `[env]` to each function type to make them implicitly closures
+    let fields = mapvec(&trait_.body, |decl| {
+        let typ = match &decl.typ {
+            cst::Type::Function(f) => {
+                let mut f = f.clone();
+                f.environment = Some(Box::new(Type::Variable(env)));
+                cst::Type::Function(f)
+            },
+            other => other.clone(),
+        };
+        (decl.name, typ)
+    });
 
     TopLevelItemKind::TypeDefinition(super::cst::TypeDefinition {
         shared: false,
         is_trait: true,
         name: trait_.name,
-        generics: trait_.generics.clone(),
+        generics,
         body: TypeDefinitionBody::Struct(fields),
     })
 }

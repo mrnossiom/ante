@@ -34,6 +34,7 @@ mod implicits;
 pub mod patterns;
 mod type_definitions;
 pub mod types;
+pub mod kinds;
 
 pub use get_type::get_type_impl;
 

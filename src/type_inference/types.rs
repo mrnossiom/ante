@@ -5,7 +5,8 @@ use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    incremental::GetItem,
+    diagnostics::Diagnostic,
+    incremental::{DbHandle, GetItem},
     iterator_extensions::mapvec,
     lexer::token::{FloatKind, IntegerKind},
     name_resolution::{Origin, builtin::Builtin},
@@ -13,7 +14,7 @@ use crate::{
         cst::{self, Mutability, Sharedness},
         ids::NameStore,
     },
-    type_inference::generics::Generic,
+    type_inference::{generics::Generic, kinds::Kind},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -341,29 +342,51 @@ impl Type {
     }
 
     /// Convert an ast type to a Type as closely as possible.
-    /// This method does not emit any errors and relies on name resolution
-    /// to emit errors when resolving types.
-    /// Convert the given Origin to a type, issuing an error if the origin is not a type
-    pub(crate) fn from_cst_type(typ: &cst::Type, resolve: &crate::name_resolution::ResolutionResult) -> Type {
+    ///
+    /// Issues error(s) if:
+    /// - A type is not applied to the correct number of kinds of arguments
+    /// - The final converted type is not of kind [Kind::Type]
+    /// - A name [Origin] was used which does not point to a type
+    pub(crate) fn from_cst_type(
+        typ: &cst::Type, resolve: &crate::name_resolution::ResolutionResult, db: &DbHandle,
+    ) -> Type {
+        let mut errors = Vec::new();
+        let (typ, kind) = Type::from_cst_type_helper(typ, resolve, db);
+
+        // TODO: Need a [Location]
+        if kind != Kind::Type {}
+
+        typ
+    }
+
+    /// Returns a tuple of:
+    /// - The converted type
+    /// - The kind of the converted type
+    fn from_cst_type_helper(
+        typ: &cst::Type, resolve: &crate::name_resolution::ResolutionResult, db: &DbHandle,
+    ) -> (Type, Kind) {
         match typ {
-            crate::parser::cst::Type::Integer(kind) => match kind {
-                IntegerKind::I8 => Type::I8,
-                IntegerKind::I16 => Type::I16,
-                IntegerKind::I32 => Type::I32,
-                IntegerKind::I64 => Type::I64,
-                IntegerKind::Isz => Type::ISZ,
-                IntegerKind::U8 => Type::U8,
-                IntegerKind::U16 => Type::U16,
-                IntegerKind::U32 => Type::U32,
-                IntegerKind::U64 => Type::U64,
-                IntegerKind::Usz => Type::USZ,
+            crate::parser::cst::Type::Integer(kind) => {
+                let typ = match kind {
+                    IntegerKind::I8 => Type::I8,
+                    IntegerKind::I16 => Type::I16,
+                    IntegerKind::I32 => Type::I32,
+                    IntegerKind::I64 => Type::I64,
+                    IntegerKind::Isz => Type::ISZ,
+                    IntegerKind::U8 => Type::U8,
+                    IntegerKind::U16 => Type::U16,
+                    IntegerKind::U32 => Type::U32,
+                    IntegerKind::U64 => Type::U64,
+                    IntegerKind::Usz => Type::USZ,
+                };
+                (typ, Kind::Type)
             },
             crate::parser::cst::Type::Float(kind) => match kind {
-                FloatKind::F32 => Type::F32,
-                FloatKind::F64 => Type::F64,
+                FloatKind::F32 => (Type::F32, Kind::Type),
+                FloatKind::F64 => (Type::F64, Kind::Type),
             },
-            crate::parser::cst::Type::String => Type::STRING,
-            crate::parser::cst::Type::Char => Type::CHAR,
+            crate::parser::cst::Type::String => (Type::STRING, Kind::Type),
+            crate::parser::cst::Type::Char => (Type::CHAR, Kind::Type),
             crate::parser::cst::Type::Named(path) => {
                 let origin = resolve.path_origins.get(path).copied();
                 Self::convert_origin_to_type(origin, Type::UserDefined)

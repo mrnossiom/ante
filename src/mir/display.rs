@@ -19,7 +19,7 @@ impl Display for mir::Mir {
         }
 
         for function in self.definitions.values() {
-            fmt_function(function, Some(self), f)?;
+            fmt_definition(function, Some(self), f)?;
             writeln!(f, "\n")?;
         }
         Ok(())
@@ -38,7 +38,7 @@ pub struct DefinitionDisplay<'a>(&'a Definition, Option<&'a mir::Mir>);
 
 impl Display for DefinitionDisplay<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        fmt_function(self.0, self.1, f)
+        fmt_definition(self.0, self.1, f)
     }
 }
 
@@ -165,8 +165,13 @@ impl Display for PrimitiveType {
     }
 }
 
-fn fmt_function(function: &mir::Definition, mir: Option<&mir::Mir>, f: &mut Formatter) -> Result {
-    write!(f, "fn {} {}: ", function.name, function.id)?;
+fn fmt_definition(function: &mir::Definition, mir: Option<&mir::Mir>, f: &mut Formatter) -> Result {
+    if function.is_global() {
+        write!(f, "let ")?;
+    } else {
+        write!(f, "fn ")?;
+    }
+    write!(f, "{} {}: ", function.name, function.id)?;
 
     if function.generic_count != 0 {
         write!(f, "forall")?;

@@ -340,8 +340,7 @@ impl Type {
     /// - The final converted type is not of kind [Kind::Type]
     /// - A name [Origin] was used which does not point to a type
     pub(crate) fn from_cst_type(
-        typ: &cst::Type, resolve: &crate::name_resolution::ResolutionResult, db: &DbHandle,
-        next_id: &mut u32,
+        typ: &cst::Type, resolve: &crate::name_resolution::ResolutionResult, db: &DbHandle, next_id: &mut u32,
     ) -> Type {
         Self::from_cst_type_with_kind(typ, Kind::Type, resolve, db, next_id)
     }
@@ -366,8 +365,7 @@ impl Type {
     ///
     /// Does not error if the returned type is not of kind [Kind::Type]
     fn from_cst_type_helper(
-        typ: &cst::Type, resolve: &crate::name_resolution::ResolutionResult, db: &DbHandle,
-        next_id: &mut u32,
+        typ: &cst::Type, resolve: &crate::name_resolution::ResolutionResult, db: &DbHandle, next_id: &mut u32,
     ) -> (Type, Kind) {
         match &typ.kind {
             crate::parser::cst::TypeKind::Integer(kind) => {

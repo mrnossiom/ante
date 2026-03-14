@@ -30,10 +30,10 @@ pub fn get_type_impl(context: &GetType, compiler: &DbHandle) -> Type {
             try_get_type(definition, &item_context, &resolve, compiler, &mut 0)
                 .map(|t| t.generalize(&TypeBindings::default()))
                 .unwrap_or_else(|| {
-                let check = TypeCheck(context.0.top_level_item).get(compiler);
-                let typ = check.get_generalized(context.0.local_name_id);
-                typ.follow_all(&check.bindings)
-            })
+                    let check = TypeCheck(context.0.top_level_item).get(compiler);
+                    let typ = check.get_generalized(context.0.local_name_id);
+                    typ.follow_all(&check.bindings)
+                })
         },
         _ => {
             let check = TypeCheck(context.0.top_level_item).get(compiler);

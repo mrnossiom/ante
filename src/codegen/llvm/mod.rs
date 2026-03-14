@@ -26,7 +26,6 @@ pub struct CodegenLlvmResult {
     pub module_bitcode: Arc<Vec<u8>>,
 }
 
-#[allow(unused)]
 pub fn initialize_native_target() {
     let config = InitializationConfig::default();
     Target::initialize_native(&config).unwrap();
@@ -38,6 +37,7 @@ pub fn codegen_llvm(compiler: &Db) -> Option<CodegenLlvmResult> {
     let mir = mir::monomorphization::monomorphize(compiler);
     let name = &mir.definitions.iter().next().map_or("_", |(_, function)| &function.name);
 
+    initialize_native_target();
     let llvm = inkwell::context::Context::create();
     let mut module = ModuleContext::new(&llvm, &mir, name);
 
@@ -135,7 +135,89 @@ impl<'ctx> ModuleContext<'ctx> {
         }
     }
 
+    fn codegen_global(&mut self, global: &mir::Definition, id: mir::DefinitionId) {
+        let typ = self.convert_type(&global.typ);
+        let name = self.get_name(id);
+        let global_var = self.module.add_global(typ, None, name);
+
+        // Save the current values map (may be non-empty if called from within function codegen)
+        let saved_values = std::mem::take(&mut self.values);
+
+        // Evaluate each instruction in the entry block as a constant
+        for instr_id in global.entry_block().instructions.iter().copied() {
+            let value = self.codegen_constant_instruction(global, instr_id);
+            self.values.insert(mir::Value::InstructionResult(instr_id), value);
+        }
+
+        // Get the Result value and use it as the initializer
+        let TerminatorInstruction::Result(result_value) = global.entry_block().terminator.as_ref().unwrap() else {
+            panic!("Global definition missing Result terminator");
+        };
+        let initializer = self.constant_value(*result_value);
+        global_var.set_initializer(&initializer);
+
+        // Restore the saved values map
+        self.values = saved_values;
+
+        self.global_values.insert(mir::Value::Definition(id), global_var);
+    }
+
+    fn constant_value(&mut self, value: mir::Value) -> BasicValueEnum<'ctx> {
+        match value {
+            mir::Value::Unit => self.llvm.const_struct(&[], false).into(),
+            mir::Value::Bool(b) => self.llvm.bool_type().const_int(b as u64, false).into(),
+            mir::Value::Char(c) => self.llvm.i32_type().const_int(c as u64, false).into(),
+            mir::Value::Integer(constant) => {
+                let kind = constant.kind();
+                let typ = self.convert_integer_kind(kind);
+                typ.const_int(constant.as_u64(), kind.is_signed()).into()
+            },
+            mir::Value::Float(FloatConstant::F32(v)) => self.llvm.f32_type().const_float(v.0).into(),
+            mir::Value::Float(FloatConstant::F64(v)) => self.llvm.f64_type().const_float(v.0).into(),
+            mir::Value::InstructionResult(_) | mir::Value::Parameter(..) => {
+                *self.values.get(&value).expect("constant value not cached")
+            },
+            mir::Value::Definition(id) => {
+                if let Some(gv) = self.global_values.get(&mir::Value::Definition(id)) {
+                    return gv.as_pointer_value().into();
+                }
+                let def = self.mir.definitions.get(&id).expect("constant_value: definition not found");
+                let fn_type = self
+                    .convert_function_type(&def.typ)
+                    .expect("constant_value: definition in global initializer is not a function");
+                let name = self.get_name(id);
+                let fn_val = self.module.add_function(name, fn_type, None);
+                let gv = fn_val.as_global_value();
+                self.global_values.insert(mir::Value::Definition(id), gv);
+                gv.as_pointer_value().into()
+            },
+            mir::Value::Error => unreachable!("Error value in global initializer"),
+        }
+    }
+
+    fn codegen_constant_instruction(
+        &mut self, global: &mir::Definition, id: mir::InstructionId,
+    ) -> BasicValueEnum<'ctx> {
+        match &global.instructions[id] {
+            mir::Instruction::MakeTuple(fields) => {
+                let fields: Vec<mir::Value> = fields.clone();
+                let field_values: Vec<BasicValueEnum<'ctx>> = fields.iter().map(|f| self.constant_value(*f)).collect();
+                self.llvm.const_struct(&field_values, false).into()
+            },
+            mir::Instruction::Id(value) => {
+                let value = *value;
+                self.constant_value(value)
+            },
+            _ => panic!("Unsupported instruction in global initializer"),
+        }
+    }
+
     fn codegen_function(&mut self, function: &mir::Definition, id: mir::DefinitionId) {
+        if function.is_global() {
+            self.codegen_global(function, id);
+            return;
+        }
+
         let function_value = match self.global_values.get(&mir::Value::Definition(id)) {
             Some(existing) => existing.as_any_value_enum().into_function_value(),
             None => {
@@ -285,19 +367,27 @@ impl<'ctx> ModuleContext<'ctx> {
                 *self.values.get(&value).unwrap_or_else(|| panic!("llvm codegen: mir value is not cached: {value}"))
             },
             mir::Value::Definition(function_id) => {
-                if let Some(value) = self.global_values.get(&value) {
-                    return value.as_pointer_value().into();
+                if let Some(gv) = self.global_values.get(&value) {
+                    return gv.as_pointer_value().into();
                 }
 
                 let function = self.try_get_function(self.current_function.unwrap()).unwrap();
                 let typ = self.mir.type_of_value(&value, function);
-                let typ = self.convert_function_type(&typ).unwrap();
 
-                let name = self.get_name(function_id);
-
-                let function_value = self.module.add_function(name, typ, None).as_global_value();
-                self.global_values.insert(value, function_value);
-                function_value.as_pointer_value().into()
+                if let Some(fn_type) = self.convert_function_type(&typ) {
+                    let name = self.get_name(function_id);
+                    let function_value = self.module.add_function(name, fn_type, None).as_global_value();
+                    self.global_values.insert(value, function_value);
+                    function_value.as_pointer_value().into()
+                } else {
+                    // It's a global variable — codegen it now if not yet done
+                    let def =
+                        self.mir.definitions.get(&function_id).expect("lookup_value: definition not found").clone();
+                    self.codegen_global(&def, function_id);
+                    let global_var = self.global_values[&value];
+                    let llvm_type = self.convert_type(&typ);
+                    self.builder.build_load(llvm_type, global_var.as_pointer_value(), "").unwrap()
+                }
             },
         }
     }
@@ -593,7 +683,9 @@ impl<'ctx> ModuleContext<'ctx> {
                 let value = self.lookup_value(*value);
                 self.builder.build_return(Some(&value)).unwrap();
             },
-            TerminatorInstruction::Result(_) => todo!("llvm codegen for result terminator"),
+            TerminatorInstruction::Result(_) => {
+                unreachable!("Result terminator encountered during function codegen")
+            },
         }
     }
 

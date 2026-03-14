@@ -19,8 +19,13 @@ use crate::{
 
 impl<'local, 'inner> TypeChecker<'local, 'inner> {
     pub(super) fn check_definition(&mut self, definition: &Definition) {
-        let expected_generalized_type =
-            try_get_type(definition, self.current_context(), &self.current_resolve(), self.compiler, &mut self.next_type_variable_id);
+        let expected_generalized_type = try_get_type(
+            definition,
+            self.current_context(),
+            &self.current_resolve(),
+            self.compiler,
+            &mut self.next_type_variable_id,
+        );
         let expected_type = match expected_generalized_type {
             // Ignore a possible `forall` here, we don't support polymorphic recursion
             Some(typ) => typ.ignore_forall().clone(),
@@ -362,8 +367,8 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         };
 
         self.check_expr(lambda.body, &return_type);
-        self.check_for_closure(lambda, expr, &function_type.environment);
         self.pop_implicits_scope();
+        self.check_for_closure(expr, &function_type.environment);
     }
 
     /// Check a function's parameter count using the given parameter types as the expected count.

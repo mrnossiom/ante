@@ -809,9 +809,10 @@ where
         let raw_union_type = result_type.without_union_tag();
 
         let generic_count = self.generics_in_scope.len() as u32;
+        let is_zero_arg = field_types.is_empty();
 
         let id = self.new_definition(name, Some(name_id), generic_count, typ, |this| {
-            let (fields, field_types) = field_types
+            let (fields, field_types): (Vec<Value>, Vec<Type>) = field_types
                 .iter()
                 .enumerate()
                 .map(|(i, field_type)| {
@@ -832,7 +833,13 @@ where
                 result = this.push_instruction(Instruction::MakeTuple(fields_with_tag), result_type);
             }
 
-            this.terminate_block(TerminatorInstruction::Return(result));
+            // 0-arg constructors are global constant values; use Result terminator so
+            // is_global() returns true and validation treats them as globals (not functions).
+            if is_zero_arg {
+                this.terminate_block(TerminatorInstruction::Result(result));
+            } else {
+                this.terminate_block(TerminatorInstruction::Return(result));
+            }
         });
         self.name_to_id.insert(top_level_name, id);
     }

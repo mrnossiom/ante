@@ -177,7 +177,14 @@ impl Definition {
             Value::Float(constant) => Type::float(constant.kind()),
             Value::InstructionResult(instruction_id) => self.instruction_result_types[*instruction_id].clone(),
             Value::Parameter(block_id, parameter_index) => {
-                self.blocks.get(*block_id)?.parameter_types.get(*parameter_index as usize)?.clone()
+                // Return Error for out-of-bounds parameters. This can occur when closure
+                // conversion has not yet been implemented and a lambda body references a captured
+                // outer parameter that was not declared as a block parameter.
+                self.blocks
+                    .get(*block_id)
+                    .and_then(|b| b.parameter_types.get(*parameter_index as usize))
+                    .cloned()
+                    .unwrap_or(Type::ERROR)
             },
             Value::Definition(definition_id) => {
                 if let Some(definition) = definitions.get(definition_id) {

@@ -169,6 +169,7 @@ impl<'a> CstDisplay<'a> {
                 let (item, context) = GetItem(item.id).get(db);
                 self.fmt_top_level_item(&item, context.as_ref(), f)?;
             } else if let Some(db) = self.db_type_check() {
+                let (item, _) = GetItem(item.id).get(db);
                 let result = TypeCheck(item.id).get(db);
                 self.fmt_top_level_item(&item, &result.result.context, f)?;
             } else {

@@ -5,7 +5,7 @@ use rustc_hash::FxHashSet;
 use crate::{
     name_resolution::Origin,
     parser::{
-        cst::{self, Lambda},
+        cst,
         ids::{ExprId, NameId, PathId, PatternId},
     },
     type_inference::{TypeChecker, errors::TypeErrorKind, types::Type},
@@ -16,12 +16,9 @@ impl TypeChecker<'_, '_> {
     /// within the lambda. This will unify the given `expected_environment_type` with the actual
     /// environment type found but will not actually perform closure conversion. Closure conversion
     /// is instead done while building the initial [crate::mir::Mir].
-    pub(super) fn check_for_closure(&mut self, lambda: &Lambda, id: ExprId, expected_environment_type: &Type) {
+    pub(super) fn check_for_closure(&mut self, id: ExprId, expected_environment_type: &Type) {
         let mut context = FreeVars::default();
-        for parameter in &lambda.parameters {
-            context.declare_pattern(parameter.pattern, self);
-        }
-        context.find_free_variables(lambda.body, self);
+        context.find_free_variables(id, self);
 
         let env_type = make_tuple_type(context.free_vars.into_iter(), self);
         self.unify(&env_type, expected_environment_type, TypeErrorKind::ClosureEnv, id);

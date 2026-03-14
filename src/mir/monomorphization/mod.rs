@@ -95,15 +95,22 @@ fn monomorphize_non_generic_definition(
             );
         };
 
-        // If the original definition is already monomorphic, it will be covered by a different
-        // call to [monomorphize_non_generic_definition].
-        if !original_definition.is_monomorphic() {
-            let mut definition = original_definition.clone_with_id(item.new_id);
-            definition.generic_count = 0;
-            definition.typ = item.monomorphized_type;
-            context.generic_mapping = item.bindings.clone();
-            context.monomorphize_definition(definition);
+        let mut definition = original_definition.clone_with_id(item.new_id);
+        definition.generic_count = 0;
+        context.generic_mapping = if original_definition.is_monomorphic() {
+            // Already monomorphic: no generic substitution needed, but we still
+            // must insert new_id into finished_definitions so callers can resolve it.
+            Arc::new(Vec::new())
+        } else {
+            item.bindings.clone()
+        };
+        // Derive the monomorphized definition type by specializing the original's type
+        // rather than using item.monomorphized_type (which is the Instantiate instruction's
+        // result type — the value type from the caller, not the function's own type).
+        if !context.generic_mapping.is_empty() {
+            context.specialize_type(&mut definition.typ);
         }
+        context.monomorphize_definition(definition);
     }
 
     Mir { definitions: context.finished_definitions, externals: Default::default() }
@@ -126,7 +133,6 @@ struct DefinitionToMonomorphize {
     /// The id referring to the monomorphized version of `old_id` with the given generic bindings
     new_id: DefinitionId,
     bindings: Arc<GenericBindings>,
-    monomorphized_type: Type,
 }
 
 /// Maps (old_id, generic bindings) to a new [DefinitionId] referring to the newly monomorphized
@@ -150,7 +156,7 @@ impl<'local> FunctionContext<'local> {
 
         // We can skip the blocks and go right to the instructions themselves. There shouldn't be
         // any that aren't used in a block.
-        for (instruction_id, instruction) in definition.instructions.iter_mut() {
+        for (_instruction_id, instruction) in definition.instructions.iter_mut() {
             if let Instruction::Instantiate(id, bindings) = instruction {
                 assert!(!bindings.is_empty());
                 if !self.generic_mapping.is_empty() {
@@ -159,13 +165,7 @@ impl<'local> FunctionContext<'local> {
 
                 let new_id = *self.definitions.entry((*id, bindings.clone())).or_insert_with(|| {
                     let new_id = next_definition_id();
-                    let typ = definition.instruction_result_types[instruction_id].clone();
-                    self.queue.push(DefinitionToMonomorphize {
-                        old_id: *id,
-                        new_id,
-                        monomorphized_type: typ,
-                        bindings: bindings.clone(),
-                    });
+                    self.queue.push(DefinitionToMonomorphize { old_id: *id, new_id, bindings: bindings.clone() });
                     new_id
                 });
 

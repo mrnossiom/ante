@@ -3,7 +3,7 @@ use crate::{
     name_resolution::ResolutionResult,
     parser::{
         context::TopLevelContext,
-        cst::{self, Definition, Expr, Pattern, TopLevelItemKind},
+        cst::{self, Definition, Expr, Pattern, TopLevelItemKind, TypeKind},
     },
     type_inference::types::{Type, TypeBindings},
 };
@@ -50,7 +50,7 @@ pub fn get_type_impl(context: &GetType, compiler: &DbHandle) -> Type {
 /// want instead to succeed with partial types, filling in holes as needed for better type
 /// errors.
 pub(super) fn try_get_type(
-    definition: &Definition, context: &TopLevelContext, resolve: &ResolutionResult, compiler: &DbHandle
+    definition: &Definition, context: &TopLevelContext, resolve: &ResolutionResult, compiler: &DbHandle,
 ) -> Option<Type> {
     if let Pattern::TypeAnnotation(_, typ) = &context.patterns[definition.pattern] {
         return Some(Type::from_cst_type(typ, resolve, compiler));
@@ -64,7 +64,10 @@ pub(super) fn try_get_type(
             .iter()
             .map(|parameter| match &context.patterns[parameter.pattern] {
                 Pattern::TypeAnnotation(_, typ) => Some(cst::ParameterType::new(typ.clone(), parameter.is_implicit)),
-                Pattern::Literal(cst::Literal::Unit) => Some(cst::ParameterType::explicit(cst::Type::Unit)),
+                Pattern::Literal(cst::Literal::Unit) => {
+                    let location = context.pattern_locations[parameter.pattern].clone();
+                    Some(cst::ParameterType::explicit(cst::Type::new(TypeKind::Unit, location)))
+                },
                 _ => None,
             })
             .collect::<Option<Vec<_>>>()?;
@@ -77,7 +80,9 @@ pub(super) fn try_get_type(
 
         // We construct a function type to convert wholesale instead of converting as we go
         // to avoid repeating logic in [Type::from_cst_type], namely handling of effect types.
-        let typ = Type::from_cst_type(&cst::Type::Function(cst_function_type), resolve, compiler);
+        let lambda_location = context.expr_locations[definition.rhs].clone();
+        let cst_fn_type = cst::Type::new(TypeKind::Function(cst_function_type), lambda_location);
+        let typ = Type::from_cst_type(&cst_fn_type, resolve, compiler);
         Some(typ.generalize(&TypeBindings::default()))
     } else {
         None

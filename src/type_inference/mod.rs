@@ -31,10 +31,10 @@ pub mod fresh_expr;
 pub mod generics;
 mod get_type;
 mod implicits;
+pub mod kinds;
 pub mod patterns;
 mod type_definitions;
 pub mod types;
-pub mod kinds;
 
 pub use get_type::get_type_impl;
 

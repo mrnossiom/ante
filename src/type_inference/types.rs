@@ -5,6 +5,7 @@ use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    diagnostics::Diagnostic,
     incremental::{DbHandle, GetItem},
     iterator_extensions::mapvec,
     lexer::token::{FloatKind, IntegerKind},
@@ -347,11 +348,12 @@ impl Type {
     /// Convert this [cst::Type] into a [Type] with the expected [Kind].
     /// Error if the converted [Kind] does not match the expected [Kind].
     fn from_cst_type_with_kind(
-        typ: &cst::Type, kind: Kind, resolve: &crate::name_resolution::ResolutionResult, db: &DbHandle,
+        typ: &cst::Type, expected: Kind, resolve: &crate::name_resolution::ResolutionResult, db: &DbHandle,
     ) -> Type {
+        let location = typ.location.clone();
         let (typ, kind) = Type::from_cst_type_helper(typ, resolve, db);
-        if let Err(error) = kind.accepts_arguments(Vec::new(), todo!("need type location")) {
-            db.accumulate(error);
+        if !expected.unifies(&kind) {
+            db.accumulate(Diagnostic::ExpectedKind { actual: kind, expected, location });
         }
         typ
     }
@@ -364,8 +366,8 @@ impl Type {
     fn from_cst_type_helper(
         typ: &cst::Type, resolve: &crate::name_resolution::ResolutionResult, db: &DbHandle,
     ) -> (Type, Kind) {
-        match typ {
-            crate::parser::cst::Type::Integer(kind) => {
+        match &typ.kind {
+            crate::parser::cst::TypeKind::Integer(kind) => {
                 let typ = match kind {
                     IntegerKind::I8 => Type::I8,
                     IntegerKind::I16 => Type::I16,
@@ -380,21 +382,21 @@ impl Type {
                 };
                 (typ, Kind::Type)
             },
-            crate::parser::cst::Type::Float(kind) => match kind {
+            crate::parser::cst::TypeKind::Float(kind) => match kind {
                 FloatKind::F32 => (Type::F32, Kind::Type),
                 FloatKind::F64 => (Type::F64, Kind::Type),
             },
-            crate::parser::cst::Type::String => (Type::STRING, Kind::Type),
-            crate::parser::cst::Type::Char => (Type::CHAR, Kind::Type),
-            crate::parser::cst::Type::Named(path) => {
+            crate::parser::cst::TypeKind::String => (Type::STRING, Kind::Type),
+            crate::parser::cst::TypeKind::Char => (Type::CHAR, Kind::Type),
+            crate::parser::cst::TypeKind::Named(path) => {
                 let origin = resolve.path_origins.get(path).copied();
                 Self::convert_origin_to_type(origin, db, Type::UserDefined)
             },
-            crate::parser::cst::Type::Variable(name) => {
+            crate::parser::cst::TypeKind::Variable(name) => {
                 let origin = resolve.name_origins.get(name).copied();
                 Self::convert_origin_to_type(origin, db, |origin| Type::Generic(Generic::Named(origin)))
             },
-            crate::parser::cst::Type::Function(function) => {
+            crate::parser::cst::TypeKind::Function(function) => {
                 let parameters = mapvec(&function.parameters, |param| {
                     let typ = Self::from_cst_type(&param.typ, resolve, db);
                     ParameterType::new(typ, param.is_implicit)
@@ -410,14 +412,19 @@ impl Type {
                 let f = Type::Function(Arc::new(FunctionType { parameters, environment, return_type, effects }));
                 (f, Kind::Type)
             },
-            crate::parser::cst::Type::Error => (Type::ERROR, Kind::Error),
-            crate::parser::cst::Type::Unit => (Type::UNIT, Kind::Type),
-            crate::parser::cst::Type::Pair => (Type::PAIR, Kind::TypeConstructorSimple(NonZeroUsize::new(2).unwrap())),
-            crate::parser::cst::Type::Application(f, args) => {
+            crate::parser::cst::TypeKind::Error => (Type::ERROR, Kind::Error),
+            crate::parser::cst::TypeKind::Unit => (Type::UNIT, Kind::Type),
+            crate::parser::cst::TypeKind::Pair => {
+                (Type::PAIR, Kind::TypeConstructorSimple(NonZeroUsize::new(2).unwrap()))
+            },
+            crate::parser::cst::TypeKind::Application(f, args) => {
                 let (f, f_kind) = Self::from_cst_type_helper(f, resolve, db);
 
                 if !f_kind.accepts_n_arguments(args.len()) {
-                    todo!("error")
+                    let expected = f_kind.required_argument_count();
+                    let location = typ.location.clone();
+                    db.accumulate(Diagnostic::FunctionArgCountMismatch { actual: args.len(), expected, location });
+                    return (Type::ERROR, Kind::Type);
                 }
 
                 let args = mapvec(args.iter().enumerate(), |(i, arg)| {
@@ -428,36 +435,10 @@ impl Type {
                 let typ = Type::Application(Arc::new(f), Arc::new(args));
                 (typ, Kind::Type)
             },
-            crate::parser::cst::Type::Reference(kind) => (Type::Primitive(PrimitiveType::Reference(*kind)), Kind::Type),
-        }
-    }
-
-    fn kind_of_origin(origin: Option<Origin>, db: &DbHandle) -> Kind {
-        match origin {
-            None => Kind::Error,
-            Some(Origin::TypeResolution) => Kind::Error,
-            Some(Origin::Local(_)) => Kind::Type,
-            Some(Origin::Builtin(builtin)) => match builtin {
-                Builtin::Unit => Kind::Type,
-                Builtin::Int => Kind::Type,
-                Builtin::Char => Kind::Type,
-                Builtin::Bool => Kind::Type,
-                Builtin::Float => Kind::TypeConstructorSimple(NonZeroUsize::new(1).unwrap()),
-                Builtin::String => Kind::Type,
-                Builtin::Ptr => Kind::TypeConstructorSimple(NonZeroUsize::new(1).unwrap()),
-                Builtin::PairType => Kind::TypeConstructorSimple(NonZeroUsize::new(2).unwrap()),
-                Builtin::PairConstructor => Kind::Error,
-                Builtin::Intrinsic => Kind::Error,
-            },
-            Some(Origin::TopLevelDefinition(type_name)) => {
-                let (item, _ctx) = GetItem(type_name.top_level_item).get(db);
-                match &item.kind {
-                    cst::TopLevelItemKind::TypeDefinition(definition) => {
-                        crate::definition_collection::kind_of_type_definition(definition)
-                    },
-                    _ => Kind::Error,
-                }
-            },
+            crate::parser::cst::TypeKind::Reference(kind) => (
+                Type::Primitive(PrimitiveType::Reference(*kind)),
+                Kind::TypeConstructorSimple(NonZeroUsize::new(1).unwrap()),
+            ),
         }
     }
 

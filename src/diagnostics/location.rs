@@ -6,11 +6,11 @@ use crate::name_resolution::namespace::SourceFileId;
 
 /// A default value to provide when something has errored
 pub trait ErrorDefault {
-    fn error_default() -> Self;
+    fn error_default(location: Location) -> Self;
 }
 
 impl<T> ErrorDefault for Vec<T> {
-    fn error_default() -> Self {
+    fn error_default(_: Location) -> Self {
         Vec::new()
     }
 }

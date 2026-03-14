@@ -91,7 +91,19 @@ impl PatternId {
 
 /// TODO: Types should probably be interned like expressions & patterns are
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
-pub enum Type {
+pub struct Type {
+    pub kind: TypeKind,
+    pub location: Location,
+}
+
+impl Type {
+    pub fn new(kind: TypeKind, location: Location) -> Type {
+        Type { kind, location }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
+pub enum TypeKind {
     Error,
     Unit,
     Char,
@@ -115,8 +127,8 @@ pub enum ReferenceKind {
 }
 
 impl ErrorDefault for Type {
-    fn error_default() -> Self {
-        Self::Error
+    fn error_default(location: Location) -> Self {
+        Type::new(TypeKind::Error, location)
     }
 }
 
@@ -181,7 +193,7 @@ pub enum TypeDefinitionBody {
 }
 
 impl ErrorDefault for TypeDefinitionBody {
-    fn error_default() -> Self {
+    fn error_default(_: Location) -> Self {
         Self::Error
     }
 }
@@ -206,7 +218,7 @@ pub enum Expr {
 }
 
 impl ErrorDefault for Expr {
-    fn error_default() -> Self {
+    fn error_default(_: Location) -> Self {
         Self::Error
     }
 }
@@ -375,7 +387,7 @@ pub enum Pattern {
 }
 
 impl ErrorDefault for Pattern {
-    fn error_default() -> Self {
+    fn error_default(_: Location) -> Self {
         Self::Error
     }
 }

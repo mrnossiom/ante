@@ -21,7 +21,7 @@ use crate::{
         cst::{
             Comptime, Constructor, Declaration, Definition, EffectDefinition, EffectType, Expr, Extern, Generics,
             ItemName, Path, Pattern, TopLevelItemKind, TraitDefinition, TraitImpl, Type, TypeDefinition,
-            TypeDefinitionBody,
+            TypeDefinitionBody, TypeKind,
         },
         ids::{ExprId, NameId, PathId, PatternId, TopLevelId, TopLevelName},
     },
@@ -592,14 +592,14 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
 
     /// If the given type is a struct type, return its fields. Otherwise return None.
     fn get_fields_of_type(&self, typ: &Type) -> FieldsResult {
-        match typ {
-            Type::Named(path) => match self.path_links.get(path) {
+        match &typ.kind {
+            TypeKind::Named(path) => match self.path_links.get(path) {
                 Some(origin) => origin.get_fields_of_type(self.compiler),
                 None => FieldsResult::PriorError,
             },
             // NOTE: Once type aliases are added, the fields of an alias may depend
             // on its generic arguments
-            Type::Application(typ, _) => self.get_fields_of_type(typ),
+            TypeKind::Application(typ, _) => self.get_fields_of_type(typ),
             _ => FieldsResult::NotAStruct,
         }
     }
@@ -642,18 +642,18 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
     /// not already in scope will be declared in the current local scope. Otherwise,
     /// an error will be issued.
     fn resolve_type(&mut self, typ: &Type, declare_type_vars: bool) {
-        match typ {
-            Type::Error
-            | Type::Unit
-            | Type::Integer(_)
-            | Type::Float(_)
-            | Type::String
-            | Type::Char
-            | Type::Pair
-            | Type::Reference(..) => (),
-            Type::Named(path) => self.link(*path, false, true),
-            Type::Variable(name) => self.resolve_variable(*name, declare_type_vars),
-            Type::Function(function) => {
+        match &typ.kind {
+            TypeKind::Error
+            | TypeKind::Unit
+            | TypeKind::Integer(_)
+            | TypeKind::Float(_)
+            | TypeKind::String
+            | TypeKind::Char
+            | TypeKind::Pair
+            | TypeKind::Reference(..) => (),
+            TypeKind::Named(path) => self.link(*path, false, true),
+            TypeKind::Variable(name) => self.resolve_variable(*name, declare_type_vars),
+            TypeKind::Function(function) => {
                 for parameter in &function.parameters {
                     self.resolve_type(&parameter.typ, declare_type_vars);
                 }
@@ -668,7 +668,7 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
                     }
                 }
             },
-            Type::Application(f, args) => {
+            TypeKind::Application(f, args) => {
                 self.resolve_type(f, declare_type_vars);
                 for arg in args {
                     self.resolve_type(arg, declare_type_vars);

@@ -19,7 +19,7 @@ use crate::{
 
 use self::cst::{
     Call, Cst, Definition, Expr, Import, Literal, Path, SequenceItem, TopLevelItem, TopLevelItemKind, Type,
-    TypeDefinition, TypeDefinitionBody,
+    TypeDefinition, TypeDefinitionBody, TypeKind,
 };
 
 pub mod context;
@@ -356,9 +356,10 @@ impl<'tokens> Parser<'tokens> {
         match f(self) {
             Ok(typ) => Ok(typ),
             Err(error) => {
+                let location = self.current_token_location();
                 if self.recover_to(recover_to, too_far) {
                     self.diagnostics.push(error);
-                    Ok(T::error_default())
+                    Ok(T::error_default(location))
                 } else {
                     Err(error)
                 }
@@ -768,7 +769,7 @@ impl<'tokens> Parser<'tokens> {
             }
         }
 
-        Ok(result.unwrap_or(T::error_default()))
+        Ok(result.unwrap_or_else(|_| T::error_default(self.current_token_location())))
     }
 
     fn parse_type(&mut self) -> Result<Type> {
@@ -777,6 +778,7 @@ impl<'tokens> Parser<'tokens> {
 
     // TODO: Parse lifetime & element type
     fn parse_reference_type(&mut self) -> Result<Type> {
+        let start = self.current_token_location();
         let kind = match self.current_token() {
             Token::Ref => cst::ReferenceKind::Ref,
             Token::Mut => cst::ReferenceKind::Mut,
@@ -786,22 +788,27 @@ impl<'tokens> Parser<'tokens> {
         };
 
         self.advance();
-        self.parse_reference_element_type(kind)
+        self.parse_reference_element_type(kind, start)
     }
 
-    fn parse_reference_element_type(&mut self, kind: cst::ReferenceKind) -> Result<Type> {
+    fn parse_reference_element_type(&mut self, kind: cst::ReferenceKind, ref_location: Location) -> Result<Type> {
         match self.parse_type_application() {
-            Ok(application) => Ok(Type::Application(Box::new(Type::Reference(kind)), vec![application])),
-            Err(_) => Ok(Type::Reference(kind)),
+            Ok(application) => {
+                let location = ref_location.to(&application.location);
+                let ref_type = Type::new(TypeKind::Reference(kind), ref_location);
+                Ok(Type::new(TypeKind::Application(Box::new(ref_type), vec![application]), location))
+            },
+            Err(_) => Ok(Type::new(TypeKind::Reference(kind), ref_location)),
         }
     }
 
     fn parse_function_type(&mut self) -> Result<Type> {
+        let start = self.current_token_location();
         self.expect(Token::Fn, "`fn` to start this function type")?;
 
         let mut parameters = self.many0(Self::parse_parameter_type);
         if parameters.is_empty() {
-            parameters.push(ParameterType::explicit(Type::Unit));
+            parameters.push(ParameterType::explicit(Type::new(TypeKind::Unit, start.clone())));
         }
 
         let environment = if self.accept(Token::BraceLeft) {
@@ -819,8 +826,9 @@ impl<'tokens> Parser<'tokens> {
 
         let return_type = Box::new(self.parse_type()?);
         let effects = self.parse_effects_clause();
+        let location = start.to(&self.previous_token_location());
 
-        Ok(Type::Function(cst::FunctionType { parameters, environment, return_type, effects }))
+        Ok(Type::new(TypeKind::Function(cst::FunctionType { parameters, environment, return_type, effects }), location))
     }
 
     /// The effect clause on a function or function type.
@@ -875,7 +883,10 @@ impl<'tokens> Parser<'tokens> {
         // `,` is right-associative
         let mut typ = types.pop().expect("Should always have at least one type");
         while let Some(lhs) = types.pop() {
-            typ = Type::Application(Box::new(Type::Pair), vec![lhs, typ]);
+            let location = lhs.location.to(&typ.location);
+            let pair_location = location.clone();
+            let pair = Type::new(TypeKind::Pair, pair_location);
+            typ = Type::new(TypeKind::Application(Box::new(pair), vec![lhs, typ]), location);
         }
 
         Ok(typ)
@@ -895,7 +906,12 @@ impl<'tokens> Parser<'tokens> {
         let typ = self.parse_type_arg()?;
         let args = self.many0(Self::parse_type_arg);
 
-        if args.is_empty() { Ok(typ) } else { Ok(Type::Application(Box::new(typ), args)) }
+        if args.is_empty() {
+            Ok(typ)
+        } else {
+            let location = typ.location.to(&args.last().unwrap().location);
+            Ok(Type::new(TypeKind::Application(Box::new(typ), args), location))
+        }
     }
 
     // Parse a type in a function parameter position. e.g. `a` in `fn a b c -> d`.
@@ -919,27 +935,36 @@ impl<'tokens> Parser<'tokens> {
     fn parse_type_arg(&mut self) -> Result<Type> {
         match self.current_token() {
             Token::IntegerType(kind) => {
+                let location = self.current_token_location();
+                let kind = *kind;
                 self.advance();
-                Ok(Type::Integer(*kind))
+                Ok(Type::new(TypeKind::Integer(kind), location))
             },
             Token::FloatType(kind) => {
+                let location = self.current_token_location();
+                let kind = *kind;
                 self.advance();
-                Ok(Type::Float(*kind))
+                Ok(Type::new(TypeKind::Float(kind), location))
             },
             Token::TypeName(_) => {
+                let start = self.current_token_location();
                 let path = self.parse_type_path_id()?;
-                Ok(Type::Named(path))
+                let location = start.to(&self.previous_token_location());
+                Ok(Type::new(TypeKind::Named(path), location))
             },
             Token::Identifier(_) => {
+                let location = self.current_token_location();
                 let name = self.parse_ident_id()?;
-                Ok(Type::Variable(name))
+                Ok(Type::new(TypeKind::Variable(name), location))
             },
             Token::ParenthesisLeft => {
+                let start = self.current_token_location();
                 self.advance();
                 let too_far = &[Token::Newline, Token::Indent, Token::Unindent];
                 let typ = self.parse_with_recovery(Self::parse_type, Token::ParenthesisRight, too_far)?;
                 self.expect(Token::ParenthesisRight, "a `)` to close the opening `(` from the parameter")?;
-                Ok(typ)
+                let location = start.to(&self.previous_token_location());
+                Ok(Type::new(typ.kind, location))
             },
             _ => self.expected("a type"),
         }

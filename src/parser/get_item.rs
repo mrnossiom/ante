@@ -6,7 +6,8 @@ use crate::{
     parser::{
         context::TopLevelContext,
         cst::{
-            self, Constructor, Definition, Expr, Lambda, Pattern, TopLevelItem, TopLevelItemKind, TraitDefinition, TraitImpl, Type, TypeDefinitionBody
+            self, Constructor, Definition, Expr, Lambda, Pattern, TopLevelItem, TopLevelItemKind, TraitDefinition,
+            TraitImpl, Type, TypeDefinitionBody, TypeKind,
         },
     },
 };
@@ -49,9 +50,11 @@ fn desugar_impl(impl_: &TraitImpl, context: &mut TopLevelContext) -> TopLevelIte
     let location = context.name_locations[impl_.name].clone();
     assert_eq!(variable, context.pattern_locations.push(location.clone()));
 
-    let mut trait_type = Type::Named(impl_.trait_path);
+    let mut trait_type = Type::new(TypeKind::Named(impl_.trait_path), location.clone());
     if !impl_.trait_arguments.is_empty() {
-        trait_type = Type::Application(Box::new(trait_type), impl_.trait_arguments.clone());
+        let app_location = location.clone();
+        trait_type =
+            Type::new(TypeKind::Application(Box::new(trait_type), impl_.trait_arguments.clone()), app_location);
     }
 
     // If this is not a function we need to put the type annotation on the name itself rather than
@@ -113,13 +116,13 @@ fn desugar_trait(trait_: &TraitDefinition, context: &mut TopLevelContext) -> Top
 
     // Add `[env]` to each function type to make them implicitly closures
     let fields = mapvec(&trait_.body, |decl| {
-        let typ = match &decl.typ {
-            cst::Type::Function(f) => {
+        let typ = match &decl.typ.kind {
+            cst::TypeKind::Function(f) => {
                 let mut f = f.clone();
-                f.environment = Some(Box::new(Type::Variable(env)));
-                cst::Type::Function(f)
+                f.environment = Some(Box::new(Type::new(TypeKind::Variable(env), name_location.clone())));
+                Type::new(cst::TypeKind::Function(f), decl.typ.location.clone())
             },
-            other => other.clone(),
+            _ => decl.typ.clone(),
         };
         (decl.name, typ)
     });

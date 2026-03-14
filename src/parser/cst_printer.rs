@@ -19,9 +19,9 @@ use super::{
     TopLevelContext,
     cst::{
         Call, Comptime, Cst, Declaration, Definition, EffectDefinition, EffectType, Expr, Extern, FunctionType, Handle,
-        HandlePattern, If, Import, Lambda, Literal, Match, MemberAccess, Parameter, Path, Pattern, Quoted,
-        Reference, SequenceItem, TopLevelItem, TraitDefinition, TraitImpl, Type, TypeAnnotation,
-        TypeDefinition, TypeDefinitionBody,
+        HandlePattern, If, Import, Lambda, Literal, Match, MemberAccess, Parameter, Path, Pattern, Quoted, Reference,
+        SequenceItem, TopLevelItem, TraitDefinition, TraitImpl, Type, TypeAnnotation, TypeDefinition,
+        TypeDefinitionBody, TypeKind,
     },
     ids::{ExprId, PatternId, TopLevelId},
 };
@@ -407,7 +407,7 @@ impl<'a> CstDisplay<'a> {
 
     /// Formats type arguments with a leading space in front of each (including the first)
     fn fmt_type_args(&self, args: &[Type], context: &impl IdStore, f: &mut Formatter) -> std::fmt::Result {
-        let requires_parens = |typ: &Type| matches!(typ, Type::Function(_) | Type::Application(..));
+        let requires_parens = |typ: &Type| matches!(typ.kind, TypeKind::Function(_) | TypeKind::Application(..));
 
         for arg in args {
             if requires_parens(arg) {
@@ -484,19 +484,19 @@ impl<'a> CstDisplay<'a> {
     }
 
     fn fmt_type(&self, typ: &Type, context: &impl IdStore, f: &mut Formatter) -> std::fmt::Result {
-        match typ {
-            Type::Error => write!(f, "(error)"),
-            Type::Named(path) => self.fmt_type_path(*path, context, f),
-            Type::Variable(name) => self.fmt_type_name(*name, context, f),
-            Type::Unit => write!(f, "Unit"),
-            Type::Integer(kind) => write!(f, "{kind}"),
-            Type::Float(kind) => write!(f, "{kind}"),
-            Type::Function(function_type) => self.fmt_function_type(function_type, context, f),
-            Type::Application(constructor, args) => self.fmt_type_application(constructor, args, context, f),
-            Type::String => write!(f, "String"),
-            Type::Char => write!(f, "Char"),
-            Type::Pair => write!(f, ","),
-            Type::Reference(kind) => self.fmt_reference_type(*kind, f),
+        match &typ.kind {
+            TypeKind::Error => write!(f, "(error)"),
+            TypeKind::Named(path) => self.fmt_type_path(*path, context, f),
+            TypeKind::Variable(name) => self.fmt_type_name(*name, context, f),
+            TypeKind::Unit => write!(f, "Unit"),
+            TypeKind::Integer(kind) => write!(f, "{kind}"),
+            TypeKind::Float(kind) => write!(f, "{kind}"),
+            TypeKind::Function(function_type) => self.fmt_function_type(function_type, context, f),
+            TypeKind::Application(constructor, args) => self.fmt_type_application(constructor, args, context, f),
+            TypeKind::String => write!(f, "String"),
+            TypeKind::Char => write!(f, "Char"),
+            TypeKind::Pair => write!(f, ","),
+            TypeKind::Reference(kind) => self.fmt_reference_type(*kind, f),
         }
     }
 
@@ -512,11 +512,11 @@ impl<'a> CstDisplay<'a> {
     fn fmt_type_application(
         &self, constructor: &Type, args: &[Type], context: &impl IdStore, f: &mut Formatter,
     ) -> std::fmt::Result {
-        if *constructor == Type::Pair {
+        if matches!(constructor.kind, TypeKind::Pair) {
             return self.fmt_pair_type(args, context, f);
         }
 
-        let requires_parens = |typ: &Type| matches!(typ, Type::Function(_) | Type::Application(..));
+        let requires_parens = |typ: &Type| matches!(typ.kind, TypeKind::Function(_) | TypeKind::Application(..));
         if requires_parens(constructor) {
             write!(f, "(")?;
             self.fmt_type(constructor, context, f)?;
@@ -531,9 +531,9 @@ impl<'a> CstDisplay<'a> {
     fn fmt_pair_type(&self, args: &[Type], context: &impl IdStore, f: &mut Formatter) -> std::fmt::Result {
         assert_eq!(args.len(), 2);
 
-        let lhs_requires_parens = |typ: &Type| match typ {
-            Type::Function(_) => true,
-            Type::Application(function, _) => matches!(function.as_ref(), Type::Pair),
+        let lhs_requires_parens = |typ: &Type| match &typ.kind {
+            TypeKind::Function(_) => true,
+            TypeKind::Application(function, _) => matches!(function.kind, TypeKind::Pair),
             _ => false,
         };
 
@@ -554,7 +554,7 @@ impl<'a> CstDisplay<'a> {
     ) -> std::fmt::Result {
         write!(f, "fn")?;
 
-        let requires_parens = |typ: &Type| matches!(typ, Type::Function(_) | Type::Application(..));
+        let requires_parens = |typ: &Type| matches!(typ.kind, TypeKind::Function(_) | TypeKind::Application(..));
         for parameter in &function_type.parameters {
             write!(f, " ")?;
             if parameter.is_implicit {

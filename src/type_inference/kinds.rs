@@ -111,7 +111,7 @@ impl Kind {
     }
 
     /// True if both kinds are compatible
-    fn unifies(&self, other: &Kind) -> bool {
+    pub fn unifies(&self, other: &Kind) -> bool {
         match (self, other) {
             (Kind::Error, _) | (_, Kind::Error) => true,
             (Kind::Type, Kind::Type) => true,
@@ -195,11 +195,7 @@ impl Kind {
             Kind::TypeConstructorComplex(kinds) => kinds[n].clone(),
             Kind::TraitConstructor(kinds) => {
                 // Check for the implicit `env` environment
-                if n == kinds.len() {
-                    Kind::Type
-                } else {
-                    kinds[n].clone()
-                }
+                if n == kinds.len() { Kind::Type } else { kinds[n].clone() }
             },
             Kind::U32 => panic!("Kind::U32 has no parameters"),
             Kind::Error => Kind::Error, // Try to avoid further errors
@@ -221,7 +217,7 @@ impl std::fmt::Display for Kind {
         match self {
             Kind::Type => write!(f, "*"),
             Kind::TypeConstructorSimple(n) => {
-                for _ in 0 .. usize::from(*n) {
+                for _ in 0..usize::from(*n) {
                     write!(f, "* -> ")?;
                 }
                 write!(f, "*")

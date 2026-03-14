@@ -34,28 +34,28 @@ main () =
 
 // args: --delete-binary
 // expected stderr:
-// examples/codegen/builtin_float.an:4:18	error: No implicit found for type Add _ required by parameter 3 of +
+// examples/codegen/builtin_float.an:4:18	error: No implicit found for type Add F64 _ required by parameter 3 of function
 //     add_f64 = 3.0 + 4.0
 // 
-// examples/codegen/builtin_float.an:5:18	error: No implicit found for type Sub _ required by parameter 3 of -
+// examples/codegen/builtin_float.an:5:18	error: No implicit found for type Sub F64 _ required by parameter 3 of function
 //     sub_f64 = 7.0 - 8.0
 // 
-// examples/codegen/builtin_float.an:6:19	error: No implicit found for type Mul _ required by parameter 3 of *
+// examples/codegen/builtin_float.an:6:19	error: No implicit found for type Mul F64 _ required by parameter 3 of function
 //     mul_f64 = 11.0 * 12.0
 // 
-// examples/codegen/builtin_float.an:7:19	error: No implicit found for type Div _ required by parameter 3 of /
+// examples/codegen/builtin_float.an:7:19	error: No implicit found for type Div F64 _ required by parameter 3 of function
 //     div_f64 = 15.0 / 16.0
 // 
-// examples/codegen/builtin_float.an:10:4	error: `print` not found in scope
+// examples/codegen/builtin_float.an:10:4	error: No implicit found for type Print F64 _ required by parameter 2 of function
 //     print add_f64
 // 
-// examples/codegen/builtin_float.an:11:4	error: `print` not found in scope
+// examples/codegen/builtin_float.an:11:4	error: No implicit found for type Print F64 _ required by parameter 2 of function
 //     print sub_f64
 // 
-// examples/codegen/builtin_float.an:12:4	error: `print` not found in scope
+// examples/codegen/builtin_float.an:12:4	error: No implicit found for type Print F64 _ required by parameter 2 of function
 //     print mul_f64
 // 
-// examples/codegen/builtin_float.an:13:4	error: `print` not found in scope
+// examples/codegen/builtin_float.an:13:4	error: No implicit found for type Print F64 _ required by parameter 2 of function
 //     print div_f64
 // 
 // examples/codegen/builtin_float.an:17:14	error: Expected an expression but found `InvalidFloatSuffx`
@@ -70,32 +70,14 @@ main () =
 // examples/codegen/builtin_float.an:20:14	error: Expected an expression but found `InvalidFloatSuffx`
 //     div_f32 = 15.0f / 16.0f
 // 
-// examples/codegen/builtin_float.an:21:4	error: `print` not found in scope
-//     print add_f32
-// 
-// examples/codegen/builtin_float.an:22:4	error: `print` not found in scope
-//     print sub_f32
-// 
-// examples/codegen/builtin_float.an:23:4	error: `print` not found in scope
-//     print mul_f32
-// 
-// examples/codegen/builtin_float.an:24:4	error: `print` not found in scope
-//     print div_f32
-// 
 // examples/codegen/builtin_float.an:27:8	error: Expected an expression but found `InvalidFloatSuffx`
 //     x = 1.0f / 7.0f
 // 
-// examples/codegen/builtin_float.an:28:4	error: `print` not found in scope
-//     print x
-// 
-// examples/codegen/builtin_float.an:29:4	error: `print` not found in scope
+// examples/codegen/builtin_float.an:29:4	error: No implicit found for type Print F32 _ required by parameter 2 of function
 //     print (cast (cast x : F64) : F32)
 // 
-// examples/codegen/builtin_float.an:29:11	error: `cast` not found in scope
+// examples/codegen/builtin_float.an:29:17	error: No implicit found for type Cast Bool F64 _ required by parameter 2 of function
 //     print (cast (cast x : F64) : F32)
 // 
-// examples/codegen/builtin_float.an:29:17	error: `cast` not found in scope
-//     print (cast (cast x : F64) : F32)
-// 
-// Found 21 errors and 0 warnings
+// Found 15 errors and 0 warnings
 

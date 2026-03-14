@@ -15,13 +15,13 @@ id x = x
 
 // args: -e ast-t
 // expected stdout:
-// (add: fn (fn _ _ -> _ can _) (fn _ _ -> _ can _) -> fn _ -> fn _ -> _ can _ can _ can _) (m: fn _ _ -> _ can _) (n: fn _ _ -> _ can _) = fn (f: _) -> fn (x: _) -> (m: fn _ _ -> _ can _) (f: _) ((n: fn _ _ -> _ can _) (f: _) (x: _))
+// (add: fn (fn _ _ [_] -> _ can _) (fn _ _ [_] -> _ can _) -> fn _ -> fn _ -> _ can _ can _ can _) (m: fn _ _ [_] -> _ can _) (n: fn _ _ [_] -> _ can _) = fn (f: _) -> fn (x: _) -> (m: fn _ _ [_] -> _ can _) (f: _) ((n: fn _ _ [_] -> _ can _) (f: _) (x: _))
 // 
-// (one: fn (fn _ -> _ can _) _ -> _ can _) (f: fn _ -> _ can _) (x: _) = (f: fn _ -> _ can _) (x: _)
+// (one: fn (fn _ [_] -> _ can _) _ -> _ can _) (f: fn _ [_] -> _ can _) (x: _) = (f: fn _ [_] -> _ can _) (x: _)
 // 
-// (two1: fn (fn _ -> _ can _) _ -> _ can _) (f: fn _ -> _ can _) (x: _) = (f: fn _ -> _ can _) ((f: fn _ -> _ can _) (x: _))
+// (two1: fn (fn _ [_] -> _ can _) _ -> _ can _) (f: fn _ [_] -> _ can _) (x: _) = (f: fn _ [_] -> _ can _) ((f: fn _ [_] -> _ can _) (x: _))
 // 
-// (two2: fn (fn _ -> _ can _) -> fn _ -> _ can _ can _) = (add: fn (fn (fn _ -> _ can _) _ -> _ can _) (fn (fn _ -> _ can _) _ -> _ can _) -> fn (fn _ -> _ can _) -> fn _ -> _ can _ can _ can _) (one: fn (fn _ -> _ can _) _ -> _ can _) (one: fn (fn _ -> _ can _) _ -> _ can _)
+// (two2: fn (fn _ [_] -> _ can _) -> fn _ -> _ can _ can _) = (add: fn (fn (fn _ [_] -> _ can _) _ [_] -> _ can _) (fn (fn _ [_] -> _ can _) _ [_] -> _ can _) -> fn (fn _ [_] -> _ can _) -> fn _ -> _ can _ can _ can _) (one: fn (fn _ [_] -> _ can _) _ -> _ can _) (one: fn (fn _ [_] -> _ can _) _ -> _ can _)
 // 
 // (main: fn Unit -> String can _) () =
 //     (id: fn I32 -> I32 can _) 3

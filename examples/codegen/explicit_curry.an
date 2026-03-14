@@ -13,37 +13,34 @@ main () =
 
 // args: --delete-binary
 // expected stderr:
-// examples/codegen/explicit_curry.an:3:6	error: No implicit found for type Add _ required by parameter 3 of +
-//     a + b + c
-// 
-// examples/codegen/explicit_curry.an:3:10	error: No implicit found for type Add _ required by parameter 3 of +
-//     a + b + c
-// 
 // examples/codegen/explicit_curry.an:6:16	error: `_` not found in scope
+//     plus2 = foo _ 2 _
+// 
+// examples/codegen/explicit_curry.an:6:18	error: Expected I16 but found I32
 //     plus2 = foo _ 2 _
 // 
 // examples/codegen/explicit_curry.an:6:20	error: `_` not found in scope
 //     plus2 = foo _ 2 _
 // 
-// examples/codegen/explicit_curry.an:7:20	error: `_` not found in scope
+// examples/codegen/explicit_curry.an:7:16	error: Expected I16 but found I32
 //     plus4 = foo 2 2 _
 // 
-// examples/codegen/explicit_curry.an:9:4	error: `print` not found in scope
-//     print <| plus4 2
+// examples/codegen/explicit_curry.an:7:18	error: Expected I16 but found I32
+//     plus4 = foo 2 2 _
+// 
+// examples/codegen/explicit_curry.an:7:20	error: `_` not found in scope
+//     plus4 = foo 2 2 _
 // 
 // examples/codegen/explicit_curry.an:9:10	error: `<|` not found in scope
 //     print <| plus4 2
 // 
-// examples/codegen/explicit_curry.an:9:13	error: Expected fn _ -> _ can _ but found I32
+// examples/codegen/explicit_curry.an:9:13	error: Expected fn _ [_] -> _ can _ but found I16
 //     print <| plus4 2
-// 
-// examples/codegen/explicit_curry.an:10:4	error: `print` not found in scope
-//     print <| plus2 38 2
 // 
 // examples/codegen/explicit_curry.an:10:10	error: `<|` not found in scope
 //     print <| plus2 38 2
 // 
-// examples/codegen/explicit_curry.an:10:13	error: Expected fn _ _ -> _ can _ but found I32
+// examples/codegen/explicit_curry.an:10:13	error: Expected fn _ _ [_] -> _ can _ but found I16
 //     print <| plus2 38 2
 // 
 // examples/codegen/explicit_curry.an:12:6	error: `|>` not found in scope
@@ -52,14 +49,8 @@ main () =
 // examples/codegen/explicit_curry.an:12:10	error: `_` not found in scope
 //     4 |> (_ + 2) |> print
 // 
-// examples/codegen/explicit_curry.an:12:12	error: No implicit found for type Add _ required by parameter 3 of +
-//     4 |> (_ + 2) |> print
-// 
 // examples/codegen/explicit_curry.an:12:17	error: `|>` not found in scope
 //     4 |> (_ + 2) |> print
 // 
-// examples/codegen/explicit_curry.an:12:20	error: `print` not found in scope
-//     4 |> (_ + 2) |> print
-// 
-// Found 16 errors and 0 warnings
+// Found 13 errors and 0 warnings
 

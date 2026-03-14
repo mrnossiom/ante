@@ -23,8 +23,8 @@ main () =
 // (bar: fn a a -> I32 pure) =
 //     fn (_: a) (b: a) -> (b: a)
 // 
-// (baz: forall _1. fn Usz -> Ptr a pure) ((a: Usz)) : Ptr a =
-//     (transmute: (error)) (a: Usz)
+// (baz: fn Usz -> Ptr a pure) ((a: Usz)) : Ptr a =
+//     (transmute: fn Usz -> Ptr a pure) (a: Usz)
 // 
 // (main: fn Unit -> fn (Ptr Char) -> I32 pure can _) () =
 //     (exit2: fn I32 -> Unit pure) = (exit: fn I32 -> Unit pure)
@@ -36,14 +36,8 @@ main () =
 // examples/typechecking/type_annotations.an:5:14	error: Expected I32 but found a
 //     fn _ b -> b
 // 
-// examples/typechecking/type_annotations.an:7:0	error: Expected a function with 1 parameter, but found forall _1. fn Usz -> Ptr a pure
-// baz (a: Usz): Ptr a =
-// 
-// examples/typechecking/type_annotations.an:8:4	error: `transmute` not found in scope
-//     transmute a
-// 
 // examples/typechecking/type_annotations.an:14:10	error: Expected I32 but found String
 //     exit2 "test"
 // 
-// Found 4 errors and 0 warnings
+// Found 2 errors and 0 warnings
 

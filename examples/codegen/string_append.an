@@ -4,11 +4,8 @@ main () =
 
 // args: --delete-binary
 // expected stderr:
-// examples/codegen/string_append.an:3:4	error: `print` not found in scope
+// examples/codegen/string_append.an:3:13	error: No implicit found for type Append String _ required by parameter 3 of function
 //     print (a ++ "，世界")
 // 
-// examples/codegen/string_append.an:3:13	error: `++` not found in scope
-//     print (a ++ "，世界")
-// 
-// Found 2 errors and 0 warnings
+// Found 1 error and 0 warnings
 

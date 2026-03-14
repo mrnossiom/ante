@@ -39,9 +39,9 @@ t = 3 : I32
 // 
 // type List a =
 //     | Nil
-//     | Cons (a (& (List a)))
+//     | Cons (a (ref (List a)))
 // 
-// type UniquePtr a = & a
+// type UniquePtr a = ref a
 // 
 // t = 3: I32
 

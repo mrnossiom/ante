@@ -54,5 +54,5 @@ type MyRef a = ref a
 // t_c1m929_9396_1 = Option.Just_c1m929_1108_2 1
 // 
 // // id = c1m929_2555
-// type MyRef_c1m929_2555_0 a_1 = & a_1
+// type MyRef_c1m929_2555_0 a_1 = ref a_1
 

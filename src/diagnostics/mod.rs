@@ -256,7 +256,7 @@ impl Diagnostic {
             Diagnostic::FunctionArgCountMismatch { actual, expected, location: _ } => {
                 let s = if *actual == 1 { "" } else { "s" };
                 let was = if *expected == 1 { "was" } else { "were" };
-                format!("Function accepts {actual} parameter{s} but {expected} {was} expected")
+                format!("Function has {actual} argument{s} but {expected} {was} expected")
             },
             Diagnostic::NoSuchFieldForType { name, typ, location: _ } => {
                 format!("{} has no field named `{name}`", typ.blue())

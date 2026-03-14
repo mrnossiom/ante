@@ -15,8 +15,8 @@ c = foo "one" "two"
 
 // args: -e ast-t
 // expected stdout:
-// trait Foo a with
-//     (foo: fn a a {Foo a} -> a pure): fn a a -> a
+// type Foo a [env] =
+//     foo: fn a a [[env]] -> a
 // 
 // (a: _) = (foo: (error)) 1 2_I32
 // 

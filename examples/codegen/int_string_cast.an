@@ -13,31 +13,22 @@ main () =
 
 // args: --delete-binary
 // expected stderr:
-// examples/codegen/int_string_cast.an:2:2	error: `print` not found in scope
-//   print <|
-// 
 // examples/codegen/int_string_cast.an:2:8	error: `<|` not found in scope
 //   print <|
 // 
-// examples/codegen/int_string_cast.an:3:15	error: `++` not found in scope
+// examples/codegen/int_string_cast.an:3:15	error: No implicit found for type Append String _ required by parameter 3 of function
 //     "string: " ++
 // 
-// examples/codegen/int_string_cast.an:4:8	error: `++` not found in scope
+// examples/codegen/int_string_cast.an:4:8	error: No implicit found for type Append String _ required by parameter 3 of function
 //     str ++
 // 
-// examples/codegen/int_string_cast.an:5:13	error: `++` not found in scope
+// examples/codegen/int_string_cast.an:5:13	error: No implicit found for type Append String _ required by parameter 3 of function
 //     " len: " ++
 // 
-// examples/codegen/int_string_cast.an:6:4	error: `cast` not found in scope
-//     cast str.length
-// 
-// examples/codegen/int_string_cast.an:6:12	error: Object type must be known by this point to access its field
+// examples/codegen/int_string_cast.an:6:4	error: No implicit found for type Cast U32 String _ required by parameter 2 of function
 //     cast str.length
 // 
 // examples/codegen/int_string_cast.an:9:10	error: `<|` not found in scope
-//     debug <| cast (255: U8)
-// 
-// examples/codegen/int_string_cast.an:9:13	error: `cast` not found in scope
 //     debug <| cast (255: U8)
 // 
 // examples/codegen/int_string_cast.an:9:19	error: Expected U8 but found I32
@@ -46,20 +37,11 @@ main () =
 // examples/codegen/int_string_cast.an:10:10	error: `<|` not found in scope
 //     debug <| cast -1024
 // 
-// examples/codegen/int_string_cast.an:10:13	error: `cast` not found in scope
-//     debug <| cast -1024
-// 
 // examples/codegen/int_string_cast.an:11:10	error: `<|` not found in scope
-//     debug <| cast 0
-// 
-// examples/codegen/int_string_cast.an:11:13	error: `cast` not found in scope
 //     debug <| cast 0
 // 
 // examples/codegen/int_string_cast.an:12:10	error: `<|` not found in scope
 //     debug <| cast 10
 // 
-// examples/codegen/int_string_cast.an:12:13	error: `cast` not found in scope
-//     debug <| cast 10
-// 
-// Found 16 errors and 0 warnings
+// Found 10 errors and 0 warnings
 

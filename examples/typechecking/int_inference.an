@@ -13,12 +13,6 @@ main () =
 
 // args: -e ast-t
 // expected stdout:
-// (main: fn Unit -> _ can _) () =
-//     (print: (error)) 2
-
-// expected stderr:
-// examples/typechecking/int_inference.an:2:4	error: `print` not found in scope
-//     print 2
-// 
-// Found 1 error and 0 warnings
+// (main: fn Unit -> Unit can _) () =
+//     (fn (p1: I32) -> (print: fn I32 {Print I32 _} [_] -> Unit pure) (p1: I32) {(print_i32: Print I32 _)}) 2
 

@@ -36,14 +36,8 @@ main () =
 // examples/codegen/data.an:15:8	error: `printne` not found in scope
 //         printne "s = "
 // 
-// examples/codegen/data.an:16:8	error: `print` not found in scope
-//         print x
-// 
 // examples/codegen/data.an:17:6	error: `None` not found in scope
 //     | None -> print "s = None"
 // 
-// examples/codegen/data.an:17:14	error: `print` not found in scope
-//     | None -> print "s = None"
-// 
-// Found 9 errors and 0 warnings
+// Found 7 errors and 0 warnings
 

@@ -23,33 +23,30 @@ impl monad_maybe: Monad Maybe with
 
 // args: -e ast-t
 // expected stdout:
-// trait Functor f with
-//     (map: fn (f (error)) (fn (error) -> (error) pure) {Functor f} -> f (error) pure): fn (f a) (fn a -> b) -> f b
+// type Functor f [env] =
+//     map: fn (f a) (fn a -> b) [[env]] -> f b
 // 
-// trait Monad m with
-//     (wrap: fn (error) {Monad m} -> m (error) pure): fn a -> m a
-//     (bind: fn (m (error)) (fn (error) -> m (error) pure) {Monad m} -> m (error) pure): fn (m a) (fn a -> m b) -> m b
+// type Monad m [env] =
+//     wrap: fn a [[env]] -> m a
+//     bind: fn (m a) (fn a -> m b) [[env]] -> m b
 // 
-// impl functor_maybe: (Functor: (error)) Maybe with
-//     (map: fn (Maybe (error)) (fn (error) -> (error) pure) -> Maybe (error) pure) (m: Maybe (error)) (f: fn (error) -> (error) pure) =
-//         (match_var9: (error)) = (m: Maybe (error))
-//         switch (match_var9: Maybe (error))
-//         | 0 -> (None: Maybe (error))
-//         | 1, (match_var10: (error)) -> 
-//                 (x: (error)) = (match_var10: (error))
-//                 (Some: fn (error) -> Maybe (error) pure) ((f: fn (error) -> (error) pure) (x: (error)))
+// implicit (functor_maybe: Functor Maybe Unit) = Functor Maybe with
+//     (map: fn (error) (fn (error) -> (error) pure) -> (error) pure) = fn (m: (error)) (f: fn (error) -> (error) pure) ->
+//         match (m: (error))
+//         | (Some: (error)) (x: (error)) -> (Some: (error)) ((f: fn (error) -> (error) pure) (x: (error)))
+//         | (None: (error)) -> (None: (error))
 // 
-// impl monad_maybe: (Monad: (error)) Maybe with
-//     (wrap: fn (error) -> Maybe (error) pure) (a: (error)) = (Some: fn (error) -> Maybe (error) pure) (a: (error))
-//     (bind: fn (Maybe (error)) (fn (error) -> Maybe (error) pure) -> Maybe (error) pure) (m: Maybe (error)) (f: fn (error) -> Maybe (error) pure) =
-//         (match_var10: (error)) = (m: Maybe (error))
-//         switch (match_var10: Maybe (error))
-//         | 0 -> (None: Maybe (error))
-//         | 1, (match_var11: (error)) -> 
-//                 (x: (error)) = (match_var11: (error))
-//                 (f: fn (error) -> Maybe (error) pure) (x: (error))
+// implicit (monad_maybe: Monad Maybe Unit) = Monad Maybe with
+//     (wrap: fn (error) -> (error) pure) = fn (a: (error)) -> (Some: (error)) (a: (error))
+//     (bind: fn (error) (fn (error) -> (error) pure) -> (error) pure) = fn (m: (error)) (f: fn (error) -> (error) pure) ->
+//         match (m: (error))
+//         | (Some: (error)) (x: (error)) -> (f: fn (error) -> (error) pure) (x: (error))
+//         | (None: (error)) -> (None: (error))
 
 // expected stderr:
+// examples/typechecking/functor_and_monad.an:3:12	error: Function has 1 argument but 0 were expected
+//     map: fn (f a) (fn a -> b) -> f b
+// 
 // examples/typechecking/functor_and_monad.an:3:13	error: `a` not found in scope
 //     map: fn (f a) (fn a -> b) -> f b
 // 
@@ -62,11 +59,20 @@ impl monad_maybe: Monad Maybe with
 // examples/typechecking/functor_and_monad.an:3:33	error: `b` not found in scope
 //     map: fn (f a) (fn a -> b) -> f b
 // 
+// examples/typechecking/functor_and_monad.an:3:33	error: Function has 1 argument but 0 were expected
+//     map: fn (f a) (fn a -> b) -> f b
+// 
 // examples/typechecking/functor_and_monad.an:6:10	error: `a` not found in scope
 //     wrap: fn a -> m a
 // 
 // examples/typechecking/functor_and_monad.an:6:18	error: `a` not found in scope
 //     wrap: fn a -> m a
+// 
+// examples/typechecking/functor_and_monad.an:6:18	error: Function has 1 argument but 0 were expected
+//     wrap: fn a -> m a
+// 
+// examples/typechecking/functor_and_monad.an:7:13	error: Function has 1 argument but 0 were expected
+//     bind: fn (m a) (fn a -> m b) -> m b
 // 
 // examples/typechecking/functor_and_monad.an:7:14	error: `a` not found in scope
 //     bind: fn (m a) (fn a -> m b) -> m b
@@ -77,8 +83,44 @@ impl monad_maybe: Monad Maybe with
 // examples/typechecking/functor_and_monad.an:7:28	error: `b` not found in scope
 //     bind: fn (m a) (fn a -> m b) -> m b
 // 
+// examples/typechecking/functor_and_monad.an:7:28	error: Function has 1 argument but 0 were expected
+//     bind: fn (m a) (fn a -> m b) -> m b
+// 
 // examples/typechecking/functor_and_monad.an:7:36	error: `b` not found in scope
 //     bind: fn (m a) (fn a -> m b) -> m b
 // 
-// Found 10 errors and 0 warnings
+// examples/typechecking/functor_and_monad.an:7:36	error: Function has 1 argument but 0 were expected
+//     bind: fn (m a) (fn a -> m b) -> m b
+// 
+// examples/typechecking/functor_and_monad.an:10:28	error: Expected a type here, this type constructor is missing 1 argument
+// impl functor_maybe: Functor Maybe with
+// 
+// examples/typechecking/functor_and_monad.an:13:10	error: `Some` not found in scope
+//         | Some x -> Some (f x)
+// 
+// examples/typechecking/functor_and_monad.an:13:20	error: `Some` not found in scope
+//         | Some x -> Some (f x)
+// 
+// examples/typechecking/functor_and_monad.an:14:10	error: `None` not found in scope
+//         | None -> None
+// 
+// examples/typechecking/functor_and_monad.an:14:18	error: `None` not found in scope
+//         | None -> None
+// 
+// examples/typechecking/functor_and_monad.an:16:24	error: Expected a type here, this type constructor is missing 1 argument
+// impl monad_maybe: Monad Maybe with
+// 
+// examples/typechecking/functor_and_monad.an:17:13	error: `Some` not found in scope
+//     wrap a = Some a
+// 
+// examples/typechecking/functor_and_monad.an:21:10	error: `Some` not found in scope
+//         | Some x -> f x
+// 
+// examples/typechecking/functor_and_monad.an:22:10	error: `None` not found in scope
+//         | None -> None
+// 
+// examples/typechecking/functor_and_monad.an:22:18	error: `None` not found in scope
+//         | None -> None
+// 
+// Found 26 errors and 0 warnings
 

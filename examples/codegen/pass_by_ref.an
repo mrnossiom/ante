@@ -22,8 +22,11 @@ main () =
 
 // args: --delete-binary
 // expected stderr:
-// examples/codegen/pass_by_ref.an:3:14	error: `Print` not found in scope
+// examples/codegen/pass_by_ref.an:3:0	error: Missing field: print
 // impl print_s: Print S with
+// 
+// examples/codegen/pass_by_ref.an:4:0	error: Print S has no field named `printne`
+//     printne s = printne s.message
 // 
 // examples/codegen/pass_by_ref.an:4:16	error: `printne` not found in scope
 //     printne s = printne s.message
@@ -34,14 +37,8 @@ main () =
 // examples/codegen/pass_by_ref.an:12:4	error: `printne` not found in scope
 //     printne "x before: "
 // 
-// examples/codegen/pass_by_ref.an:13:4	error: `print` not found in scope
-//     print x
-// 
 // examples/codegen/pass_by_ref.an:16:4	error: `printne` not found in scope
 //     printne "x after:  "
 // 
-// examples/codegen/pass_by_ref.an:17:4	error: `print` not found in scope
-//     print x
-// 
-// Found 7 errors and 0 warnings
+// Found 6 errors and 0 warnings
 

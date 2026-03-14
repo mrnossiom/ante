@@ -31,8 +31,5 @@ main () =
 // examples/codegen/vec_basic.an:7:10	error: `mut` not found in scope
 //     push (mut v) 4
 // 
-// examples/codegen/vec_basic.an:9:4	error: `print` not found in scope
-//     print v
-// 
-// Found 8 errors and 0 warnings
+// Found 7 errors and 0 warnings
 

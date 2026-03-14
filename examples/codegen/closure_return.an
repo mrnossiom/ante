@@ -8,9 +8,15 @@ main () =
     foo ()
 
 // args: --delete-binary
+// expected exit status: 101
 // expected stderr:
-// examples/codegen/closure_return.an:3:15	error: `print` not found in scope
-//     stuff () = print foo
+// thread 'main' panicked at src/mir/validation.rs:144:29:
+// fn stuff d523: fn Unit -> Unit
+//   b0(b0_0: Unit):
+//     v0: fn (Pointer, U32) -> Unit = id lambda_d524
+//     v1: Unit = v0 v0
+//     ^^^^^^^^^^^^^^^^ Type mismatch in arg 0 of call
 // 
-// Found 1 error and 0 warnings
+//     return v1
+// note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 

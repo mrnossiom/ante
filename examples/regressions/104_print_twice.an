@@ -20,9 +20,6 @@ print map
 // examples/regressions/104_print_twice.an:3:14	error: `Hash` not found in scope
 // impl hash_u8: Hash U8 with
 // 
-// examples/regressions/104_print_twice.an:4:13	error: `cast` not found in scope
-//     hash x = cast x
-// 
 // examples/regressions/104_print_twice.an:6:0	error: Expected a top-level item but found `var`
 // var map = empty ()
 // 
@@ -35,5 +32,5 @@ print map
 // examples/regressions/104_print_twice.an:10:6	error: Expected `=` to begin the function body but found `map`
 // print map
 // 
-// Found 8 errors and 0 warnings
+// Found 7 errors and 0 warnings
 

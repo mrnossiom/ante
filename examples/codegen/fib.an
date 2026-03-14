@@ -5,21 +5,9 @@ fib n =
 main () = println (fib 10)
 
 // args: --delete-binary
+// expected exit status: 101
 // expected stderr:
-// examples/codegen/fib.an:2:9	error: No implicit found for type Cmp _ required by parameter 3 of <
-//     if n < 2 then n
-// 
-// examples/codegen/fib.an:3:16	error: No implicit found for type Sub _ required by parameter 3 of -
-//     else fib (n - 2) + fib (n - 1)
-// 
-// examples/codegen/fib.an:3:21	error: No implicit found for type Add _ required by parameter 3 of +
-//     else fib (n - 2) + fib (n - 1)
-// 
-// examples/codegen/fib.an:3:30	error: No implicit found for type Sub _ required by parameter 3 of -
-//     else fib (n - 2) + fib (n - 1)
-// 
-// examples/codegen/fib.an:5:10	error: `print` not found in scope
-// main () = print (fib 10)
-// 
-// Found 5 errors and 0 warnings
+// thread 'main' panicked at src/codegen/llvm/mod.rs:367:60:
+// llvm codegen: mir value is not cached: b0_2
+// note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 

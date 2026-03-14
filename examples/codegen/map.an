@@ -27,9 +27,6 @@ main () =
 // examples/codegen/map.an:3:14	error: `Hash` not found in scope
 // impl hash_u8: Hash U8 with
 // 
-// examples/codegen/map.an:4:13	error: `cast` not found in scope
-//     hash x = cast x
-// 
 // examples/codegen/map.an:7:14	error: `empty` not found in scope
 //     var map = empty ()
 // 
@@ -75,8 +72,5 @@ main () =
 // examples/codegen/map.an:18:12	error: `mut` not found in scope
 //     insert (mut map) 7 21
 // 
-// examples/codegen/map.an:20:4	error: `print` not found in scope
-//     print map
-// 
-// Found 19 errors and 0 warnings
+// Found 17 errors and 0 warnings
 

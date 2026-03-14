@@ -38,11 +38,11 @@ ex2c (a: v) b =
 //     (ex1a: fn u _ -> U32 can _) (a: u) (b: _)
 //     1_U32
 // 
-// trait T1 a with
-//     (trait1: fn a {T1 a} -> Unit pure): fn a -> Unit
+// type T1 a [env] =
+//     trait1: fn a [[env]] -> Unit
 // 
-// trait T2 a with
-//     (trait2: fn a {T2 a} -> Unit pure): fn a -> Unit
+// type T2 a [env] =
+//     trait2: fn a [[env]] -> Unit
 // 
 // (ex2a: fn t _ -> _ can _) ((a: t)) (b: _) =
 //     (ex2b: fn t _ -> _ can _) (a: t) (b: _)

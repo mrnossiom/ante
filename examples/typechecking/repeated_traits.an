@@ -6,16 +6,7 @@ foo a =
 
 // args: -e ast-t
 // expected stdout:
-// (foo: fn _ -> _ can _) (a: _) =
-//     (print: (error)) (a: _)
-//     (print: (error)) (a: _)
-
-// expected stderr:
-// examples/typechecking/repeated_traits.an:2:4	error: `print` not found in scope
-//     print a
-// 
-// examples/typechecking/repeated_traits.an:3:4	error: `print` not found in scope
-//     print a
-// 
-// Found 2 errors and 0 warnings
+// (foo: fn Bool -> Unit can _) (a: Bool) =
+//     (fn (p4: Bool) -> (print: fn Bool {Print Bool _} [_] -> Unit pure) (p4: Bool) {(print_bool: Print Bool _)}) (a: Bool)
+//     (fn (p5: Bool) -> (print: fn Bool {Print Bool _} [_] -> Unit pure) (p5: Bool) {(print_bool: Print Bool _)}) (a: Bool)
 

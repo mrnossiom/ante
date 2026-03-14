@@ -22,20 +22,11 @@ main ()
 
 // args: --delete-binary
 // expected stderr:
-// examples/regressions/85_type_defaulting_rules.an:7:9	error: No implicit found for type Cmp _ required by parameter 3 of >
-//     if n > 0 then
-// 
-// examples/regressions/85_type_defaulting_rules.an:9:22	error: No implicit found for type Sub _ required by parameter 3 of -
-//         count_down (n - 1) f
-// 
-// examples/regressions/85_type_defaulting_rules.an:14:4	error: Expected fn _ -> _ can _ but found fn I32 (fn I32 -> _ can _) -> Unit can _
+// examples/regressions/85_type_defaulting_rules.an:14:4	error: Expected fn _ [_] -> _ can _ but found fn I32 (fn I32 [_] -> _ can _) -> Unit can _
 //     count_down 3 fn x ->
 // 
 // examples/regressions/85_type_defaulting_rules.an:14:17	error: Expected an unindent but found `fn`
 //     count_down 3 fn x ->
-// 
-// examples/regressions/85_type_defaulting_rules.an:17:21	error: `print` not found in scope
-//     print_offset _ = print offset
 // 
 // examples/regressions/85_type_defaulting_rules.an:17:27	error: `offset` not found in scope
 //     print_offset _ = print offset
@@ -49,5 +40,5 @@ main ()
 // examples/regressions/85_type_defaulting_rules.an:21:5	error: Expected `=` to begin the function body but found `()`
 // main ()
 // 
-// Found 9 errors and 0 warnings
+// Found 6 errors and 0 warnings
 

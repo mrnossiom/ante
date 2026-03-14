@@ -4,18 +4,18 @@ impl print_impl {_: DoesNotExist a}: Print a with
 
 // args: -e ast-t
 // expected stdout:
-// impl print_impl {(_: (error) a)}: (Print: (error)) a with
-//     (printne: (error)) (_: _) = ()
+// implicit (print_impl: fn {(error) a} -> Print a _ pure) {(_: (error) a)} : Print a pure = Print a with
+//     (printne: (error)) = fn (_: _) -> ()
 
 // expected stderr:
-// examples/typechecking/given_constraint_error.an:2:0	error: Expected a function with 1 parameter, but found (error) a
+// examples/typechecking/given_constraint_error.an:2:0	error: Missing field: print
 // impl print_impl {_: DoesNotExist a}: Print a with
 // 
 // examples/typechecking/given_constraint_error.an:2:20	error: `DoesNotExist` not found in scope
 // impl print_impl {_: DoesNotExist a}: Print a with
 // 
-// examples/typechecking/given_constraint_error.an:2:37	error: `Print` not found in scope
-// impl print_impl {_: DoesNotExist a}: Print a with
+// examples/typechecking/given_constraint_error.an:3:0	error: Print a has no field named `printne`
+//     printne _ = ()
 // 
 // Found 3 errors and 0 warnings
 

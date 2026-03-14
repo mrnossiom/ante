@@ -5,7 +5,12 @@ _ = boom ()
 // args: --delete-binary
 // expected exit status: 101
 // expected stderr:
-// thread '<unnamed>' panicked at src/mir/builder/mod.rs:308:17:
-// No cached variable for None with origin td
+// thread 'main' panicked at src/mir/validation.rs:181:21:
+// fn boom d463: fn Unit -> (U8, (Pointer,))
+//   b0(b0_0: Unit):
+//     v0: U8, ((U8, (error,)),) = id None_d529
+//     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Value type `U8, (Pointer,)` != result type `U8, ((U8, (error,)),)`
+// 
+//     return v0
 // note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 

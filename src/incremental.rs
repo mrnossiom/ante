@@ -26,6 +26,7 @@ use crate::{
     type_inference::{
         self, TypeCheckSCCResult,
         dependency_graph::{SCC, TypeCheckDependencyGraphResult, TypeCheckResult},
+        kinds::Kind,
     },
 };
 
@@ -201,7 +202,7 @@ pub struct VisibleDefinitionsResult {
 /// Returns any global types visible to the given item in the context.
 #[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VisibleTypes(pub SourceFileId);
-define_intermediate!(600, VisibleTypes -> Definitions, DbStorage, definition_collection::visible_types_impl);
+define_intermediate!(600, VisibleTypes -> TypeDefinitions, DbStorage, definition_collection::visible_types_impl);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// Returns any global implicits visible to the given item in the context.
@@ -221,6 +222,9 @@ define_intermediate!(700, VisibleImplicits -> Definitions, DbStorage, definition
 /// defines both `a` and `b`. Similarly, a trait may define multiple methods, etc.
 pub type Definitions = BTreeMap<Arc<String>, TopLevelName>;
 
+/// Maps type names to their TopLevelName and Kind.
+pub type TypeDefinitions = BTreeMap<Arc<String>, (TopLevelName, Kind)>;
+
 /// A map from each top-level type in a file to the methods defined on it.
 /// If a type in a file does not have any methods defined on it, it may not be in the map.
 pub type Methods = BTreeMap<TopLevelId, Definitions>;
@@ -235,7 +239,7 @@ define_intermediate!(800, ExportedDefinitions -> Arc<VisibleDefinitionsResult>, 
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExportedTypes(pub SourceFileId);
-define_intermediate!(900, ExportedTypes -> Definitions, DbStorage, definition_collection::exported_types_impl);
+define_intermediate!(900, ExportedTypes -> TypeDefinitions, DbStorage, definition_collection::exported_types_impl);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// Retrieves the imports used by a file. This step is the first done by the compiler to collect

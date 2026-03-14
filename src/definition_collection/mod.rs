@@ -6,14 +6,16 @@ use crate::{
     diagnostics::{Diagnostic, Location},
     incremental::{
         self, DbHandle, Definitions, ExportedDefinitions, ExportedTypes, GetCrateGraph, GetImports, GetItem,
-        GetItemRaw, Methods, Parse, VisibleDefinitions, VisibleDefinitionsResult, VisibleImplicits, VisibleTypes,
+        GetItemRaw, Methods, Parse, TypeDefinitions, VisibleDefinitions, VisibleDefinitionsResult, VisibleImplicits,
+        VisibleTypes,
     },
     name_resolution::namespace::{CrateId, SourceFileId},
     parser::{
         context::TopLevelContext,
-        cst::{Import, ItemName, Literal, Pattern, TopLevelItemKind, TypeDefinitionBody},
+        cst::{Import, ItemName, Literal, Pattern, TopLevelItemKind, TypeDefinition, TypeDefinitionBody},
         ids::{NameId, PatternId, TopLevelId, TopLevelName},
     },
+    type_inference::kinds::Kind,
 };
 
 /// Collect all definitions which should be visible to expressions within this file.
@@ -87,7 +89,7 @@ fn get_file_id(target_crate_name: &String, module_path: &PathBuf, db: &DbHandle)
     None
 }
 
-pub fn visible_types_impl(context: &VisibleTypes, db: &DbHandle) -> Definitions {
+pub fn visible_types_impl(context: &VisibleTypes, db: &DbHandle) -> TypeDefinitions {
     incremental::enter_query();
     incremental::println(format!("Collecting visible types in {:?}", context.0));
 
@@ -105,8 +107,8 @@ pub fn visible_types_impl(context: &VisibleTypes, db: &DbHandle) -> Definitions 
         };
         let exports = ExportedTypes(import_file_id).get(db);
 
-        for (exported_name, exported_id) in exports {
-            if let Some(existing) = definitions.get(&exported_name) {
+        for (exported_name, (exported_id, kind)) in exports {
+            if let Some((existing, _)) = definitions.get(&exported_name) {
                 // This reports the location the item was defined in, not the location it was imported at.
                 // I could improve this but instead I'll leave it as an exercise for the reader!
                 let first_location = existing.location(db);
@@ -114,7 +116,7 @@ pub fn visible_types_impl(context: &VisibleTypes, db: &DbHandle) -> Definitions 
                 let name = exported_name;
                 db.accumulate(Diagnostic::ImportedNameAlreadyInScope { name, first_location, second_location });
             } else {
-                definitions.insert(exported_name, exported_id);
+                definitions.insert(exported_name, (exported_id, kind));
             }
         }
     }
@@ -144,13 +146,29 @@ pub fn visible_implicits_impl(context: &VisibleImplicits, db: &DbHandle) -> Defi
     definitions
 }
 
+pub(crate) fn kind_of_type_definition(definition: &TypeDefinition) -> Kind {
+    use std::num::NonZeroUsize;
+    let n = definition.generics.len();
+    if definition.is_trait {
+        // The last generic is the implicit `[env]` parameter added during desugaring (get_item.rs).
+        // TraitConstructor's accepts_arguments already handles env as an optional extra arg,
+        // so we exclude it from the explicit generic count.
+        let explicit_n = n.saturating_sub(1);
+        Kind::TraitConstructor(vec![Kind::Type; explicit_n])
+    } else if n == 0 {
+        Kind::Type
+    } else {
+        Kind::TypeConstructorSimple(NonZeroUsize::new(n).unwrap())
+    }
+}
+
 /// Collect only the exported types within a file.
-pub fn exported_types_impl(context: &ExportedTypes, db: &DbHandle) -> Definitions {
+pub fn exported_types_impl(context: &ExportedTypes, db: &DbHandle) -> TypeDefinitions {
     incremental::enter_query();
     incremental::println(format!("Collecting exported definitions in {:?}", context.0));
 
     let result = Parse(context.0).get(db);
-    let mut definitions = Definitions::default();
+    let mut definitions = TypeDefinitions::default();
 
     // Collect each definition, issuing an error if there is a duplicate name (imports are not counted)
     for item in result.cst.top_level_items.iter() {
@@ -159,13 +177,14 @@ pub fn exported_types_impl(context: &ExportedTypes, db: &DbHandle) -> Definition
         if let TopLevelItemKind::TypeDefinition(definition) = &item.kind {
             let name = &context.names[definition.name];
 
-            if let Some(existing) = definitions.get(name) {
+            if let Some((existing, _)) = definitions.get(name) {
                 let first_location = existing.location(db);
                 let second_location = context.name_locations[definition.name].clone();
                 let name = name.clone();
                 db.accumulate(Diagnostic::NameAlreadyInScope { name, first_location, second_location });
             } else {
-                definitions.insert(name.clone(), TopLevelName::new(item.id, definition.name));
+                let kind = kind_of_type_definition(definition);
+                definitions.insert(name.clone(), (TopLevelName::new(item.id, definition.name), kind));
             }
         }
     }

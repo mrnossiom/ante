@@ -89,6 +89,7 @@ impl PatternId {
     }
 }
 
+/// TODO: Types should probably be interned like expressions & patterns are
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
 pub enum Type {
     Error,

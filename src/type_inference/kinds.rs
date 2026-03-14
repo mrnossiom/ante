@@ -1,9 +1,13 @@
 use std::num::NonZeroUsize;
 
+use serde::{Deserialize, Serialize};
+
+use crate::diagnostics::{Diagnostic, Location};
+
 /// A type's [Kind] is essentially the type of a type.
 /// These differentiate whether something in a type position is itself
 /// a type, a type constructor, or a type-level integer.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Hash, Clone)]
 pub enum Kind {
     /// A type valid in a type position
     Type,
@@ -33,24 +37,207 @@ pub enum Kind {
 }
 
 impl Kind {
-    pub fn accepts_arguments(&self, args: &[Kind]) -> bool {
+    /// Try to accept the given arguments, returning a diagnostic explaining the error if it cannot
+    /// be done.
+    ///
+    /// TODO: Need location for each Kind to improve errors
+    pub fn accepts_arguments(self, mut args: Vec<Kind>, location: Location) -> Result<(), Diagnostic> {
         match self {
-            Kind::Type => args.is_empty(),
-            Kind::TypeConstructorSimple(expected) => {
-                args.len() == usize::from(*expected) && args.iter().all(|kind| matches!(kind, Kind::Type))
-            },
-            Kind::TypeConstructorComplex(kinds) => kinds == args,
-            Kind::TraitConstructor(kinds) => {
-                if args.len() == kinds.len() + 1 {
-                    kinds == &args[0..args.len() - 1]
-                        // The optional env arg should be a Type
-                        && matches!(&args[args.len() - 1], Kind::Type)
+            Kind::Type => {
+                if args.is_empty() {
+                    Ok(())
                 } else {
-                    kinds == args
+                    Err(Diagnostic::ExpectedTypeKind { actual: Kind::from_args(args), location })
                 }
             },
-            Kind::U32 => args.is_empty(),
+            Kind::TypeConstructorSimple(expected) => {
+                if args.len() != expected.into() {
+                    let actual = args.len();
+                    return Err(Diagnostic::FunctionArgCountMismatch { actual, expected: expected.into(), location });
+                }
+
+                for arg in args {
+                    if !arg.unifies(&Kind::Type) {
+                        return Err(Diagnostic::ExpectedTypeKind { actual: arg, location });
+                    }
+                }
+                Ok(())
+            },
+            Kind::TypeConstructorComplex(kinds) => {
+                if kinds.len() != args.len() {
+                    let actual = args.len();
+                    return Err(Diagnostic::FunctionArgCountMismatch { actual, expected: kinds.len(), location });
+                }
+
+                for (expected, actual) in kinds.into_iter().zip(args) {
+                    if !expected.unifies(&actual) {
+                        return Err(Diagnostic::ExpectedKind { actual, expected, location });
+                    }
+                }
+                Ok(())
+            },
+            Kind::TraitConstructor(kinds) => {
+                if kinds.len() != args.len() && kinds.len() + 1 != args.len() {
+                    let actual = args.len();
+                    return Err(Diagnostic::FunctionArgCountMismatch { actual, expected: kinds.len(), location });
+                }
+
+                let optional_env_arg = if args.len() == kinds.len() + 1 { args.pop() } else { None };
+
+                for (expected, actual) in kinds.into_iter().zip(args) {
+                    if !expected.unifies(&actual) {
+                        return Err(Diagnostic::ExpectedKind { actual, expected, location });
+                    }
+                }
+
+                // The extra optional env argument was provided
+                if let Some(env) = optional_env_arg {
+                    if !env.unifies(&Kind::Type) {
+                        return Err(Diagnostic::ExpectedTypeKind { actual: env, location });
+                    }
+                }
+                Ok(())
+            },
+            Kind::U32 => {
+                if args.is_empty() {
+                    Ok(())
+                } else {
+                    let actual = Kind::from_args(args);
+                    Err(Diagnostic::ExpectedTypeKind { actual, location })
+                }
+            },
+            Kind::Error => Ok(()),
+        }
+    }
+
+    /// True if both kinds are compatible
+    fn unifies(&self, other: &Kind) -> bool {
+        match (self, other) {
+            (Kind::Error, _) | (_, Kind::Error) => true,
+            (Kind::Type, Kind::Type) => true,
+            (Kind::TypeConstructorSimple(l), Kind::TypeConstructorSimple(r)) => l == r,
+            (Kind::TypeConstructorComplex(l_kinds), Kind::TypeConstructorComplex(r_kinds)) => {
+                l_kinds.len() == r_kinds.len() && l_kinds.iter().zip(r_kinds).all(|(l, r)| l.unifies(r))
+            },
+            (Kind::TraitConstructor(l_kinds), Kind::TraitConstructor(r_kinds)) => {
+                l_kinds.len() == r_kinds.len() && l_kinds.iter().zip(r_kinds).all(|(l, r)| l.unifies(r))
+            },
+
+            // TraitConstructor has an optional argument which can make it equivalent to other kinds
+            // A TraitConstructor is a Type if it has no required args
+            (Kind::Type, Kind::TraitConstructor(kinds)) | (Kind::TraitConstructor(kinds), Kind::Type) => {
+                kinds.is_empty()
+            },
+
+            // A TraitConstructor is a simple constructor if the lengths match with or without the
+            // optional argument, and all required arguments are simple types
+            (Kind::TypeConstructorSimple(count), Kind::TraitConstructor(kinds))
+            | (Kind::TraitConstructor(kinds), Kind::TypeConstructorSimple(count)) => {
+                (kinds.len() == (*count).into() || kinds.len() + 1 == (*count).into())
+                    && kinds.iter().all(|kind| matches!(kind, Kind::Type))
+            },
+
+            // A TraitConstructor is a complex constructor if the lengths match with or without the
+            // optional argument, and all required arguments unify
+            (Kind::TypeConstructorComplex(complex_kinds), Kind::TraitConstructor(trait_kinds))
+            | (Kind::TraitConstructor(trait_kinds), Kind::TypeConstructorComplex(complex_kinds)) => {
+                (trait_kinds.len() == complex_kinds.len() || trait_kinds.len() + 1 == complex_kinds.len())
+                    && trait_kinds.iter().zip(complex_kinds).all(|(l, r)| l.unifies(r))
+            },
+            (Kind::U32, Kind::U32) => true,
+            _ => false,
+        }
+    }
+
+    /// Create a `Kind` that accepts the given arguments
+    pub fn from_args(args: Vec<Kind>) -> Kind {
+        if args.is_empty() {
+            Kind::Type
+        } else if args.iter().all(|arg| matches!(arg, Kind::Type)) {
+            Kind::TypeConstructorSimple(NonZeroUsize::new(args.len()).unwrap())
+        } else {
+            Kind::TypeConstructorComplex(args)
+        }
+    }
+
+    pub fn required_argument_count(&self) -> usize {
+        match self {
+            Kind::Type => 0,
+            Kind::TypeConstructorSimple(n) => (*n).into(),
+            Kind::TypeConstructorComplex(kinds) => kinds.len(),
+            Kind::TraitConstructor(kinds) => kinds.len(),
+            Kind::U32 => 0,
+            Kind::Error => 0,
+        }
+    }
+
+    /// True if this Kind accepts `n` arguments (partial application is disallowed).
+    pub fn accepts_n_arguments(&self, n: usize) -> bool {
+        match self {
+            Kind::Type => n == 0,
+            Kind::TypeConstructorSimple(count) => n == usize::from(*count),
+            Kind::TypeConstructorComplex(kinds) => n == kinds.len(),
+            Kind::TraitConstructor(kinds) => n == kinds.len() || n == kinds.len() + 1,
+            Kind::U32 => n == 0,
             Kind::Error => true,
+        }
+    }
+
+    /// Returns the `n`th parameter's kind, zero-indexed.
+    /// Panics if this kind does not support at least `n+1` parameters.
+    pub fn get_nth_parameter_kind(&self, n: usize) -> Kind {
+        match self {
+            Kind::Type => panic!("Kind::Type has no parameters"),
+            Kind::TypeConstructorSimple(count) => {
+                assert!(n < usize::from(*count));
+                Kind::Type
+            },
+            Kind::TypeConstructorComplex(kinds) => kinds[n].clone(),
+            Kind::TraitConstructor(kinds) => {
+                // Check for the implicit `env` environment
+                if n == kinds.len() {
+                    Kind::Type
+                } else {
+                    kinds[n].clone()
+                }
+            },
+            Kind::U32 => panic!("Kind::U32 has no parameters"),
+            Kind::Error => Kind::Error, // Try to avoid further errors
+        }
+    }
+}
+
+impl std::fmt::Display for Kind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let should_parenthesize = |kind: &Kind| match kind {
+            Kind::Type => false,
+            Kind::TypeConstructorSimple(_) => true,
+            Kind::TypeConstructorComplex(_) => true,
+            Kind::TraitConstructor(args) => !args.is_empty(),
+            Kind::U32 => false,
+            Kind::Error => false,
+        };
+
+        match self {
+            Kind::Type => write!(f, "*"),
+            Kind::TypeConstructorSimple(n) => {
+                for _ in 0 .. usize::from(*n) {
+                    write!(f, "* -> ")?;
+                }
+                write!(f, "*")
+            },
+            Kind::TypeConstructorComplex(kinds) | Kind::TraitConstructor(kinds) => {
+                for kind in kinds {
+                    if should_parenthesize(kind) {
+                        write!(f, "({kind}) -> ")?;
+                    } else {
+                        write!(f, "{kind} -> ")?;
+                    }
+                }
+                write!(f, "*")
+            },
+            Kind::U32 => write!(f, "U32"),
+            Kind::Error => write!(f, "<Error>"),
         }
     }
 }

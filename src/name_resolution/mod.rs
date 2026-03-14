@@ -213,7 +213,7 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
                 }
 
                 let exported = ExportedTypes(id).get(self.compiler);
-                let id = exported.get(name)?;
+                let (id, _kind) = exported.get(name)?;
                 Some(Namespace::Type(id.top_level_item))
             },
         }
@@ -350,6 +350,17 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
     fn link(&mut self, path: PathId, allow_type_based_resolution: bool, is_type: bool) {
         match self.lookup(&self.context.paths[path], allow_type_based_resolution, is_type) {
             Ok(origin) => {
+                if !self.is_valid_for_position(origin, is_type) {
+                    let last = self.context.paths[path].components.last().unwrap();
+                    let location = self.context.path_locations[path].clone();
+                    if is_type {
+                        let name = Arc::new(last.0.clone());
+                        self.emit_diagnostic(Diagnostic::TypeExpected { name, location });
+                    } else {
+                        let typ = Arc::new(last.0.clone());
+                        self.emit_diagnostic(Diagnostic::ValueExpected { location, typ });
+                    }
+                }
                 self.path_links.insert(path, origin);
             },
             Err(diagnostic) => self.emit_diagnostic(diagnostic),
@@ -408,6 +419,44 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
 
     fn emit_diagnostic(&self, diagnostic: Diagnostic) {
         self.compiler.accumulate(diagnostic);
+    }
+
+    fn is_valid_for_position(&self, origin: Origin, is_type: bool) -> bool {
+        match origin {
+            // TypeResolution is always a value (deferred enum/struct constructor), never a type
+            Origin::TypeResolution => !is_type,
+            // Local names (type vars or value bindings) are accepted in either position
+            Origin::Local(_) => true,
+            Origin::TopLevelDefinition(name) => {
+                let (item, _) = GetItem(name.top_level_item).get(self.compiler);
+                match &item.kind {
+                    TopLevelItemKind::TypeDefinition(def) if name.local_name_id == def.name => {
+                        match &def.body {
+                            // Struct type names may be used as a type OR value constructor
+                            TypeDefinitionBody::Struct(_) | TypeDefinitionBody::Error => true,
+                            // Union (enum) type name is only valid as a type; its variants are handled below
+                            TypeDefinitionBody::Enum(_) | TypeDefinitionBody::Alias(_) => is_type,
+                        }
+                    },
+                    // Enum variants are value constructors but accepted in either position
+                    // (kind/type checking validates appropriate use later)
+                    TopLevelItemKind::TypeDefinition(_) => true,
+                    // Effect type name: only valid in type position
+                    TopLevelItemKind::EffectDefinition(def) if name.local_name_id == def.name => is_type,
+                    // Effect operations/methods: only valid in value position
+                    TopLevelItemKind::EffectDefinition(_) => !is_type,
+                    // All other items (Definition, Extern, TraitImpl, Comptime) are values
+                    _ => !is_type,
+                }
+            },
+            Origin::Builtin(b) => {
+                if is_type {
+                    !matches!(b, Builtin::PairConstructor | Builtin::Intrinsic)
+                } else {
+                    matches!(b, Builtin::PairConstructor | Builtin::Intrinsic)
+                }
+            },
+        }
     }
 
     fn resolve_expr(&mut self, expr: ExprId) {

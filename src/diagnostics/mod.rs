@@ -4,8 +4,11 @@ use colored::{ColoredString, Colorize};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    incremental::Db, iterator_extensions::mapvec, lexer::token::Token, parser::cst::Name,
-    type_inference::errors::TypeErrorKind,
+    incremental::Db,
+    iterator_extensions::mapvec,
+    lexer::token::Token,
+    parser::cst::Name,
+    type_inference::{errors::TypeErrorKind, kinds::Kind},
 };
 
 mod location;
@@ -50,6 +53,15 @@ pub enum Diagnostic {
         expected: String,
         location: Location,
     },
+    ExpectedTypeKind {
+        actual: Kind,
+        location: Location,
+    },
+    ExpectedKind {
+        actual: Kind,
+        expected: Kind,
+        location: Location,
+    },
     RecursiveType {
         typ: String,
         location: Location,
@@ -68,6 +80,10 @@ pub enum Diagnostic {
     ValueExpected {
         location: Location,
         typ: Arc<String>,
+    },
+    TypeExpected {
+        name: Arc<String>,
+        location: Location,
     },
     TypeError {
         actual: String,
@@ -233,6 +249,9 @@ impl Diagnostic {
             Diagnostic::ValueExpected { location: _, typ } => {
                 format!("Expected a value but `{}` is a type", typ)
             },
+            Diagnostic::TypeExpected { name, location: _ } => {
+                format!("Expected a type but `{name}` is a value")
+            },
             Diagnostic::TypeError { actual, expected, kind, location: _ } => kind.message(actual, expected),
             Diagnostic::FunctionArgCountMismatch { actual, expected, location: _ } => {
                 let s = if *actual == 1 { "" } else { "s" };
@@ -352,6 +371,20 @@ impl Diagnostic {
                     type_string.blue(),
                 )
             },
+            Diagnostic::ExpectedTypeKind { actual, location: _ } => {
+                let n = actual.required_argument_count();
+                let s = if n == 1 { "" } else { "s" };
+                format!("Expected a type here, this type constructor is missing {n} argument{s}")
+            },
+            Diagnostic::ExpectedKind { actual, expected, location } => {
+                if *expected == Kind::Type {
+                    Diagnostic::ExpectedTypeKind { actual: actual.clone(), location: location.clone() }.message()
+                } else {
+                    let expected = expected.to_string().blue();
+                    let actual = actual.to_string().blue();
+                    format!("Expected a type constructor of kind {expected}, but found one of kind {actual}")
+                }
+            },
         }
     }
 
@@ -371,6 +404,7 @@ impl Diagnostic {
             | Diagnostic::MethodDeclaredOnUnknownType { location, .. }
             | Diagnostic::LiteralUsedAsName { location }
             | Diagnostic::ValueExpected { location, .. }
+            | Diagnostic::TypeExpected { location, .. }
             | Diagnostic::TypeError { location, .. }
             | Diagnostic::FunctionArgCountMismatch { location, .. }
             | Diagnostic::NoSuchFieldForType { location, .. }
@@ -388,6 +422,8 @@ impl Diagnostic {
             | Diagnostic::ImplicitNotAVariable { location }
             | Diagnostic::NoImplicitFound { location, .. }
             | Diagnostic::MultipleImplicitsFound { location, .. }
+            | Diagnostic::ExpectedTypeKind { location, .. }
+            | Diagnostic::ExpectedKind { location, .. }
             | Diagnostic::Unimplemented { location, .. } => location,
         }
     }

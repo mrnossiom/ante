@@ -341,10 +341,17 @@ impl Type {
     pub(crate) fn from_cst_type(
         typ: &cst::Type, resolve: &crate::name_resolution::ResolutionResult, db: &DbHandle,
     ) -> Type {
+        Self::from_cst_type_with_kind(typ, Kind::Type, resolve, db)
+    }
+
+    /// Convert this [cst::Type] into a [Type] with the expected [Kind].
+    /// Error if the converted [Kind] does not match the expected [Kind].
+    fn from_cst_type_with_kind(
+        typ: &cst::Type, kind: Kind, resolve: &crate::name_resolution::ResolutionResult, db: &DbHandle,
+    ) -> Type {
         let (typ, kind) = Type::from_cst_type_helper(typ, resolve, db);
-        // TODO: Need a [Location]
-        if kind != Kind::Type {
-            todo!("accumulate error")
+        if let Err(error) = kind.accepts_arguments(Vec::new(), todo!("need type location")) {
+            db.accumulate(error);
         }
         typ
     }
@@ -381,13 +388,11 @@ impl Type {
             crate::parser::cst::Type::Char => (Type::CHAR, Kind::Type),
             crate::parser::cst::Type::Named(path) => {
                 let origin = resolve.path_origins.get(path).copied();
-                let typ = Self::convert_origin_to_type(origin, Type::UserDefined);
-                (typ, todo!("retrieve kind of type from name resolution"))
+                Self::convert_origin_to_type(origin, db, Type::UserDefined)
             },
             crate::parser::cst::Type::Variable(name) => {
                 let origin = resolve.name_origins.get(name).copied();
-                let typ = Self::convert_origin_to_type(origin, |origin| Type::Generic(Generic::Named(origin)));
-                (typ, todo!("retrieve type variable kind"))
+                Self::convert_origin_to_type(origin, db, |origin| Type::Generic(Generic::Named(origin)))
             },
             crate::parser::cst::Type::Function(function) => {
                 let parameters = mapvec(&function.parameters, |param| {
@@ -411,49 +416,78 @@ impl Type {
             crate::parser::cst::Type::Application(f, args) => {
                 let (f, f_kind) = Self::from_cst_type_helper(f, resolve, db);
 
-                let (args, arg_kinds): (_, Vec<_>) = args.iter().map(|typ| Self::from_cst_type_helper(typ, resolve, db)).unzip();
-
-                if !f_kind.accepts_arguments(&arg_kinds) {
-                    todo!("kind error")
+                if !f_kind.accepts_n_arguments(args.len()) {
+                    todo!("error")
                 }
 
-                // TODO: We assume this always produces a type but this is not true if we ever
-                // allow partial application of type constructors
+                let args = mapvec(args.iter().enumerate(), |(i, arg)| {
+                    let expected_kind = f_kind.get_nth_parameter_kind(i);
+                    Self::from_cst_type_with_kind(arg, expected_kind, resolve, db)
+                });
+
                 let typ = Type::Application(Arc::new(f), Arc::new(args));
                 (typ, Kind::Type)
             },
-            crate::parser::cst::Type::Reference(kind) => {
-                (Type::Primitive(PrimitiveType::Reference(*kind)), Kind::Type)
+            crate::parser::cst::Type::Reference(kind) => (Type::Primitive(PrimitiveType::Reference(*kind)), Kind::Type),
+        }
+    }
+
+    fn kind_of_origin(origin: Option<Origin>, db: &DbHandle) -> Kind {
+        match origin {
+            None => Kind::Error,
+            Some(Origin::TypeResolution) => Kind::Error,
+            Some(Origin::Local(_)) => Kind::Type,
+            Some(Origin::Builtin(builtin)) => match builtin {
+                Builtin::Unit => Kind::Type,
+                Builtin::Int => Kind::Type,
+                Builtin::Char => Kind::Type,
+                Builtin::Bool => Kind::Type,
+                Builtin::Float => Kind::TypeConstructorSimple(NonZeroUsize::new(1).unwrap()),
+                Builtin::String => Kind::Type,
+                Builtin::Ptr => Kind::TypeConstructorSimple(NonZeroUsize::new(1).unwrap()),
+                Builtin::PairType => Kind::TypeConstructorSimple(NonZeroUsize::new(2).unwrap()),
+                Builtin::PairConstructor => Kind::Error,
+                Builtin::Intrinsic => Kind::Error,
+            },
+            Some(Origin::TopLevelDefinition(type_name)) => {
+                let (item, _ctx) = GetItem(type_name.top_level_item).get(db);
+                match &item.kind {
+                    cst::TopLevelItemKind::TypeDefinition(definition) => {
+                        crate::definition_collection::kind_of_type_definition(definition)
+                    },
+                    _ => Kind::Error,
+                }
             },
         }
     }
 
-    fn convert_origin_to_type(origin: Option<Origin>, make_type: impl FnOnce(Origin) -> Type) -> Type {
+    fn convert_origin_to_type(
+        origin: Option<Origin>, db: &DbHandle, make_type: impl FnOnce(Origin) -> Type,
+    ) -> (Type, Kind) {
         match origin {
-            Some(Origin::Builtin(builtin)) => {
-                match builtin {
-                    Builtin::Unit => Type::UNIT,
-                    Builtin::Int => Type::ERROR, // TODO: Polymorphic integers
-                    Builtin::Char => Type::CHAR,
-                    Builtin::Bool => Type::BOOL,
-                    Builtin::Float => Type::ERROR, // TODO: Polymorphic floats
-                    Builtin::String => Type::STRING,
-                    Builtin::Ptr => Type::POINTER,
-                    Builtin::PairType => Type::PAIR,
-                    Builtin::PairConstructor | Builtin::Intrinsic => {
-                        // TODO: Error
-                        Type::ERROR
-                    },
-                }
+            Some(Origin::Builtin(builtin)) => match builtin {
+                Builtin::Unit => (Type::UNIT, Kind::Type),
+                Builtin::Int => (Type::ERROR, Kind::TypeConstructorSimple(NonZeroUsize::new(1).unwrap())), // TODO: Polymorphic integers
+                Builtin::Char => (Type::CHAR, Kind::Type),
+                Builtin::Bool => (Type::BOOL, Kind::Type),
+                Builtin::Float => (Type::ERROR, Kind::TypeConstructorSimple(NonZeroUsize::new(1).unwrap())), // TODO: Polymorphic floats
+                Builtin::String => (Type::STRING, Kind::Type),
+                Builtin::Ptr => (Type::POINTER, Kind::TypeConstructorSimple(NonZeroUsize::new(1).unwrap())),
+                Builtin::PairType => (Type::PAIR, Kind::TypeConstructorSimple(NonZeroUsize::new(2).unwrap())),
+                Builtin::PairConstructor => {
+                    unreachable!("`,` in a type position should always resolve to Builtin::PairType")
+                },
+                Builtin::Intrinsic => (Type::ERROR, Kind::Error),
             },
-            Some(origin) => {
-                if !origin.may_be_a_type() {
-                    // TODO: Error
-                }
-                make_type(origin)
+            Some(origin @ Origin::TopLevelDefinition(type_name)) => {
+                let (item, _ctx) = GetItem(type_name.top_level_item).get(db);
+                let cst::TopLevelItemKind::TypeDefinition(definition) = &item.kind else { unreachable!() };
+                let kind = crate::definition_collection::kind_of_type_definition(definition);
+                (make_type(origin), kind)
             },
+            Some(origin) => (make_type(origin), Kind::Type),
             // Assume name resolution has already issued an error for this case
-            None => Type::ERROR,
+            None => (Type::ERROR, Kind::Error),
         }
     }
 

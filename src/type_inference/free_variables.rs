@@ -18,6 +18,9 @@ impl TypeChecker<'_, '_> {
     /// is instead done while building the initial [crate::mir::Mir].
     pub(super) fn check_for_closure(&mut self, lambda: &Lambda, id: ExprId, expected_environment_type: &Type) {
         let mut context = FreeVars::default();
+        for parameter in &lambda.parameters {
+            context.declare_pattern(parameter.pattern, self);
+        }
         context.find_free_variables(lambda.body, self);
 
         let env_type = make_tuple_type(context.free_vars.into_iter(), self);
@@ -103,7 +106,7 @@ impl FreeVars {
             cst::Pattern::Variable(name) => {
                 self.defined_in_fn.insert(*name);
             },
-            cst::Pattern::Literal(_) => todo!(),
+            cst::Pattern::Literal(_) => (),
             cst::Pattern::Constructor(_, fields) => {
                 for field in fields {
                     self.declare_pattern(*field, checker);

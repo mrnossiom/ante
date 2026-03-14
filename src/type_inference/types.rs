@@ -341,17 +341,19 @@ impl Type {
     /// - A name [Origin] was used which does not point to a type
     pub(crate) fn from_cst_type(
         typ: &cst::Type, resolve: &crate::name_resolution::ResolutionResult, db: &DbHandle,
+        next_id: &mut u32,
     ) -> Type {
-        Self::from_cst_type_with_kind(typ, Kind::Type, resolve, db)
+        Self::from_cst_type_with_kind(typ, Kind::Type, resolve, db, next_id)
     }
 
     /// Convert this [cst::Type] into a [Type] with the expected [Kind].
     /// Error if the converted [Kind] does not match the expected [Kind].
     fn from_cst_type_with_kind(
         typ: &cst::Type, expected: Kind, resolve: &crate::name_resolution::ResolutionResult, db: &DbHandle,
+        next_id: &mut u32,
     ) -> Type {
         let location = typ.location.clone();
-        let (typ, kind) = Type::from_cst_type_helper(typ, resolve, db);
+        let (typ, kind) = Type::from_cst_type_helper(typ, resolve, db, next_id);
         if !expected.unifies(&kind) {
             db.accumulate(Diagnostic::ExpectedKind { actual: kind, expected, location });
         }
@@ -365,6 +367,7 @@ impl Type {
     /// Does not error if the returned type is not of kind [Kind::Type]
     fn from_cst_type_helper(
         typ: &cst::Type, resolve: &crate::name_resolution::ResolutionResult, db: &DbHandle,
+        next_id: &mut u32,
     ) -> (Type, Kind) {
         match &typ.kind {
             crate::parser::cst::TypeKind::Integer(kind) => {
@@ -398,15 +401,15 @@ impl Type {
             },
             crate::parser::cst::TypeKind::Function(function) => {
                 let parameters = mapvec(&function.parameters, |param| {
-                    let typ = Self::from_cst_type(&param.typ, resolve, db);
+                    let typ = Self::from_cst_type(&param.typ, resolve, db, next_id);
                     ParameterType::new(typ, param.is_implicit)
                 });
                 let environment = if let Some(environment) = function.environment.as_ref() {
-                    Self::from_cst_type(environment, resolve, db)
+                    Self::from_cst_type(environment, resolve, db, next_id)
                 } else {
                     Type::UNIT
                 };
-                let return_type = Self::from_cst_type(&function.return_type, resolve, db);
+                let return_type = Self::from_cst_type(&function.return_type, resolve, db, next_id);
                 // TODO: Effects
                 let effects = Type::UNIT;
                 let f = Type::Function(Arc::new(FunctionType { parameters, environment, return_type, effects }));
@@ -418,7 +421,7 @@ impl Type {
                 (Type::PAIR, Kind::TypeConstructorSimple(NonZeroUsize::new(2).unwrap()))
             },
             crate::parser::cst::TypeKind::Application(f, args) => {
-                let (f, f_kind) = Self::from_cst_type_helper(f, resolve, db);
+                let (f, f_kind) = Self::from_cst_type_helper(f, resolve, db, next_id);
 
                 if !f_kind.accepts_n_arguments(args.len()) {
                     let expected = f_kind.required_argument_count();
@@ -427,12 +430,22 @@ impl Type {
                     return (Type::ERROR, Kind::Type);
                 }
 
-                let args = mapvec(args.iter().enumerate(), |(i, arg)| {
+                let mut converted_args = mapvec(args.iter().enumerate(), |(i, arg)| {
                     let expected_kind = f_kind.get_nth_parameter_kind(i);
-                    Self::from_cst_type_with_kind(arg, expected_kind, resolve, db)
+                    Self::from_cst_type_with_kind(arg, expected_kind, resolve, db, next_id)
                 });
 
-                let typ = Type::Application(Arc::new(f), Arc::new(args));
+                // Automatically insert a fresh type variable for the implicit env parameter
+                // when a TraitConstructor is applied without the optional env argument.
+                if let Kind::TraitConstructor(kinds) = &f_kind {
+                    if converted_args.len() == kinds.len() {
+                        let fresh_env = Type::Variable(TypeVariableId(*next_id));
+                        *next_id += 1;
+                        converted_args.push(fresh_env);
+                    }
+                }
+
+                let typ = Type::Application(Arc::new(f), Arc::new(converted_args));
                 (typ, Kind::Type)
             },
             crate::parser::cst::TypeKind::Reference(kind) => (

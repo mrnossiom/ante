@@ -479,8 +479,8 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         typ.follow(&self.bindings)
     }
 
-    fn from_cst_type(&self, typ: &cst::Type) -> Type {
-        Type::from_cst_type(typ, self.current_resolve(), self.compiler)
+    fn from_cst_type(&mut self, typ: &cst::Type) -> Type {
+        Type::from_cst_type(typ, self.current_resolve(), self.compiler, &mut self.next_type_variable_id)
     }
 
     /// Try to retrieve the types of each field of the given type.

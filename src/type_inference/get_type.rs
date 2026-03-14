@@ -24,7 +24,12 @@ pub fn get_type_impl(context: &GetType, compiler: &DbHandle) -> Type {
     let typ = match &item.kind {
         TopLevelItemKind::Definition(definition) => {
             let resolve = Resolve(context.0.top_level_item).get(compiler);
-            try_get_type(definition, &item_context, &resolve, compiler).unwrap_or_else(|| {
+            // Use a local counter and immediately generalize so any fresh type variables
+            // (e.g. implicit env args for TraitConstructors) become universally-quantified
+            // generics rather than free variables that could collide with another checker's IDs.
+            try_get_type(definition, &item_context, &resolve, compiler, &mut 0)
+                .map(|t| t.generalize(&TypeBindings::default()))
+                .unwrap_or_else(|| {
                 let check = TypeCheck(context.0.top_level_item).get(compiler);
                 let typ = check.get_generalized(context.0.local_name_id);
                 typ.follow_all(&check.bindings)
@@ -51,9 +56,10 @@ pub fn get_type_impl(context: &GetType, compiler: &DbHandle) -> Type {
 /// errors.
 pub(super) fn try_get_type(
     definition: &Definition, context: &TopLevelContext, resolve: &ResolutionResult, compiler: &DbHandle,
+    next_id: &mut u32,
 ) -> Option<Type> {
     if let Pattern::TypeAnnotation(_, typ) = &context.patterns[definition.pattern] {
-        return Some(Type::from_cst_type(typ, resolve, compiler));
+        return Some(Type::from_cst_type(typ, resolve, compiler, next_id));
     }
 
     if let Expr::Lambda(lambda) = &context.exprs[definition.rhs] {
@@ -82,8 +88,8 @@ pub(super) fn try_get_type(
         // to avoid repeating logic in [Type::from_cst_type], namely handling of effect types.
         let lambda_location = context.expr_locations[definition.rhs].clone();
         let cst_fn_type = cst::Type::new(TypeKind::Function(cst_function_type), lambda_location);
-        let typ = Type::from_cst_type(&cst_fn_type, resolve, compiler);
-        Some(typ.generalize(&TypeBindings::default()))
+        let typ = Type::from_cst_type(&cst_fn_type, resolve, compiler, next_id);
+        Some(typ)
     } else {
         None
     }

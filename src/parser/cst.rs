@@ -102,7 +102,15 @@ pub enum Type {
     Float(FloatKind),
     Function(FunctionType),
     Application(Box<Type>, Vec<Type>),
-    Reference(Mutability, Sharedness),
+    Reference(ReferenceKind),
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Copy, Clone, PartialOrd, Ord)]
+pub enum ReferenceKind {
+    Ref,
+    Mut,
+    Imm,
+    Uniq,
 }
 
 impl ErrorDefault for Type {
@@ -344,21 +352,8 @@ pub struct Handle {
 /// `&rhs`, `!rhs`
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
 pub struct Reference {
-    pub mutability: Mutability,
-    pub sharedness: Sharedness,
+    pub kind: ReferenceKind,
     pub rhs: ExprId,
-}
-
-#[derive(Debug, Serialize, Deserialize, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum Mutability {
-    Immutable,
-    Mutable,
-}
-
-#[derive(Debug, Serialize, Deserialize, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum Sharedness {
-    Shared,
-    Owned,
 }
 
 /// A constructor with named fields such as `Foo with bar = 1, baz = 2`

@@ -27,6 +27,9 @@ pub enum Kind {
 
     /// A type-level `U32` used (for example) as an array length.
     U32,
+
+    /// An error occurred while resolving the type this kind belongs to
+    Error,
 }
 
 impl Kind {
@@ -46,7 +49,8 @@ impl Kind {
                     kinds == args
                 }
             },
-            Kind::U32 => todo!(),
+            Kind::U32 => args.is_empty(),
+            Kind::Error => true,
         }
     }
 }

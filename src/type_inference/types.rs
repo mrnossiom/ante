@@ -1,17 +1,16 @@
-use std::{borrow::Cow, collections::BTreeMap, sync::Arc};
+use std::{borrow::Cow, collections::BTreeMap, num::NonZeroUsize, sync::Arc};
 
 use inc_complete::DbGet;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    diagnostics::Diagnostic,
     incremental::{DbHandle, GetItem},
     iterator_extensions::mapvec,
     lexer::token::{FloatKind, IntegerKind},
     name_resolution::{Origin, builtin::Builtin},
     parser::{
-        cst::{self, Mutability, Sharedness},
+        cst::{self, ReferenceKind},
         ids::NameStore,
     },
     type_inference::{generics::Generic, kinds::Kind},
@@ -88,7 +87,7 @@ pub enum PrimitiveType {
     Pair,
     Int(IntegerKind),
     Float(FloatKind),
-    Reference(Mutability, Sharedness),
+    Reference(ReferenceKind),
 }
 
 /// Maps type variables to their bindings
@@ -120,10 +119,10 @@ impl Type {
     pub const F32: Type = Type::Primitive(PrimitiveType::Float(FloatKind::F32));
     pub const F64: Type = Type::Primitive(PrimitiveType::Float(FloatKind::F64));
 
-    pub const REF: Type = Type::Primitive(PrimitiveType::Reference(Mutability::Immutable, Sharedness::Shared));
-    pub const IMM: Type = Type::Primitive(PrimitiveType::Reference(Mutability::Immutable, Sharedness::Owned));
-    pub const MUT: Type = Type::Primitive(PrimitiveType::Reference(Mutability::Mutable, Sharedness::Shared));
-    pub const UNIQ: Type = Type::Primitive(PrimitiveType::Reference(Mutability::Mutable, Sharedness::Owned));
+    pub const REF: Type = Type::Primitive(PrimitiveType::Reference(ReferenceKind::Ref));
+    pub const MUT: Type = Type::Primitive(PrimitiveType::Reference(ReferenceKind::Mut));
+    pub const IMM: Type = Type::Primitive(PrimitiveType::Reference(ReferenceKind::Imm));
+    pub const UNIQ: Type = Type::Primitive(PrimitiveType::Reference(ReferenceKind::Uniq));
 
     pub fn integer(kind: crate::lexer::token::IntegerKind) -> Type {
         match kind {
@@ -158,20 +157,12 @@ impl Type {
             super::types::PrimitiveType::Pair => Type::PAIR,
             super::types::PrimitiveType::Int(kind) => Self::integer(kind),
             super::types::PrimitiveType::Float(kind) => Self::float(kind),
-            super::types::PrimitiveType::Reference(Mutability::Immutable, Sharedness::Shared) => Type::REF,
-            super::types::PrimitiveType::Reference(Mutability::Immutable, Sharedness::Owned) => Type::IMM,
-            super::types::PrimitiveType::Reference(Mutability::Mutable, Sharedness::Shared) => Type::MUT,
-            super::types::PrimitiveType::Reference(Mutability::Mutable, Sharedness::Owned) => Type::UNIQ,
+            super::types::PrimitiveType::Reference(kind) => Self::reference(kind),
         }
     }
 
-    pub fn reference(mutability: Mutability, sharedness: Sharedness) -> Type {
-        match (mutability, sharedness) {
-            (Mutability::Immutable, Sharedness::Shared) => Type::REF,
-            (Mutability::Immutable, Sharedness::Owned) => Type::IMM,
-            (Mutability::Mutable, Sharedness::Shared) => Type::MUT,
-            (Mutability::Mutable, Sharedness::Owned) => Type::UNIQ,
-        }
+    pub fn reference(kind: ReferenceKind) -> Type {
+        Type::Primitive(PrimitiveType::Reference(kind))
     }
 
     /// Convert this type to a string (without any coloring)
@@ -350,18 +341,19 @@ impl Type {
     pub(crate) fn from_cst_type(
         typ: &cst::Type, resolve: &crate::name_resolution::ResolutionResult, db: &DbHandle,
     ) -> Type {
-        let mut errors = Vec::new();
         let (typ, kind) = Type::from_cst_type_helper(typ, resolve, db);
-
         // TODO: Need a [Location]
-        if kind != Kind::Type {}
-
+        if kind != Kind::Type {
+            todo!("accumulate error")
+        }
         typ
     }
 
     /// Returns a tuple of:
     /// - The converted type
     /// - The kind of the converted type
+    ///
+    /// Does not error if the returned type is not of kind [Kind::Type]
     fn from_cst_type_helper(
         typ: &cst::Type, resolve: &crate::name_resolution::ResolutionResult, db: &DbHandle,
     ) -> (Type, Kind) {
@@ -389,37 +381,49 @@ impl Type {
             crate::parser::cst::Type::Char => (Type::CHAR, Kind::Type),
             crate::parser::cst::Type::Named(path) => {
                 let origin = resolve.path_origins.get(path).copied();
-                Self::convert_origin_to_type(origin, Type::UserDefined)
+                let typ = Self::convert_origin_to_type(origin, Type::UserDefined);
+                (typ, todo!("retrieve kind of type from name resolution"))
             },
             crate::parser::cst::Type::Variable(name) => {
                 let origin = resolve.name_origins.get(name).copied();
-                Self::convert_origin_to_type(origin, |origin| Type::Generic(Generic::Named(origin)))
+                let typ = Self::convert_origin_to_type(origin, |origin| Type::Generic(Generic::Named(origin)));
+                (typ, todo!("retrieve type variable kind"))
             },
             crate::parser::cst::Type::Function(function) => {
                 let parameters = mapvec(&function.parameters, |param| {
-                    let typ = Self::from_cst_type(&param.typ, resolve);
+                    let typ = Self::from_cst_type(&param.typ, resolve, db);
                     ParameterType::new(typ, param.is_implicit)
                 });
                 let environment = if let Some(environment) = function.environment.as_ref() {
-                    Self::from_cst_type(environment, resolve)
+                    Self::from_cst_type(environment, resolve, db)
                 } else {
                     Type::UNIT
                 };
-                let return_type = Self::from_cst_type(&function.return_type, resolve);
+                let return_type = Self::from_cst_type(&function.return_type, resolve, db);
                 // TODO: Effects
                 let effects = Type::UNIT;
-                Type::Function(Arc::new(FunctionType { parameters, environment, return_type, effects }))
+                let f = Type::Function(Arc::new(FunctionType { parameters, environment, return_type, effects }));
+                (f, Kind::Type)
             },
-            crate::parser::cst::Type::Error => Type::ERROR,
-            crate::parser::cst::Type::Unit => Type::UNIT,
-            crate::parser::cst::Type::Pair => Type::PAIR,
+            crate::parser::cst::Type::Error => (Type::ERROR, Kind::Error),
+            crate::parser::cst::Type::Unit => (Type::UNIT, Kind::Type),
+            crate::parser::cst::Type::Pair => (Type::PAIR, Kind::TypeConstructorSimple(NonZeroUsize::new(2).unwrap())),
             crate::parser::cst::Type::Application(f, args) => {
-                let f = Self::from_cst_type(f, resolve);
-                let args = mapvec(args, |typ| Self::from_cst_type(typ, resolve));
-                Type::Application(Arc::new(f), Arc::new(args))
+                let (f, f_kind) = Self::from_cst_type_helper(f, resolve, db);
+
+                let (args, arg_kinds): (_, Vec<_>) = args.iter().map(|typ| Self::from_cst_type_helper(typ, resolve, db)).unzip();
+
+                if !f_kind.accepts_arguments(&arg_kinds) {
+                    todo!("kind error")
+                }
+
+                // TODO: We assume this always produces a type but this is not true if we ever
+                // allow partial application of type constructors
+                let typ = Type::Application(Arc::new(f), Arc::new(args));
+                (typ, Kind::Type)
             },
-            crate::parser::cst::Type::Reference(mutability, sharedness) => {
-                Type::Primitive(PrimitiveType::Reference(*mutability, *sharedness))
+            crate::parser::cst::Type::Reference(kind) => {
+                (Type::Primitive(PrimitiveType::Reference(*kind)), Kind::Type)
             },
         }
     }
@@ -656,10 +660,18 @@ impl std::fmt::Display for PrimitiveType {
             PrimitiveType::String => write!(f, "String"),
             PrimitiveType::Char => write!(f, "Char"),
             PrimitiveType::Pair => write!(f, ","),
-            PrimitiveType::Reference(Mutability::Immutable, Sharedness::Shared) => write!(f, "ref"),
-            PrimitiveType::Reference(Mutability::Immutable, Sharedness::Owned) => write!(f, "imm"),
-            PrimitiveType::Reference(Mutability::Mutable, Sharedness::Shared) => write!(f, "mut"),
-            PrimitiveType::Reference(Mutability::Mutable, Sharedness::Owned) => write!(f, "uniq"),
+            PrimitiveType::Reference(kind) => write!(f, "{kind}"),
+        }
+    }
+}
+
+impl std::fmt::Display for ReferenceKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ReferenceKind::Ref => write!(f, "ref"),
+            ReferenceKind::Mut => write!(f, "mut"),
+            ReferenceKind::Imm => write!(f, "imm"),
+            ReferenceKind::Uniq => write!(f, "uniq"),
         }
     }
 }

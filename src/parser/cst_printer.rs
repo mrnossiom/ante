@@ -9,7 +9,7 @@ use crate::{
     lexer::token::INDEX_OPERATOR_FUNCTION_NAME,
     name_resolution::{Origin, namespace::SourceFileId},
     parser::{
-        cst::{Argument, Constructor, TopLevelItemKind},
+        cst::{Argument, Constructor, ReferenceKind, TopLevelItemKind},
         ids::{IdStore, NameId, PathId},
     },
     type_inference::{patterns::DecisionTree, types},
@@ -19,8 +19,8 @@ use super::{
     TopLevelContext,
     cst::{
         Call, Comptime, Cst, Declaration, Definition, EffectDefinition, EffectType, Expr, Extern, FunctionType, Handle,
-        HandlePattern, If, Import, Lambda, Literal, Match, MemberAccess, Mutability, Parameter, Path, Pattern, Quoted,
-        Reference, SequenceItem, Sharedness, TopLevelItem, TraitDefinition, TraitImpl, Type, TypeAnnotation,
+        HandlePattern, If, Import, Lambda, Literal, Match, MemberAccess, Parameter, Path, Pattern, Quoted,
+        Reference, SequenceItem, TopLevelItem, TraitDefinition, TraitImpl, Type, TypeAnnotation,
         TypeDefinition, TypeDefinitionBody,
     },
     ids::{ExprId, PatternId, TopLevelId},
@@ -496,16 +496,16 @@ impl<'a> CstDisplay<'a> {
             Type::String => write!(f, "String"),
             Type::Char => write!(f, "Char"),
             Type::Pair => write!(f, ","),
-            Type::Reference(mutable, shared) => self.fmt_reference_type(*mutable, *shared, f),
+            Type::Reference(kind) => self.fmt_reference_type(*kind, f),
         }
     }
 
-    fn fmt_reference_type(&self, mutable: Mutability, shared: Sharedness, f: &mut Formatter) -> std::fmt::Result {
-        match (mutable, shared) {
-            (Mutability::Immutable, Sharedness::Shared) => write!(f, "ref"),
-            (Mutability::Mutable, Sharedness::Shared) => write!(f, "mut"),
-            (Mutability::Immutable, Sharedness::Owned) => write!(f, "imm"),
-            (Mutability::Mutable, Sharedness::Owned) => write!(f, "uniq"),
+    fn fmt_reference_type(&self, kind: ReferenceKind, f: &mut Formatter) -> std::fmt::Result {
+        match kind {
+            ReferenceKind::Ref => write!(f, "ref"),
+            ReferenceKind::Mut => write!(f, "mut"),
+            ReferenceKind::Imm => write!(f, "imm"),
+            ReferenceKind::Uniq => write!(f, "uniq"),
         }
     }
 
@@ -968,7 +968,7 @@ impl<'a> CstDisplay<'a> {
     }
 
     fn fmt_reference(&mut self, reference: &Reference, context: &impl IdStore, f: &mut Formatter) -> std::fmt::Result {
-        self.fmt_reference_type(reference.mutability, reference.sharedness, f)?;
+        self.fmt_reference_type(reference.kind, f)?;
         write!(f, " ")?;
         self.fmt_expr(reference.rhs, context, f)
     }

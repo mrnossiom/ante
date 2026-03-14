@@ -19,7 +19,8 @@ use crate::{
 
 impl<'local, 'inner> TypeChecker<'local, 'inner> {
     pub(super) fn check_definition(&mut self, definition: &Definition) {
-        let expected_generalized_type = try_get_type(definition, self.current_context(), &self.current_resolve());
+        let expected_generalized_type =
+            try_get_type(definition, self.current_context(), &self.current_resolve(), self.compiler);
         let expected_type = match expected_generalized_type {
             // Ignore a possible `forall` here, we don't support polymorphic recursion
             Some(typ) => typ.ignore_forall().clone(),
@@ -450,7 +451,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     }
 
     fn check_reference(&mut self, reference: &cst::Reference, expected: &Type, expr: ExprId) {
-        let actual = Type::reference(reference.mutability, reference.sharedness);
+        let actual = Type::reference(reference.kind);
 
         let expected_element_type = match self.follow_type(expected) {
             Type::Application(constructor, args) => {

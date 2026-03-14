@@ -24,7 +24,7 @@ pub fn get_type_impl(context: &GetType, compiler: &DbHandle) -> Type {
     let typ = match &item.kind {
         TopLevelItemKind::Definition(definition) => {
             let resolve = Resolve(context.0.top_level_item).get(compiler);
-            try_get_type(definition, &item_context, &resolve).unwrap_or_else(|| {
+            try_get_type(definition, &item_context, &resolve, compiler).unwrap_or_else(|| {
                 let check = TypeCheck(context.0.top_level_item).get(compiler);
                 let typ = check.get_generalized(context.0.local_name_id);
                 typ.follow_all(&check.bindings)
@@ -50,10 +50,10 @@ pub fn get_type_impl(context: &GetType, compiler: &DbHandle) -> Type {
 /// want instead to succeed with partial types, filling in holes as needed for better type
 /// errors.
 pub(super) fn try_get_type(
-    definition: &Definition, context: &TopLevelContext, resolve: &ResolutionResult,
+    definition: &Definition, context: &TopLevelContext, resolve: &ResolutionResult, compiler: &DbHandle
 ) -> Option<Type> {
     if let Pattern::TypeAnnotation(_, typ) = &context.patterns[definition.pattern] {
-        return Some(Type::from_cst_type(typ, resolve));
+        return Some(Type::from_cst_type(typ, resolve, compiler));
     }
 
     if let Expr::Lambda(lambda) = &context.exprs[definition.rhs] {
@@ -77,7 +77,7 @@ pub(super) fn try_get_type(
 
         // We construct a function type to convert wholesale instead of converting as we go
         // to avoid repeating logic in [Type::from_cst_type], namely handling of effect types.
-        let typ = Type::from_cst_type(&cst::Type::Function(cst_function_type), resolve);
+        let typ = Type::from_cst_type(&cst::Type::Function(cst_function_type), resolve, compiler);
         Some(typ.generalize(&TypeBindings::default()))
     } else {
         None

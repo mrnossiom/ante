@@ -480,7 +480,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     }
 
     fn from_cst_type(&self, typ: &cst::Type) -> Type {
-        Type::from_cst_type(typ, self.current_resolve())
+        Type::from_cst_type(typ, self.current_resolve(), self.compiler)
     }
 
     /// Try to retrieve the types of each field of the given type.

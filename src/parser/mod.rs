@@ -1,6 +1,6 @@
 use std::{collections::BTreeMap, sync::Arc};
 
-use cst::{Comptime, Declaration, EffectType, Lambda, MemberAccess, Mutability, Name, Parameter, Pattern, Sharedness};
+use cst::{Comptime, Declaration, EffectType, Lambda, MemberAccess, Name, Parameter, Pattern};
 use ids::{ExprId, NameId, PathId, PatternId, TopLevelId};
 use rustc_hash::FxHashSet;
 use serde::{Deserialize, Serialize};
@@ -777,22 +777,22 @@ impl<'tokens> Parser<'tokens> {
 
     // TODO: Parse lifetime & element type
     fn parse_reference_type(&mut self) -> Result<Type> {
-        let (mutability, sharedness) = match self.current_token() {
-            Token::Ref => (cst::Mutability::Immutable, cst::Sharedness::Shared),
-            Token::Mut => (cst::Mutability::Mutable, cst::Sharedness::Shared),
-            Token::Imm => (cst::Mutability::Immutable, cst::Sharedness::Owned),
-            Token::Uniq => (cst::Mutability::Mutable, cst::Sharedness::Owned),
+        let kind = match self.current_token() {
+            Token::Ref => cst::ReferenceKind::Ref,
+            Token::Mut => cst::ReferenceKind::Mut,
+            Token::Imm => cst::ReferenceKind::Imm,
+            Token::Uniq => cst::ReferenceKind::Uniq,
             _ => return self.expected("a reference type"),
         };
 
         self.advance();
-        self.parse_reference_element_type(mutability, sharedness)
+        self.parse_reference_element_type(kind)
     }
 
-    fn parse_reference_element_type(&mut self, mutability: cst::Mutability, shared: cst::Sharedness) -> Result<Type> {
+    fn parse_reference_element_type(&mut self, kind: cst::ReferenceKind) -> Result<Type> {
         match self.parse_type_application() {
-            Ok(application) => Ok(Type::Application(Box::new(Type::Reference(mutability, shared)), vec![application])),
-            Err(_) => Ok(Type::Reference(mutability, shared)),
+            Ok(application) => Ok(Type::Application(Box::new(Type::Reference(kind)), vec![application])),
+            Err(_) => Ok(Type::Reference(kind)),
         }
     }
 
@@ -1359,20 +1359,6 @@ impl<'tokens> Parser<'tokens> {
                 let function = this.push_expr(Expr::Variable(path_id), operator_location);
                 Ok(Expr::Call(Call { function, arguments: vec![rhs] }))
             }),
-            operator @ (Token::ExclamationMark | Token::Ampersand) => {
-                let mutability = match operator {
-                    Token::ExclamationMark => Mutability::Mutable,
-                    Token::Ampersand => Mutability::Immutable,
-                    _ => unreachable!(),
-                };
-
-                self.with_expr_id_and_location(|this| {
-                    this.advance();
-                    let rhs = this.parse_left_unary()?;
-                    let sharedness = Sharedness::Shared;
-                    Ok(Expr::Reference(cst::Reference { mutability, sharedness, rhs }))
-                })
-            },
             Token::BraceLeft => {
                 self.advance();
                 let expr = self.parse_expression()?;

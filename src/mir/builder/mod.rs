@@ -3,9 +3,12 @@
 //!
 //! For more on the Medium-level IR (MIR) itself, see [super].
 //!
-//! Although the MIR may eventually be monomorphized, the initial output of this builder uses a
-//! uniform representation instead, relying on a later pass to manually specialize each function
-//! if desired.
+//! Although the MIR may eventually be monomorphized, the initial output of this builder keeps
+//! the original generics, relying on a later pass to manually either specialize each function
+//! or existentialize it.
+//!
+//! The MIR-builder will however, perform closure conversion on any functions with closure types
+//! it finds.
 use std::{
     collections::BTreeMap,
     sync::{Arc, LazyLock},

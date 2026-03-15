@@ -55,7 +55,7 @@ impl candidate2: Foo Thing with
 //     (foo: fn a -> Unit pure) = fn (a: a) -> (bar: fn {Baz _ _} -> Bar _ _ pure) (a: a)
 // 
 // implicit (bar: fn {Baz a _} -> Bar a Unit pure) {(_: Baz a _)} : Bar a pure = Bar a with
-//     (bar: fn a -> Unit pure) = fn (a: a) -> (baz: Baz Thing _) (a: a)
+//     (bar: fn a -> Unit pure) = fn (a: a) -> (baz: Baz Thing Unit) (a: a)
 // 
 // implicit (baz: Baz Thing Unit) = Baz Thing with
 //     (baz: fn Thing -> Unit pure) = fn (_: Thing) -> ()
@@ -73,7 +73,7 @@ impl candidate2: Foo Thing with
 // examples/typechecking/multiple_matching_impls.an:19:12	error: Expected fn _ [_] -> Unit can _ but found fn {Baz _ _} -> Bar _ _ pure
 //     foo a = bar a
 // 
-// examples/typechecking/multiple_matching_impls.an:22:12	error: Expected fn _ [_] -> Unit can _ but found Baz Thing _
+// examples/typechecking/multiple_matching_impls.an:22:12	error: Expected fn _ [_] -> Unit can _ but found Baz Thing Unit
 //     bar a = baz a
 // 
 // Found 3 errors and 0 warnings

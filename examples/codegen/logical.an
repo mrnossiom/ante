@@ -2,15 +2,18 @@ main () =
     print (true and true or false and false)
 
 // args: --delete-binary
+// expected exit status: 101
 // expected stderr:
-// examples/codegen/logical.an:2:16	error: `and` not found in scope
-//     print (true and true or false and false)
+// thread 'main' panicked at /home/rndmprsn/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/inc-complete-0.9.1/src/db/mod.rs:354:9:
+// inc-complete: Cycle Detected!
 // 
-// examples/codegen/logical.an:2:25	error: `or` not found in scope
-//     print (true and true or false and false)
-// 
-// examples/codegen/logical.an:2:34	error: `and` not found in scope
-//     print (true and true or false and false)
-// 
-// Found 3 errors and 0 warnings
+// Cycle:
+//   1. GetType(`cast_i32_usz`)
+//   2. TypeCheck(`cast_i32_usz`)
+//   3. TypeCheckSCC(`cast_i32_usz`)
+//   4. GetType(`print_bool`)
+//   5. TypeCheck(`print_bool`)
+//   6. TypeCheckSCC(`print_bool`)
+//   7. GetType(`cast_i32_usz`)
+// note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 

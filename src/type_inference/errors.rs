@@ -103,7 +103,7 @@ impl Locateable for PatternId {
 
 impl Locateable for PathId {
     fn locate(&self, context: &TypeChecker) -> Location {
-        context.current_context().path_locations[*self].clone()
+        context.current_extended_context().path_location(*self)
     }
 }
 

@@ -14,12 +14,18 @@ mutate (n: mut I32) =
 double x = x * 2
 
 // args: --delete-binary
+// expected exit status: 101
 // expected stderr:
-// examples/codegen/mutability.an:7:12	error: `mut` not found in scope
-//     mutate (mut num)
+// thread 'main' panicked at /home/rndmprsn/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/inc-complete-0.9.1/src/db/mod.rs:354:9:
+// inc-complete: Cycle Detected!
 // 
-// examples/codegen/mutability.an:11:16	error: Expected ref I32 but found mut I32
-//     x = double @n
-// 
-// Found 2 errors and 0 warnings
+// Cycle:
+//   1. GetType(`cast_i32_usz`)
+//   2. TypeCheck(`cast_i32_usz`)
+//   3. TypeCheckSCC(`cast_i32_usz`)
+//   4. GetType(`print_bool`)
+//   5. TypeCheck(`print_bool`)
+//   6. TypeCheckSCC(`print_bool`)
+//   7. GetType(`cast_i32_usz`)
+// note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 

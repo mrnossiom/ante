@@ -10,8 +10,7 @@
 //! The MIR-builder will however, perform closure conversion on any functions with closure types
 //! it finds.
 use std::{
-    collections::BTreeMap,
-    sync::{Arc, LazyLock},
+    collections::{BTreeMap, BTreeSet}, sync::{Arc, LazyLock}
 };
 
 use dashmap::DashMap;
@@ -107,7 +106,8 @@ struct Context<'local, Db> {
     current_function: Option<Definition>,
     current_block: BlockId,
 
-    variables: FxHashMap<Origin, Value>,
+    global_variables: FxHashMap<Origin, Value>,
+    local_variables: FxHashMap<NameId, Value>,
 
     finished_functions: FxHashMap<DefinitionId, Definition>,
     name_to_id: &'local SharedIdsMap,
@@ -126,7 +126,8 @@ impl<'local, Db> Context<'local, Db> {
             types,
             top_level_id,
             generics_in_scope: Default::default(),
-            variables: FxHashMap::default(),
+            global_variables: FxHashMap::default(),
+            local_variables: FxHashMap::default(),
             current_block: BlockId::ENTRY_BLOCK,
             current_function: None,
             finished_functions: Default::default(),
@@ -198,6 +199,14 @@ where
     fn expr_type(&self, expr: ExprId) -> Type {
         let typ = &self.types.result.maps.expr_types[&expr];
         self.convert_type(typ, None)
+    }
+
+    /// Defines the given value in local or global scope depending on its origin
+    fn define_variable(&mut self, origin: Origin, value: Value) {
+        match origin {
+            Origin::Local(name) => self.local_variables.insert(name, value),
+            other => self.global_variables.insert(other, value),
+        };
     }
 
     /// Retrieves the corresponding [DefinitionId] for a particular [TopLevelName].
@@ -290,22 +299,25 @@ where
                 self.make_definition_value(id, name, typ)
             },
             Some(origin @ Origin::Builtin(Builtin::PairConstructor)) => {
-                if let Some(existing) = self.variables.get(&origin) {
+                if let Some(existing) = self.global_variables.get(&origin) {
                     *existing
                 } else {
                     let function = self.define_pair_constructor();
-                    self.variables.insert(origin, function);
+                    self.global_variables.insert(origin, function);
                     function
                 }
             },
-            Some(origin) => *self
-                .variables
+            Some(Origin::Local(name)) => *self
+                .local_variables
+                .get(&name)
+                .unwrap_or_else(|| panic!("No cached variable for {} with name {name}", self.context()[path_id])),
+            Some(origin @ Origin::Builtin(_)) =>  *self
+                .global_variables
                 .get(&origin)
                 .unwrap_or_else(|| panic!("No cached variable for {} with origin {origin}", self.context()[path_id])),
-            None => {
-                eprintln!("Warning: no origin for {path_id:?}: {}", self.context()[path_id]);
-                Value::Error
-            },
+            Some(Origin::TypeResolution) => unreachable!("Unresolved TypeResolution origin found"),
+            // This is possible if there were errors during name resolution
+            None => Value::Error,
         };
 
         // If this type was instantiated, then we need to recover the pre-instantiated
@@ -488,15 +500,26 @@ where
         &mut self, lambda: &cst::Lambda, name_id: Option<NameId>, name: Option<Name>, expr: ExprId, is_global: bool,
     ) -> Value {
         let name = name.unwrap_or_else(|| Arc::new("lambda".to_string()));
-        let typ = self.convert_type(&self.types.result.maps.expr_types[&expr], None);
+        let full_type = self.convert_type(&self.types.result.maps.expr_types[&expr], None);
+
+        // Is this a closure?
+        let mut environment = None;
+        let function_type = if let Type::Tuple(fields) = &full_type {
+            assert_eq!(fields.len(), 2);
+            environment = Some(fields[1].clone());
+            fields[0].clone()
+        } else {
+            full_type.clone()
+        };
 
         // Lambdas aren't really generic but they may capture generics from their containing
         // function. Marking them as generic here effectively hoists out the generic parameters.
         // It also means we have to instantiate lambdas when they're used with the current generic
         // parameters.
         let generics_count = self.generics_in_scope.len() as u32;
+        let old_scope = std::mem::take(&mut self.local_variables);
 
-        let id = self.new_definition(name.clone(), name_id, generics_count, typ.clone(), |this| {
+        let id = self.new_definition(name.clone(), name_id, generics_count, function_type.clone(), |this| {
             for (i, parameter) in lambda.parameters.iter().enumerate() {
                 let parameter_type = &this.types.result.maps.pattern_types[&parameter.pattern];
                 this.push_parameter(this.convert_type(parameter_type, None));
@@ -505,18 +528,78 @@ where
                 this.bind_pattern(parameter.pattern, parameter_value);
             }
 
+            if let Some(free_vars) = this.context().get_closure_environment(expr) {
+                this.push_parameter(environment.unwrap());
+
+                let environment = Value::Parameter(this.current_block, lambda.parameters.len() as u32);
+                this.unpack_closure_environment(free_vars.iter().copied(), environment);
+            }
+
             let return_value = this.expression(lambda.body);
             this.terminate_block(TerminatorInstruction::Return(return_value));
         });
 
+        self.local_variables = old_scope;
+
         // If this is a generic lambda, it will have generics forward from the currenty context
         // which we need to manually instantiate.
-        let mut value = self.make_definition_value(id, name, typ.clone());
+        let mut value = self.make_definition_value(id, name, function_type.clone());
         if !is_global && !self.generics_in_scope.is_empty() {
             let bindings = Arc::new(mapvec(0..self.generics_in_scope.len() as u32, |i| Type::Generic(Generic(i))));
-            value = self.push_instruction(Instruction::Instantiate(id, bindings), typ);
+            value = self.push_instruction(Instruction::Instantiate(id, bindings), function_type);
+        }
+        if let Some(free_vars) = self.context().get_closure_environment(expr) {
+            let environment = self.pack_closure_environment(free_vars);
+            value = self.push_instruction(Instruction::MakeTuple(vec![value, environment]), full_type);
         }
         value
+    }
+
+    /// Packs each given variable into a closure environment tuple.
+    /// Expects to be called after [Self::unpack_closure_environment]
+    fn pack_closure_environment(&mut self, free_vars: &BTreeSet<NameId>) -> Value {
+        // We must match the packing done in [type_inference::free_vars::make_tuple_type]
+        assert!(!free_vars.is_empty());
+
+        // Iterating in reverse makes it easier to create the `(_, (_, (_, _)))`-shaped env
+        let mut vars = free_vars.iter().rev();
+        let mut env = *self.local_variables.get(vars.next().unwrap()).unwrap();
+
+        for var in vars {
+            let value = *self.local_variables.get(var).unwrap();
+            let value_type = self.type_of_value(&value);
+            let env_type = self.type_of_value(&env);
+            let make_tuple = Instruction::MakeTuple(vec![value, env]);
+            env = self.push_instruction(make_tuple, Type::tuple(vec![value_type, env_type]));
+        }
+
+        env
+    }
+
+    /// Unpack a closure environment tuple parameter, defining each name id captured in the
+    /// closure. Expects `free_vars` to be non-empty.
+    ///
+    /// Note that this modifies `self.local_variables`
+    fn unpack_closure_environment(&mut self, mut free_vars: impl ExactSizeIterator<Item = NameId>, environment: Value) {
+        let next_var = free_vars.next().unwrap();
+
+        if free_vars.len() == 0 {
+            let existing = self.local_variables.insert(next_var, environment);
+            assert!(existing.is_none(), "Closure is overwriting values from the outer scope");
+        } else {
+            let index0 = Instruction::IndexTuple { tuple: environment, index: 0 };
+            let index1 = Instruction::IndexTuple { tuple: environment, index: 1 };
+
+            let Type::Tuple(env_fields) = self.type_of_value(&environment) else { unreachable!() };
+            assert_eq!(env_fields.len(), 2);
+
+            let extract0 = self.push_instruction(index0, env_fields[0].clone());
+            let extract1 = self.push_instruction(index1, env_fields[1].clone());
+
+            let existing = self.local_variables.insert(next_var, extract0);
+            assert!(existing.is_none(), "Closure is overwriting values from the outer scope");
+            self.unpack_closure_environment(free_vars, extract1);
+        }
     }
 
     fn if_(&mut self, if_: &cst::If, expr: ExprId) -> Value {
@@ -623,7 +706,7 @@ where
                         let field_type = Self::tuple_field_type(&variant_type, i);
                         let index_tuple = Instruction::IndexTuple { tuple: variant, index: i as u32 };
                         let field = self.push_instruction(index_tuple, field_type);
-                        self.variables.insert(origin, field);
+                        self.define_variable(origin, field);
                     }
                 }
             }
@@ -722,10 +805,9 @@ where
         match &self.context()[pattern] {
             cst::Pattern::Error => unreachable!("Error pattern encountered in bind_pattern"),
             cst::Pattern::Variable(name) => {
+                // This may be `None` if we had errors during name resolution
                 if let Some(origin) = self.context().name_origin(*name) {
-                    self.variables.insert(origin, value);
-                } else {
-                    eprintln!("Warning: no name_origin for {name}");
+                    self.define_variable(origin, value);
                 }
             },
             cst::Pattern::Literal(_) => (),
@@ -743,7 +825,7 @@ where
             cst::Pattern::TypeAnnotation(pattern, _) => self.bind_pattern(*pattern, value),
             cst::Pattern::MethodName { type_name: _, item_name } => {
                 if let Some(origin) = self.context().name_origin(*item_name) {
-                    self.variables.insert(origin, value);
+                    self.define_variable(origin, value);
                 }
             },
         }
@@ -865,14 +947,26 @@ where
             for (i, (field_name_id, _)) in fields.iter().enumerate() {
                 let Some(field_type) = field_mir_types.get(i) else { continue };
 
-                // Only generate wrappers for fields whose type is a function (all trait methods)
+                // Only generate wrappers for fields whose type is a function or closure (all trait methods)
                 // TODO: We should still generate wrappers for other types
-                let Type::Function(field_fn_type) = field_type else { continue };
+                let (value_param_types, return_type) = match field_type {
+                    Type::Function(fn_type) => {
+                        // Plain function (no captured environment)
+                        (fn_type.parameters.clone(), fn_type.return_type.clone())
+                    },
+                    Type::Tuple(tuple_fields) if tuple_fields.len() == 2 => {
+                        // Closure: Type::Tuple([fn(value_args..., env) -> ret, env])
+                        let Type::Function(fn_type) = &tuple_fields[0] else { continue };
+                        // Strip the trailing env parameter to get the value params
+                        let n = fn_type.parameters.len().saturating_sub(1);
+                        (fn_type.parameters[..n].to_vec(), fn_type.return_type.clone())
+                    },
+                    _ => continue,
+                };
 
                 // Wrapper: fn <value_args...> (struct_type) -> return_type
-                let mut wrapper_params = field_fn_type.parameters.clone();
+                let mut wrapper_params = value_param_types;
                 wrapper_params.push(struct_type.clone());
-                let return_type = field_fn_type.return_type.clone();
                 let wrapper_type = Type::Function(Arc::new(super::FunctionType {
                     parameters: wrapper_params.clone(),
                     return_type: return_type.clone(),
@@ -880,7 +974,7 @@ where
 
                 let name = self.context()[*field_name_id].clone();
                 let top_level_name = TopLevelName::new(self.top_level_id, *field_name_id);
-                let field_fn_type_clone = field_fn_type.clone();
+                let field_type_clone = field_type.clone();
                 let n_params = wrapper_params.len();
 
                 let id = self.new_definition(name.clone(), Some(*field_name_id), generic_count, wrapper_type, |this| {
@@ -889,19 +983,15 @@ where
                     }
                     // Last parameter is the struct (implicit receiver)
                     let struct_param = Value::Parameter(BlockId::ENTRY_BLOCK, n_params as u32 - 1);
-                    // Extract the method function stored at field index i inside the struct tuple
-                    let extracted_fn_type = Type::Function(Arc::new(super::FunctionType {
-                        parameters: field_fn_type_clone.parameters.clone(),
-                        return_type: field_fn_type_clone.return_type.clone(),
-                    }));
-                    let extracted_fn = this.push_instruction(
+                    // Extract the method (function or closure) stored at field index i inside the struct tuple
+                    let extracted = this.push_instruction(
                         Instruction::IndexTuple { tuple: struct_param, index: i as u32 },
-                        extracted_fn_type,
+                        field_type_clone,
                     );
-                    // Call the extracted function with the value arguments (all params except last)
+                    // Call the extracted function/closure with the value arguments (all params except last)
                     let value_args = mapvec(0..n_params - 1, |j| Value::Parameter(BlockId::ENTRY_BLOCK, j as u32));
                     let result = this.push_instruction(
-                        Instruction::Call { function: extracted_fn, arguments: value_args },
+                        Instruction::Call { function: extracted, arguments: value_args },
                         return_type.clone(),
                     );
                     this.terminate_block(TerminatorInstruction::Return(result));

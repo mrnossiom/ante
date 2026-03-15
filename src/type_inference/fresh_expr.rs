@@ -2,7 +2,7 @@
 //! during type-inference. This is most notably used when compiling match expressions
 //! where intermediate variables are created to simplify the decision tree structure.
 
-use std::{collections::BTreeMap, ops::Index, sync::Arc};
+use std::{collections::{BTreeMap, BTreeSet}, ops::Index, sync::Arc};
 
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
@@ -72,6 +72,10 @@ pub struct ExtendedTopLevelContext {
     ///
     /// Non-generic [PathId]s are not in this map.
     instantiations: FxHashMap<PathId, Vec<Type>>,
+
+    /// Any closure capturing an environment will have an entry into this map with the non-empty
+    /// set of variables it captures. Free functions are excluded from the map entirely.
+    closure_environments: FxHashMap<ExprId, BTreeSet<NameId>>,
 }
 
 impl<'local, 'innter> TypeChecker<'local, 'innter> {
@@ -114,6 +118,7 @@ impl ExtendedTopLevelContext {
             member_access_indices: Default::default(),
             constructor_field_orders: Default::default(),
             instantiations: Default::default(),
+            closure_environments: Default::default(),
         }
     }
 
@@ -274,6 +279,15 @@ impl ExtendedTopLevelContext {
 
     pub(crate) fn get_instantiation(&self, path: PathId) -> Option<&Vec<Type>> {
         self.instantiations.get(&path)
+    }
+
+    pub(crate) fn insert_closure_environment(&mut self, expr: ExprId, free_vars: BTreeSet<NameId>) {
+        self.closure_environments.insert(expr, free_vars);
+    }
+
+    /// Retrieves a closure's captured variables. Returns `None` if no variables are captured.
+    pub(crate) fn get_closure_environment(&self, expr: ExprId) -> Option<&BTreeSet<NameId>> {
+        self.closure_environments.get(&expr)
     }
 }
 

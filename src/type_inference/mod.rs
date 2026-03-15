@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, rc::Rc, sync::Arc};
 
 use inc_complete::DbGet;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -149,6 +149,11 @@ struct TypeChecker<'local, 'inner> {
     /// The outer Vec represents each scope (roughly each block of code),
     /// while the inner Vec is the implicits context for that scope. This contains
     implicits: Vec<ImplicitsContext>,
+
+    /// Tracks ExprIds for which `check_lambda` was called due to an implicit parameter coercion
+    /// wrapper. For these, `check_for_closure` is deferred until after `pop_implicits_scope` of
+    /// the enclosing lambda resolves the delayed implicits that fill in the wrapper's free vars.
+    coercion_wrapper_exprs: FxHashSet<ExprId>,
 }
 
 #[derive(Default, Clone)]
@@ -163,6 +168,10 @@ struct ImplicitsContext {
     /// and would fail searching for an implicit for `Cmp _` since we'd check `<` before its
     /// arguments while its type is still unknown.
     delayed_implicits: Vec<DelayedImplicit>,
+
+    /// Closure checks deferred for coercion wrapper lambdas. These are run after `delayed_implicits`
+    /// are resolved so that free-variable analysis sees the fully-resolved implicit arguments.
+    deferred_closure_checks: Vec<(ExprId, Type)>,
 }
 
 #[derive(Clone)]
@@ -202,6 +211,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             item_contexts,
             id_contexts,
             implicits: vec![Default::default()],
+            coercion_wrapper_exprs: Default::default(),
         };
 
         let mut item_types = FxHashMap::default();
@@ -244,14 +254,29 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         &self.item_contexts[&item].2
     }
 
+    /// Return the current extended context.
+    /// Note that this context only includes new items added by this type checker, it does
+    /// not contain any existing items from the resolver until the type checker finishes
+    /// and inserts the pre-existing items.
     fn current_extended_context(&self) -> &ExtendedTopLevelContext {
         let item = self.current_item.expect("TypeChecker: Expected current_item to be set");
         self.id_contexts.get(&item).expect("Expected TopLevelId to be in id_contexts")
     }
 
+    /// Return the current extended context.
+    /// Note that this context only includes new items added by this type checker, it does
+    /// not contain any existing items from the resolver until the type checker finishes
+    /// and inserts the pre-existing items.
     fn current_extended_context_mut(&mut self) -> &mut ExtendedTopLevelContext {
         let item = self.current_item.expect("TypeChecker: Expected current_item to be set");
         self.id_contexts.get_mut(&item).expect("Expected TopLevelId to be in id_contexts")
+    }
+
+    /// Returns the [Origin] of the given [PathId]. May return [None] if there
+    /// was an error during name resolution.
+    fn path_origin(&self, path: PathId) -> Option<Origin> {
+        let origin = self.current_resolve().path_origins.get(&path).copied();
+        origin.or_else(|| self.current_extended_context().path_origin(path))
     }
 
     fn finish(mut self, items: Vec<TypeMaps>) -> TypeCheckSCCResult {
@@ -349,6 +374,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             {
                 if let Some(new_expr) = self.implicit_parameter_coercion(actual_fn.clone(), expected_fn.clone(), expr) {
                     self.current_extended_context_mut().insert_expr(expr, new_expr);
+                    self.coercion_wrapper_exprs.insert(expr);
                     true
                 } else {
                     false

@@ -5,12 +5,16 @@ _ = boom ()
 // args: --delete-binary
 // expected exit status: 101
 // expected stderr:
-// thread 'main' panicked at src/mir/validation.rs:181:21:
-// fn boom d463: fn Unit -> (U8, (Pointer,))
-//   b0(b0_0: Unit):
-//     v0: U8, ((U8, (error,)),) = id None_d529
-//     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Value type `U8, (Pointer,)` != result type `U8, ((U8, (error,)),)`
+// thread 'main' panicked at /home/rndmprsn/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/inc-complete-0.9.1/src/db/mod.rs:354:9:
+// inc-complete: Cycle Detected!
 // 
-//     return v0
+// Cycle:
+//   1. GetType(`cast_i32_usz`)
+//   2. TypeCheck(`cast_i32_usz`)
+//   3. TypeCheckSCC(`cast_i32_usz`)
+//   4. GetType(`print_bool`)
+//   5. TypeCheck(`print_bool`)
+//   6. TypeCheckSCC(`print_bool`)
+//   7. GetType(`cast_i32_usz`)
 // note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 

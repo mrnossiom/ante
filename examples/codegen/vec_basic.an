@@ -9,27 +9,18 @@ main () =
     print v
 
 // args: --delete-binary
+// expected exit status: 101
 // expected stderr:
-// examples/codegen/vec_basic.an:1:8	error: Could not find crate `Vec`
-// import Vec.empty push
+// thread 'main' panicked at /home/rndmprsn/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/inc-complete-0.9.1/src/db/mod.rs:354:9:
+// inc-complete: Cycle Detected!
 // 
-// examples/codegen/vec_basic.an:1:18	error: Expected a newline after the import but found `push`
-// import Vec.empty push
-// 
-// examples/codegen/vec_basic.an:4:12	error: `empty` not found in scope
-//     var v = empty ()
-// 
-// examples/codegen/vec_basic.an:6:4	error: `push` not found in scope
-//     push (mut v) 3i32
-// 
-// examples/codegen/vec_basic.an:6:10	error: `mut` not found in scope
-//     push (mut v) 3i32
-// 
-// examples/codegen/vec_basic.an:7:4	error: `push` not found in scope
-//     push (mut v) 4
-// 
-// examples/codegen/vec_basic.an:7:10	error: `mut` not found in scope
-//     push (mut v) 4
-// 
-// Found 7 errors and 0 warnings
+// Cycle:
+//   1. GetType(`cast_i32_usz`)
+//   2. TypeCheck(`cast_i32_usz`)
+//   3. TypeCheckSCC(`cast_i32_usz`)
+//   4. GetType(`print_bool`)
+//   5. TypeCheck(`print_bool`)
+//   6. TypeCheckSCC(`print_bool`)
+//   7. GetType(`cast_i32_usz`)
+// note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 

@@ -84,7 +84,7 @@ where
 fn monomorphize_non_generic_definition(
     definition: Definition, definitions: &SharedDefinitions, initial_mir: &Mir,
 ) -> Mir {
-    let mut context = FunctionContext::new(definitions);
+    let mut context = FunctionContext::new(definitions, initial_mir);
     context.monomorphize_definition(definition);
 
     while let Some(item) = context.queue.pop() {
@@ -125,6 +125,9 @@ struct FunctionContext<'local> {
 
     /// This is shared between all concurrent monomorphize calls
     definitions: &'local SharedDefinitions,
+
+    /// The initial pre-monomorphized MIR, used to look up original definition types
+    initial_mir: &'local Mir,
 }
 
 struct DefinitionToMonomorphize {
@@ -140,9 +143,10 @@ struct DefinitionToMonomorphize {
 type SharedDefinitions = DashMap<(DefinitionId, Arc<GenericBindings>), DefinitionId>;
 
 impl<'local> FunctionContext<'local> {
-    fn new(definitions: &'local SharedDefinitions) -> Self {
+    fn new(definitions: &'local SharedDefinitions, initial_mir: &'local Mir) -> Self {
         Self {
             definitions,
+            initial_mir,
             generic_mapping: Default::default(),
             queue: Default::default(),
             finished_definitions: Default::default(),

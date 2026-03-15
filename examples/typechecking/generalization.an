@@ -6,7 +6,7 @@ foo x =
 
 // args: -e ast-t
 // expected stdout:
-// (foo: fn _ -> fn _ -> _ can _ can _) (x: _) =
-//     (y: fn _ -> _ can _) (_: _) = (x: _)
-//     (y: fn _ -> _ can _)
+// (foo: fn _ -> fn _ [_] -> _ can _ can _) (x: _) =
+//     (y: fn _ [_] -> _ can _) (_: _) [(x: _)] = (x: _)
+//     (y: fn _ [_] -> _ can _)
 

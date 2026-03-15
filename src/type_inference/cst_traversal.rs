@@ -149,14 +149,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     }
 
     fn check_path(&mut self, path: PathId, expected: &Type, expr: Option<ExprId>) {
-        let origin = self
-            .current_resolve()
-            .path_origins
-            .get(&path)
-            .copied()
-            .or_else(|| self.current_extended_context().path_origin(path));
-
-        let actual = match origin {
+        let actual = match self.path_origin(path) {
             Some(Origin::TopLevelDefinition(id)) => self.type_of_top_level_name(&id, path),
             Some(Origin::Local(name)) => self.name_types[&name].clone(),
             Some(Origin::TypeResolution) => self.resolve_type_resolution(path, expected),
@@ -368,7 +361,19 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
 
         self.check_expr(lambda.body, &return_type);
         self.pop_implicits_scope();
-        self.check_for_closure(expr, &function_type.environment);
+
+        // pop_implicits_scope modifies the function by inserting implicit arguments, we need
+        // to check captures only after that step in case any of those arguments are captured.
+        if self.coercion_wrapper_exprs.contains(&expr) {
+            // For coercion wrapper lambdas, the implicit argument slots are filled in by the
+            // *enclosing* lambda's pop_implicits_scope. Defer the closure check to that scope
+            // so free-variable analysis sees the resolved arguments rather than Expr::Error.
+            if let Some(scope) = self.implicits.last_mut() {
+                scope.deferred_closure_checks.push((expr, function_type.environment.clone()));
+            }
+        } else {
+            self.check_for_closure(expr, &function_type.environment);
+        }
     }
 
     /// Check a function's parameter count using the given parameter types as the expected count.

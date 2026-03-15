@@ -53,17 +53,26 @@ where
     pub(super) fn convert_type(&self, typ: &TCType, args: Option<&[TCType]>) -> Type {
         match typ.follow(self.type_bindings) {
             TCType::Primitive(primitive_type) => self.convert_primitive_type(*primitive_type, args),
-            TCType::Generic(generic) => Type::Generic(self.generics_in_scope[&generic]),
+            TCType::Generic(generic) => self.generics_in_scope.get(&generic).map_or(Type::ERROR, |g| Type::Generic(*g)),
             // Type variables not in our generics map are unbound and should be errors
             TCType::Variable(id) => {
                 let generic = crate::type_inference::generics::Generic::Inferred(*id);
-                self.generics_in_scope.get(&generic).map_or(Type::ERROR, |&g| Type::Generic(g))
+                self.generics_in_scope.get(&generic).map_or(Type::ERROR, |g| Type::Generic(*g))
             },
             TCType::Function(function_type) => {
                 // TODO: Effects
-                let parameters = mapvec(&function_type.parameters, |typ| self.convert_type(&typ.typ, None));
+                let mut parameters = mapvec(&function_type.parameters, |typ| self.convert_type(&typ.typ, None));
+                let environment = self.convert_type(&function_type.environment, None);
                 let return_type = self.convert_type(&function_type.return_type, None);
-                Type::Function(Arc::new(FunctionType { parameters, return_type }))
+
+                // Check if this is a free function or a closure
+                if environment == Type::UNIT {
+                    Type::Function(Arc::new(FunctionType { parameters, return_type }))
+                } else {
+                    parameters.push(environment.clone());
+                    let f = Type::Function(Arc::new(FunctionType { parameters, return_type }));
+                    Type::tuple(vec![f, environment])
+                }
             },
             TCType::Application(constructor, new_args) => {
                 assert!(args.is_none());

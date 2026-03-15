@@ -1,0 +1,96 @@
+main () =
+    a = 1
+    b = 2
+    c = 3
+    free_function x = use x
+    captures1 x = use (x, a)
+    captures2 x = use (x, a, b)
+
+    captures_closure x = captures2 x
+
+    captures_nested x =
+        nested () = a
+        use (x, nested ())
+
+    _ = free_function 0
+    _ = captures1 0
+    _ = captures2 0
+    _ = captures_closure 0
+    _ = captures_nested 0
+
+use y = ()
+
+// args: -emir
+// expected stdout:
+// extern use d2: fn (I32, I32) -> Unit
+// 
+// fn main d0: forall '0 '1. fn Unit -> '0
+//   b0(b0_0: Unit):
+//     v0: fn I32 -> Unit = instantiate d1 '0 '1
+//     v1: fn I32 I32 -> Unit = instantiate d3 '0 '1
+//     v2: (fn I32 I32 -> Unit), I32 = (v1, 1_i32)
+//     v3: fn I32 (I32, I32) -> Unit = instantiate d5 '0 '1
+//     v4: I32, I32 = (1_i32, 2_i32)
+//     v5: (fn I32 (I32, I32) -> Unit), (I32, I32) = (v3, v4)
+//     v6: fn I32 ((fn I32 (I32, I32) -> Unit), (I32, I32)) -> Unit = instantiate d6 '0 '1
+//     v7: (fn I32 ((fn I32 (I32, I32) -> Unit), (I32, I32)) -> Unit), ((fn I32 (I32, I32) -> Unit), (I32, I32)) = (v6, v5)
+//     v8: fn I32 I32 -> Unit = instantiate d7 '0 '1
+//     v9: (fn I32 I32 -> Unit), I32 = (v8, 1_i32)
+//     v10: Unit = v0 0_i32
+//     v11: Unit = v2 0_i32
+//     v12: Unit = v5 0_i32
+//     v13: Unit = v7 0_i32
+//     v14: Unit = v9 0_i32
+//     return ()
+// 
+// fn captures_nested d7: forall '0 '1. fn I32 I32 -> Unit
+//   b0(b0_0: I32, b0_1: I32):
+//     v0: fn Unit I32 -> I32 = instantiate d8 '0 '1
+//     v1: (fn Unit I32 -> I32), I32 = (v0, b0_1)
+//     v2: fn (I32, I32) -> Unit = instantiate d2 I32, I32 error
+//     v3: I32 = v1 ()
+//     v4: I32, I32 = ,_d4 b0_0 v3
+//     v5: Unit = v2 v4
+//     return v5
+// 
+// fn captures1 d3: forall '0 '1. fn I32 I32 -> Unit
+//   b0(b0_0: I32, b0_1: I32):
+//     v0: fn (I32, I32) -> Unit = instantiate d2 I32, I32 error
+//     v1: I32, I32 = ,_d4 b0_0 b0_1
+//     v2: Unit = v0 v1
+//     return v2
+// 
+// fn captures_closure d6: forall '0 '1. fn I32 ((fn I32 (I32, I32) -> Unit), (I32, I32)) -> Unit
+//   b0(b0_0: I32, b0_1: (fn I32 (I32, I32) -> Unit), (I32, I32)):
+//     v0: Unit = b0_1 b0_0
+//     return v0
+// 
+// fn captures2 d5: forall '0 '1. fn I32 (I32, I32) -> Unit
+//   b0(b0_0: I32, b0_1: I32, I32):
+//     v0: I32 = b0_1.0
+//     v1: I32 = b0_1.1
+//     v2: fn (I32, (I32, I32)) -> Unit = instantiate d2 I32, (I32, I32) error
+//     v3: I32, I32 = ,_d4 v0 v1
+//     v4: I32, (I32, I32) = ,_d4 b0_0 v3
+//     v5: Unit = v2 v4
+//     return v5
+// 
+// fn free_function d1: forall '0 '1. fn I32 -> Unit
+//   b0(b0_0: I32):
+//     v0: fn I32 -> Unit = instantiate d2 I32 error
+//     v1: Unit = v0 b0_0
+//     return v1
+// 
+// fn nested d8: forall '0 '1. fn Unit I32 -> I32
+//   b0(b0_0: Unit, b0_1: I32):
+//     return b0_1
+// 
+// fn , d4: forall '0 '1. fn Pointer Pointer -> (Pointer, Pointer)
+//   b0(b0_0: Pointer, b0_1: Pointer):
+//     v0: '0, '1 = (b0_0, b0_1)
+//     return v0
+// 
+// fn use d2: forall '0 '1. fn '0 -> Unit
+//   b0(b0_0: '0):
+//     return ()
+

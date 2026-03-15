@@ -330,12 +330,12 @@ impl cmp_usz: Cmp Usz with (<) x y = intrinsic "LessUnsigned" x y
 // impl cmp_float: Cmp (Float a) with (<) x y = intrinsic "LessFloat" x y
 // 
 impl try_cast_i64_u64: TryCast I64 U64 with
-    try_cast x =
+    try_cast (x: I64) =
         if x < 0i64 then None
         else Some (transmute x)
 
 impl try_cast_u64: TryCast U64 I64 with
-    try_cast x =
+    try_cast (x: U64) =
         if x > 9_223_372_036_854_775_807u64 then None
         else Some (transmute x)
 

@@ -79,10 +79,16 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         // We must perform any queued requests before popping any implicits which should be visible
         if let Some(scope) = self.implicits.last_mut() {
             let delayed = std::mem::take(&mut scope.delayed_implicits);
+            let deferred = std::mem::take(&mut scope.deferred_closure_checks);
             for implicit in delayed {
                 if let Err(error) = self.find_implicit_value(implicit) {
                     self.compiler.accumulate(error);
                 }
+            }
+            // Run deferred closure checks after delayed implicits are resolved so that
+            // free-variable analysis sees the fully-resolved implicit arguments.
+            for (expr, env_type) in deferred {
+                self.check_for_closure(expr, &env_type);
             }
         }
 

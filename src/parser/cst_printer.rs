@@ -251,7 +251,7 @@ impl<'a> CstDisplay<'a> {
         }
 
         if let Expr::Lambda(lambda) = &context.get_expr(definition.rhs) {
-            return self.fmt_function(definition, lambda, context, f);
+            return self.fmt_function(definition, lambda, definition.rhs, context, f);
         }
 
         self.fmt_pattern(definition.pattern, context, f)?;
@@ -349,19 +349,34 @@ impl<'a> CstDisplay<'a> {
     }
 
     fn fmt_function(
-        &mut self, definition: &Definition, lambda: &Lambda, context: &impl IdStore, f: &mut Formatter,
+        &mut self, definition: &Definition, lambda: &Lambda, lambda_id: ExprId, context: &impl IdStore, f: &mut Formatter,
     ) -> std::fmt::Result {
         self.fmt_pattern_atom(definition.pattern, context, f)?;
-        self.fmt_lambda_inner(lambda, context, f, false)
+        self.fmt_lambda_inner(lambda, lambda_id, context, f, false)
     }
 
     /// Format each part of a lambda except the leading `fn`
     ///
     /// If `write_arrow` is true, `->` will be used as the body separator. Otherwise `=` is used.
     fn fmt_lambda_inner(
-        &mut self, lambda: &Lambda, context: &impl IdStore, f: &mut Formatter, write_arrow: bool,
+        &mut self, lambda: &Lambda, expr: ExprId, context: &impl IdStore, f: &mut Formatter, write_arrow: bool,
     ) -> std::fmt::Result {
         self.fmt_parameters(&lambda.parameters, context, f)?;
+
+        // Show the captured closure environment if we have it
+        if let Some(db) = self.db_type_check() {
+            let check = TypeCheck(self.current_item_id.unwrap()).get(db);
+            if let Some(env) = check.result.context.get_closure_environment(expr) {
+                write!(f, " [")?;
+                for (i, name) in env.iter().enumerate() {
+                    if i != 0 {
+                        write!(f, ", ")?;
+                    }
+                    self.fmt_name(*name, context, f)?;
+                }
+                write!(f, "]")?;
+            }
+        }
 
         if let Some(typ) = &lambda.return_type {
             write!(f, " : ")?;
@@ -591,7 +606,7 @@ impl<'a> CstDisplay<'a> {
             Expr::Definition(definition) => self.fmt_definition(definition, context, f),
             Expr::Call(call) => self.fmt_call(call, context, f),
             Expr::MemberAccess(access) => self.fmt_member_access(access, context, f),
-            Expr::Lambda(lambda) => self.fmt_lambda(lambda, context, f),
+            Expr::Lambda(lambda) => self.fmt_lambda(lambda, id, context, f),
             Expr::If(if_) => self.fmt_if(if_, context, f),
             Expr::Match(match_) => self.fmt_match(match_, context, id, f),
             Expr::Handle(handle_) => self.fmt_handle(handle_, context, f),
@@ -801,7 +816,7 @@ impl<'a> CstDisplay<'a> {
             self.fmt_name(*name, context, f)?;
 
             if let Expr::Lambda(lambda) = &context.get_expr(*expr) {
-                self.fmt_lambda_inner(lambda, context, f, false)?;
+                self.fmt_lambda_inner(lambda, *expr, context, f, false)?;
             } else {
                 write!(f, " =")?;
                 if !self.is_block(*expr, context) {
@@ -840,9 +855,9 @@ impl<'a> CstDisplay<'a> {
         self.fmt_declaration(&extern_.declaration, context, f)
     }
 
-    fn fmt_lambda(&mut self, lambda: &Lambda, context: &impl IdStore, f: &mut Formatter) -> std::fmt::Result {
+    fn fmt_lambda(&mut self, lambda: &Lambda, id: ExprId, context: &impl IdStore, f: &mut Formatter) -> std::fmt::Result {
         write!(f, "fn")?;
-        self.fmt_lambda_inner(lambda, context, f, true)
+        self.fmt_lambda_inner(lambda, id, context, f, true)
     }
 
     fn fmt_if(&mut self, if_: &If, context: &impl IdStore, f: &mut Formatter) -> std::fmt::Result {

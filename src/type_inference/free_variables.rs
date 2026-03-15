@@ -20,8 +20,12 @@ impl TypeChecker<'_, '_> {
         let mut context = FreeVars::default();
         context.find_free_variables(id, self);
 
-        let env_type = make_tuple_type(context.free_vars.into_iter(), self);
+        let env_type = make_tuple_type(context.free_vars.iter().copied(), self);
         self.unify(&env_type, expected_environment_type, TypeErrorKind::ClosureEnv, id);
+
+        if !context.free_vars.is_empty() {
+            self.current_extended_context_mut().insert_closure_environment(id, context.free_vars);
+        }
     }
 }
 
@@ -117,11 +121,14 @@ impl FreeVars {
     }
 
     fn find_free_variable(&mut self, path: PathId, checker: &TypeChecker) {
-        let origin = checker.current_extended_context().path_origin(path);
-        if let Some(Origin::Local(name)) = origin {
-            if !self.defined_in_fn.contains(&name) {
-                self.free_vars.insert(name);
-            }
+        if let Some(Origin::Local(name)) = checker.path_origin(path) {
+            self.check_name(name);
+        }
+    }
+
+    fn check_name(&mut self, name: NameId) {
+        if !self.defined_in_fn.contains(&name) {
+            self.free_vars.insert(name);
         }
     }
 }

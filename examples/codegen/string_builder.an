@@ -9,39 +9,18 @@ main () =
     print (to_string sb)
 
 // args: --delete-binary
+// expected exit status: 101
 // expected stderr:
-// examples/codegen/string_builder.an:1:8	error: Imports paths should have at least 2 components (e.g. `Foo.Bar`), otherwise nothing gets imported
-// import StringBuilder
+// thread 'main' panicked at /home/rndmprsn/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/inc-complete-0.9.1/src/db/mod.rs:354:9:
+// inc-complete: Cycle Detected!
 // 
-// examples/codegen/string_builder.an:3:0	error: Expected a top-level item but found a newline
-// main () =
-// 
-// examples/codegen/string_builder.an:4:12	error: `StringBuilder` not found in scope
-//     var sb: StringBuilder = empty ()
-// 
-// examples/codegen/string_builder.an:4:28	error: `empty` not found in scope
-//     var sb: StringBuilder = empty ()
-// 
-// examples/codegen/string_builder.an:5:4	error: `reserve` not found in scope
-//     reserve (mut sb) 10
-// 
-// examples/codegen/string_builder.an:5:13	error: `mut` not found in scope
-//     reserve (mut sb) 10
-// 
-// examples/codegen/string_builder.an:6:4	error: `append` not found in scope
-//     append (mut sb) "你好，"
-// 
-// examples/codegen/string_builder.an:6:12	error: `mut` not found in scope
-//     append (mut sb) "你好，"
-// 
-// examples/codegen/string_builder.an:7:4	error: `append` not found in scope
-//     append (mut sb) " World!"
-// 
-// examples/codegen/string_builder.an:7:12	error: `mut` not found in scope
-//     append (mut sb) " World!"
-// 
-// examples/codegen/string_builder.an:9:11	error: `to_string` not found in scope
-//     print (to_string sb)
-// 
-// Found 11 errors and 0 warnings
+// Cycle:
+//   1. GetType(`cast_i32_usz`)
+//   2. TypeCheck(`cast_i32_usz`)
+//   3. TypeCheckSCC(`cast_i32_usz`)
+//   4. GetType(`print_bool`)
+//   5. TypeCheck(`print_bool`)
+//   6. TypeCheckSCC(`print_bool`)
+//   7. GetType(`cast_i32_usz`)
+// note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 

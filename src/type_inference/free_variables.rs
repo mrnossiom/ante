@@ -20,7 +20,7 @@ impl TypeChecker<'_, '_> {
         let mut context = FreeVars::default();
         context.find_free_variables(id, self);
 
-        let env_type = make_tuple_type(context.free_vars.iter().copied(), self);
+        let env_type = make_tuple_type_with_names(&context.free_vars, self);
         self.unify(&env_type, expected_environment_type, TypeErrorKind::ClosureEnv, id);
 
         if !context.free_vars.is_empty() {
@@ -133,16 +133,22 @@ impl FreeVars {
     }
 }
 
-fn make_tuple_type(mut free_vars: impl ExactSizeIterator<Item = NameId>, checker: &TypeChecker) -> Type {
+fn make_tuple_type_with_names(free_vars: &BTreeSet<NameId>, checker: &TypeChecker) -> Type {
+    let free_vars = free_vars.iter().map(|name| {
+        checker.name_types[name].clone()
+    });
+    make_tuple_type(free_vars)
+}
+
+pub(crate) fn make_tuple_type(mut free_vars: impl ExactSizeIterator<Item = Type>) -> Type {
     let Some(free_var) = free_vars.next() else {
         return Type::UNIT;
     };
 
-    let free_var_type = checker.name_types[&free_var].clone();
     if free_vars.len() == 0 {
-        free_var_type
+        free_var
     } else {
-        let rest = make_tuple_type(free_vars, checker);
-        Type::Application(Arc::new(Type::PAIR), Arc::new(vec![free_var_type, rest]))
+        let rest = make_tuple_type(free_vars);
+        Type::Application(Arc::new(Type::PAIR), Arc::new(vec![free_var, rest]))
     }
 }

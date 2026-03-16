@@ -24,7 +24,6 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             self.current_context(),
             &self.current_resolve(),
             self.compiler,
-            &mut self.next_type_variable_id,
         );
         let expected_type = match expected_generalized_type {
             // Ignore a possible `forall` here, we don't support polymorphic recursion

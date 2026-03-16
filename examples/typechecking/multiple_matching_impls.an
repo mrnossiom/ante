@@ -51,17 +51,17 @@ impl candidate2: Foo Thing with
 // (main: fn Unit -> _ can _) () =
 //     (foo: (error)) ((Thing: fn Unit -> Thing pure) ())
 // 
-// implicit (candidate1: fn {Bar a _} -> Foo a Unit pure) {(_: Bar a _)} : Foo a pure = Foo a with
-//     (foo: fn a -> Unit pure) = fn (a: a) -> (bar: fn {Baz _ _} -> Bar _ _ pure) (a: a)
+// implicit (candidate1: fn {Bar a _} -> Foo a (Bar a _) can _) {(_: Bar a _)} : Foo a (Bar a) pure = Foo a (Bar a) with
+//     (foo: fn a [Bar a _] -> Unit pure) = fn (a: a) -> (bar: fn {Baz _ _} -> Bar _ (Baz _ _) can _) (a: a)
 // 
-// implicit (bar: fn {Baz a _} -> Bar a Unit pure) {(_: Baz a _)} : Bar a pure = Bar a with
-//     (bar: fn a -> Unit pure) = fn (a: a) -> (baz: Baz Thing Unit) (a: a)
+// implicit (bar: fn {Baz a _} -> Bar a (Baz a _) can _) {(_: Baz a _)} : Bar a (Baz a) pure = Bar a (Baz a) with
+//     (bar: fn a [Baz a _] -> Unit pure) = fn (a: a) -> (baz: Baz Thing Unit) (a: a)
 // 
 // implicit (baz: Baz Thing Unit) = Baz Thing with
 //     (baz: fn Thing -> Unit pure) = fn (_: Thing) -> ()
 // 
-// implicit (does_not_match: fn {Print a _} -> Foo a Unit pure) {(_: Print a _)} : Foo a pure = Foo a with
-//     (foo: fn a -> Unit pure) = fn (_: a) -> ()
+// implicit (does_not_match: fn {Print a _} -> Foo a (Print a _) can _) {(_: Print a _)} : Foo a (Print a) pure = Foo a (Print a) with
+//     (foo: fn a [Print a _] -> Unit pure) = fn (_: a) -> ()
 // 
 // implicit (candidate2: Foo Thing Unit) = Foo Thing with
 //     (foo: fn Thing -> Unit pure) = fn (_: Thing) -> ()
@@ -70,11 +70,20 @@ impl candidate2: Foo Thing with
 // examples/typechecking/multiple_matching_impls.an:15:4	error: `foo` not found in scope
 //     foo (Thing ())
 // 
-// examples/typechecking/multiple_matching_impls.an:19:12	error: Expected fn _ [_] -> Unit can _ but found fn {Baz _ _} -> Bar _ _ pure
+// examples/typechecking/multiple_matching_impls.an:19:4	error: Expected the closure environment Bar a _, but the actual environment was of type Unit
 //     foo a = bar a
+// 
+// examples/typechecking/multiple_matching_impls.an:19:12	error: Expected fn _ [_] -> Unit can _ but found fn {Baz _ _} -> Bar _ (Baz _ _) can _
+//     foo a = bar a
+// 
+// examples/typechecking/multiple_matching_impls.an:22:4	error: Expected the closure environment Baz a _, but the actual environment was of type Unit
+//     bar a = baz a
 // 
 // examples/typechecking/multiple_matching_impls.an:22:12	error: Expected fn _ [_] -> Unit can _ but found Baz Thing Unit
 //     bar a = baz a
 // 
-// Found 3 errors and 0 warnings
+// examples/typechecking/multiple_matching_impls.an:30:4	error: Expected the closure environment Print a _, but the actual environment was of type Unit
+//     foo _ = ()
+// 
+// Found 6 errors and 0 warnings
 

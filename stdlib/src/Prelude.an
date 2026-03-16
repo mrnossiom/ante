@@ -154,7 +154,7 @@ impl cast_i32_float: Cast I32 (Float a) with cast x = intrinsic "SignedToFloat" 
 impl cast_i64_float: Cast I64 (Float a) with cast x = intrinsic "SignedToFloat" x
 impl cast_isz_float: Cast Isz (Float a) with cast x = intrinsic "SignedToFloat" x
 
-impl cast_u8 _float: Cast U8  (Float a) with cast x = intrinsic "UnsignedToFloat" x
+impl cast_u8_float: Cast U8  (Float a) with cast x = intrinsic "UnsignedToFloat" x
 impl cast_u16_float: Cast U16 (Float a) with cast x = intrinsic "UnsignedToFloat" x
 impl cast_u32_float: Cast U32 (Float a) with cast x = intrinsic "UnsignedToFloat" x
 impl cast_u64_float: Cast U64 (Float a) with cast x = intrinsic "UnsignedToFloat" x

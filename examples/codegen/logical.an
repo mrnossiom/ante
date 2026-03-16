@@ -4,7 +4,7 @@ main () =
 // args: --delete-binary
 // expected exit status: 101
 // expected stderr:
-// thread 'main' panicked at /home/rndmprsn/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/inc-complete-0.9.1/src/db/mod.rs:354:9:
+// thread 'main' panicked at /Users/jakefecher/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/inc-complete-0.9.1/src/db/mod.rs:354:9:
 // inc-complete: Cycle Detected!
 // 
 // Cycle:

@@ -10,7 +10,21 @@ use crate::{
             TraitImpl, Type, TypeDefinitionBody, TypeKind,
         },
     },
+    diagnostics::Location,
 };
+
+fn make_tuple_type(location: &Location, mut types: impl ExactSizeIterator<Item = Type>) -> Type {
+    let Some(first) = types.next() else {
+        return Type::new(TypeKind::Unit, location.clone());
+    };
+    if types.len() == 0 {
+        first
+    } else {
+        let rest = make_tuple_type(location, types);
+        let pair = Type::new(TypeKind::Pair, location.clone());
+        Type::new(TypeKind::Application(Box::new(pair), vec![first, rest]), location.clone())
+    }
+}
 
 pub fn get_item_impl(context: &GetItem, db: &DbHandle) -> (Arc<TopLevelItem>, Arc<TopLevelContext>) {
     let (item, context) = GetItemRaw(context.0).get(db);
@@ -41,21 +55,37 @@ pub fn get_item_impl(context: &GetItem, db: &DbHandle) -> (Arc<TopLevelItem>, Ar
 /// ```
 /// Into
 /// ```ante
-/// implicit name {Parameter}: Trait TraitArgs = Trait With
+/// implicit name {Parameter}: Trait TraitArgs Parameter = Trait With
 ///     method1 = ...
 ///     method2 = ...
 /// ```
+/// Note that this assumes the returned trait will capture each parameter used.
 fn desugar_impl(impl_: &TraitImpl, context: &mut TopLevelContext) -> TopLevelItemKind {
     let variable = context.patterns.push(Pattern::Variable(impl_.name));
     let location = context.name_locations[impl_.name].clone();
     assert_eq!(variable, context.pattern_locations.push(location.clone()));
 
     let mut trait_type = Type::new(TypeKind::Named(impl_.trait_path), location.clone());
-    if !impl_.trait_arguments.is_empty() {
+    if !impl_.trait_arguments.is_empty() || !impl_.parameters.is_empty() {
         let app_location = location.clone();
-        trait_type =
-            Type::new(TypeKind::Application(Box::new(trait_type), impl_.trait_arguments.clone()), app_location);
+        let mut arguments = impl_.trait_arguments.clone();
+
+        // Assume the returned trait captures each parameter.
+        if !impl_.parameters.is_empty() {
+            let parameter_types = impl_.parameters.iter().map(|param| {
+                match &context.patterns[param.pattern] {
+                    Pattern::TypeAnnotation(_, typ) => typ.clone(),
+                    _ => unreachable!("impl parameters are expected to have type annotations"),
+                }
+            });
+            arguments.push(make_tuple_type(&location, parameter_types));
+        }
+
+        trait_type = Type::new(TypeKind::Application(Box::new(trait_type), arguments), app_location);
     }
+
+    // Add each parameter used as an implicit argument to the trait type
+    if !impl_.parameters.is_empty() {}
 
     // If this is not a function we need to put the type annotation on the name itself rather than
     // the return type of the lambda.

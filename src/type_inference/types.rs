@@ -345,6 +345,17 @@ impl Type {
         Self::from_cst_type_with_kind(typ, Kind::Type, resolve, db, next_id)
     }
 
+    /// Converts a [cst::Type] into a [Type], returning [None] if any type variables are required.
+    ///
+    /// Note that this will emit any errors from constructing the type even if [None] is returned.
+    pub(crate) fn from_cst_type_no_type_variables(
+        typ: &cst::Type, resolve: &crate::name_resolution::ResolutionResult, db: &DbHandle,
+    ) -> Option<Type> {
+        let mut next_id = 0;
+        let typ = Self::from_cst_type_with_kind(typ, Kind::Type, resolve, db, &mut next_id);
+        (next_id == 0).then_some(typ)
+    }
+
     /// Convert this [cst::Type] into a [Type] with the expected [Kind].
     /// Error if the converted [Kind] does not match the expected [Kind].
     fn from_cst_type_with_kind(

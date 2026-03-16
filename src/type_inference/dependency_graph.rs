@@ -119,7 +119,7 @@ fn item_lacks_known_type(dependency_id: TopLevelId, db: &DbHandle) -> bool {
     match &item.kind {
         TopLevelItemKind::Definition(definition) => {
             let resolve = Resolve(dependency_id).get(db);
-            try_get_type(definition, &context, &resolve, db, &mut 0).is_none()
+            try_get_type(definition, &context, &resolve, db).is_none()
         },
         TopLevelItemKind::TypeDefinition(_) => false,
         TopLevelItemKind::TraitDefinition(_) => false,

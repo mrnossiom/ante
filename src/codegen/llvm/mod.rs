@@ -407,6 +407,7 @@ impl<'ctx> ModuleContext<'ctx> {
             mir::Instruction::CallClosure { .. } => {
                 unreachable!("Exected CallClosure instructions to be removed before codegen")
             },
+            mir::Instruction::PackClosure { function, environment } => self.make_tuple(&[*function, *environment]),
             mir::Instruction::IndexTuple { tuple, index } => {
                 let tuple = self.lookup_value(tuple).into_struct_value();
                 self.builder.build_extract_value(tuple, *index, "").unwrap()
@@ -423,22 +424,7 @@ impl<'ctx> ModuleContext<'ctx> {
                 let length = self.llvm.i32_type().const_int(string.len() as u64, false).into();
                 self.llvm.const_struct(&[c_string, length], false).into()
             },
-            mir::Instruction::MakeTuple(fields) => {
-                let fields = mapvec(fields, |field| self.lookup_value(field));
-                let const_fields =
-                    mapvec(
-                        &fields,
-                        |field| if field.is_const() { *field } else { Self::undef_value(field.get_type()) },
-                    );
-                let mut tuple = self.llvm.const_struct(&const_fields, false).as_aggregate_value_enum();
-
-                for (i, field) in fields.into_iter().enumerate() {
-                    if !field.is_const() {
-                        tuple = self.builder.build_insert_value(tuple, field, i as u32, "").unwrap();
-                    }
-                }
-                tuple.as_basic_value_enum()
-            },
+            mir::Instruction::MakeTuple(fields) => self.make_tuple(fields),
             mir::Instruction::StackAlloc(value) => {
                 let value = self.lookup_value(value);
                 let alloca = self.builder.build_alloca(value.get_type(), "").unwrap();
@@ -614,6 +600,20 @@ impl<'ctx> ModuleContext<'ctx> {
             mir::Instruction::SizeOf(_) => todo!("SizeOf should be removed by monomorphization"),
         };
         self.values.insert(mir::Value::InstructionResult(id), result);
+    }
+
+    fn make_tuple(&mut self, fields: &[mir::Value]) -> BasicValueEnum<'ctx> {
+        let fields = mapvec(fields, |field| self.lookup_value(field));
+        let const_fields =
+            mapvec(&fields, |field| if field.is_const() { *field } else { Self::undef_value(field.get_type()) });
+        let mut tuple = self.llvm.const_struct(&const_fields, false).as_aggregate_value_enum();
+
+        for (i, field) in fields.into_iter().enumerate() {
+            if !field.is_const() {
+                tuple = self.builder.build_insert_value(tuple, field, i as u32, "").unwrap();
+            }
+        }
+        tuple.as_basic_value_enum()
     }
 
     fn undef_value(typ: BasicTypeEnum<'ctx>) -> BasicValueEnum<'ctx> {

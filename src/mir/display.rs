@@ -287,6 +287,9 @@ fn fmt_instruction(
                 write!(f, " {}", v(argument))?;
             }
         },
+        mir::Instruction::PackClosure { function, environment } => {
+            write!(f, "pack-closure {}, {}", function, environment)?;
+        }
         mir::Instruction::IndexTuple { tuple, index } => write!(f, "{}.{index}", v(tuple))?,
         mir::Instruction::MakeTuple(fields) => write!(f, "({})", comma_separated(fields, mir))?,
         mir::Instruction::MakeString(s) => write!(f, "\"{s}\"")?,

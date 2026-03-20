@@ -66,12 +66,13 @@ where
                 let return_type = self.convert_type(&function_type.return_type, None);
 
                 // Check if this is a free function or a closure
-                if environment == Type::UNIT {
-                    Type::Function(Arc::new(FunctionType { parameters, return_type }))
-                } else {
+                let is_closure = environment != Type::UNIT;
+                if is_closure {
                     parameters.push(environment.clone());
-                    let f = Type::Function(Arc::new(FunctionType { parameters, return_type }));
+                    let f = Type::Function(Arc::new(FunctionType { parameters, return_type, is_closure }));
                     Type::tuple(vec![f, environment])
+                } else {
+                    Type::Function(Arc::new(FunctionType { parameters, return_type, is_closure }))
                 }
             },
             TCType::Application(constructor, new_args) => {

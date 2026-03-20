@@ -347,6 +347,7 @@ where
         let typ = Type::Function(Arc::new(super::FunctionType {
             parameters: vec![Type::POINTER, Type::POINTER],
             return_type: tuple_type,
+            is_closure: false,
         }));
 
         // TODO: We have no NameId to cache this definition so we'll end up
@@ -557,7 +558,7 @@ where
         }
         if let Some(free_vars) = self.context().get_closure_environment(expr) {
             let environment = self.pack_closure_environment(free_vars);
-            value = self.push_instruction(Instruction::MakeTuple(vec![value, environment]), full_type);
+            value = self.push_instruction(Instruction::PackClosure { function: value, environment }, full_type);
         }
         value
     }
@@ -977,6 +978,7 @@ where
                 let wrapper_type = Type::Function(Arc::new(super::FunctionType {
                     parameters: wrapper_params.clone(),
                     return_type: return_type.clone(),
+                    is_closure: false,
                 }));
 
                 let name = self.context()[*field_name_id].clone();

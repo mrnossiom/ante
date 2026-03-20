@@ -379,6 +379,14 @@ pub enum Instruction {
         closure: Value,
         arguments: Vec<Value>,
     },
+    /// Returns a closure value after packing the function with the given environment.
+    /// This is equivalent to a `MakeTuple` instruction but is distinguished because the
+    /// compiler will optimize closure values & calls into free functions, removing the
+    /// environment after monomorphization.
+    PackClosure {
+        function: Value,
+        environment: Value,
+    },
     IndexTuple {
         tuple: Value,
         index: u32,
@@ -453,6 +461,7 @@ impl Instruction {
                 f(function);
                 arguments.iter().for_each(f);
             },
+            Instruction::PackClosure { function, environment } => two(function, environment),
             Instruction::IndexTuple { tuple, index: _ } => f(tuple),
             Instruction::MakeString(_) => (),
             Instruction::MakeTuple(elements) => elements.iter().for_each(f),
@@ -717,7 +726,7 @@ impl Type {
             Type::Function(function_type) => {
                 let parameters = mapvec(&function_type.parameters, |typ| typ.substitute(generic_args));
                 let return_type = function_type.return_type.substitute(generic_args);
-                Type::Function(Arc::new(FunctionType { parameters, return_type }))
+                Type::Function(Arc::new(FunctionType { parameters, return_type, is_closure: function_type.is_closure }))
             },
             Type::Union(variants) => Type::Union(Arc::new(mapvec(variants.iter(), |typ| typ.substitute(generic_args)))),
         }
@@ -803,6 +812,11 @@ impl PrimitiveType {
 pub struct FunctionType {
     pub parameters: Vec<Type>,
     pub return_type: Type,
+
+    // true if this function should also carry around its closure
+    // environment with it. The closure environment is assumed to have
+    // the same type as the last parameter of this function.
+    pub is_closure: bool,
 }
 
 #[cfg(test)]

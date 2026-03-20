@@ -173,6 +173,21 @@ impl Definition {
 
                     instr_assert_eq!(function_type.return_type, *result_type, self, id, mir, "Function type result type does not match result type of call instruction");
                 },
+                Instruction::PackClosure { function, environment } => {
+                    let function_type = mir.type_of_value(function, self);
+                    let environment_type = mir.type_of_value(environment, self);
+
+                    let Type::Function(function_type) = function_type else {
+                        instr_panic!(self, id, mir, "PackClosure function is not a function type, it is a(n) `{function_type}`")
+                    };
+
+                    instr_assert_eq!(*function_type.parameters.last().unwrap(), environment_type, self, id, mir, "Last parameter of function is not the environment type");
+
+                    let Type::Function(closure_type) = result_type else {
+                        instr_panic!(self, id, mir, "PackClosure result is not a function type, it is a(n) `{result_type}`")
+                    };
+                    instr_assert!(closure_type.is_closure, self, id, mir, "PackClosure result is not a closure");
+                }
                 Instruction::IndexTuple { tuple, index } => {
                     let tuple_type = mir.type_of_value(tuple, self);
                     let Type::Tuple(tuple_type) = tuple_type else {

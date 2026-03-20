@@ -47,6 +47,24 @@ pub fn get_item_impl(context: &GetItem, db: &DbHandle) -> (Arc<TopLevelItem>, Ar
     }
 }
 
+/// Expands a trait-typed parameter from e.g. `Print a` → `Print a [env_i]`.
+/// This ensures `from_cst_type_no_type_variables` sees a named generic for the env
+/// rather than auto-inserting a fresh type variable (which would cause it to return None).
+fn add_env_to_trait_type(typ: &Type, env_var: crate::parser::ids::NameId, location: &Location) -> Type {
+    let env_type = Type::new(TypeKind::Variable(env_var), location.clone());
+    match &typ.kind {
+        TypeKind::Named(_) => {
+            Type::new(TypeKind::Application(Box::new(typ.clone()), vec![env_type]), typ.location.clone())
+        },
+        TypeKind::Application(f, args) => {
+            let mut new_args = args.clone();
+            new_args.push(env_type);
+            Type::new(TypeKind::Application(f.clone(), new_args), typ.location.clone())
+        },
+        _ => typ.clone(),
+    }
+}
+
 /// Desugars
 /// ```ante
 /// impl name {Parameter}: Trait TraitArgs with
@@ -66,26 +84,45 @@ fn desugar_impl(impl_: &TraitImpl, context: &mut TopLevelContext) -> TopLevelIte
     assert_eq!(variable, context.pattern_locations.push(location.clone()));
 
     let mut trait_type = Type::new(TypeKind::Named(impl_.trait_path), location.clone());
+
+    // Collect existing parameter info before mutating context.
+    let param_infos: Vec<(bool, crate::parser::ids::PatternId, Type)> = impl_.parameters.iter().map(|param| {
+        match &context.patterns[param.pattern] {
+            Pattern::TypeAnnotation(inner, typ) => (param.is_implicit, *inner, typ.clone()),
+            _ => unreachable!("impl parameters are expected to have type annotations"),
+        }
+    }).collect();
+
+    // Build new parameters with expanded env types (e.g. `Print a` → `Print a [env_0]`).
+    // This prevents `from_cst_type_no_type_variables` from auto-inserting fresh type variables.
+    let expanded_parameters: Vec<cst::Parameter> = param_infos.iter().enumerate().map(|(i, (is_implicit, inner, typ))| {
+        let env_name = context.names.push(Arc::new(format!("[env_{}]", i)));
+        context.name_locations.push(location.clone());
+
+        let expanded_type = add_env_to_trait_type(typ, env_name, &location);
+
+        let new_pattern = context.patterns.push(Pattern::TypeAnnotation(*inner, expanded_type));
+        assert_eq!(new_pattern, context.pattern_locations.push(location.clone()));
+
+        cst::Parameter { is_implicit: *is_implicit, pattern: new_pattern }
+    }).collect();
+
     if !impl_.trait_arguments.is_empty() || !impl_.parameters.is_empty() {
         let app_location = location.clone();
         let mut arguments = impl_.trait_arguments.clone();
 
         // Assume the returned trait captures each parameter.
-        if !impl_.parameters.is_empty() {
-            let parameter_types = impl_.parameters.iter().map(|param| {
-                match &context.patterns[param.pattern] {
-                    Pattern::TypeAnnotation(_, typ) => typ.clone(),
-                    _ => unreachable!("impl parameters are expected to have type annotations"),
-                }
-            });
-            arguments.push(make_tuple_type(&location, parameter_types));
-        }
+        // Impls which capture 0 parameters capture the unit type instead.
+        let parameter_types = expanded_parameters.iter().map(|param| {
+            match &context.patterns[param.pattern] {
+                Pattern::TypeAnnotation(_, typ) => typ.clone(),
+                _ => unreachable!("impl parameters are expected to have type annotations"),
+            }
+        });
+        arguments.push(make_tuple_type(&location, parameter_types));
 
         trait_type = Type::new(TypeKind::Application(Box::new(trait_type), arguments), app_location);
     }
-
-    // Add each parameter used as an implicit argument to the trait type
-    if !impl_.parameters.is_empty() {}
 
     // If this is not a function we need to put the type annotation on the name itself rather than
     // the return type of the lambda.
@@ -106,7 +143,7 @@ fn desugar_impl(impl_: &TraitImpl, context: &mut TopLevelContext) -> TopLevelIte
         constructor
     } else {
         let lambda = Expr::Lambda(Lambda {
-            parameters: impl_.parameters.clone(),
+            parameters: expanded_parameters,
             return_type: Some(trait_type),
             effects: Some(Vec::new()),
             body: constructor,

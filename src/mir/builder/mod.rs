@@ -440,7 +440,14 @@ where
         let function = self.expression(call.function);
         let arguments = mapvec(&call.arguments, |expr| self.expression(expr.expr));
         let result_type = self.expr_type(id);
-        self.push_instruction(Instruction::Call { function, arguments }, result_type)
+
+        let instruction = if matches!(self.type_of_value(&function), Type::Tuple(_)) {
+            Instruction::CallClosure { closure: function, arguments }
+        } else {
+            Instruction::Call { function, arguments }
+        };
+
+        self.push_instruction(instruction, result_type)
     }
 
     fn try_find_name(&self, pattern: PatternId) -> Option<(Name, NameId)> {

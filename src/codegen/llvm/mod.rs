@@ -350,12 +350,12 @@ impl<'ctx> ModuleContext<'ctx> {
         self.mir.get_name(id).unwrap().as_ref()
     }
 
-    fn lookup_value(&mut self, value: mir::Value) -> BasicValueEnum<'ctx> {
+    fn lookup_value(&mut self, value: &mir::Value) -> BasicValueEnum<'ctx> {
         match value {
             mir::Value::Error => unreachable!("Error value encountered during llvm codegen"),
             mir::Value::Unit => self.llvm.const_struct(&[], false).into(),
-            mir::Value::Bool(value) => self.llvm.bool_type().const_int(value as u64, false).into(),
-            mir::Value::Char(value) => self.llvm.i32_type().const_int(value as u64, false).into(),
+            mir::Value::Bool(value) => self.llvm.bool_type().const_int(*value as u64, false).into(),
+            mir::Value::Char(value) => self.llvm.i32_type().const_int(*value as u64, false).into(),
             mir::Value::Integer(constant) => {
                 let kind = constant.kind();
                 let typ = self.convert_integer_kind(kind);
@@ -375,15 +375,15 @@ impl<'ctx> ModuleContext<'ctx> {
                 let typ = self.mir.type_of_value(&value, function);
 
                 if let Some(fn_type) = self.convert_function_type(&typ) {
-                    let name = self.get_name(function_id);
+                    let name = self.get_name(*function_id);
                     let function_value = self.module.add_function(name, fn_type, None).as_global_value();
-                    self.global_values.insert(value, function_value);
+                    self.global_values.insert(*value, function_value);
                     function_value.as_pointer_value().into()
                 } else {
                     // It's a global variable — codegen it now if not yet done
                     let def =
                         self.mir.definitions.get(&function_id).expect("lookup_value: definition not found").clone();
-                    self.codegen_global(&def, function_id);
+                    self.codegen_global(&def, *function_id);
                     let global_var = self.global_values[&value];
                     let llvm_type = self.convert_type(&typ);
                     self.builder.build_load(llvm_type, global_var.as_pointer_value(), "").unwrap()
@@ -396,16 +396,19 @@ impl<'ctx> ModuleContext<'ctx> {
         let result = match &function.instructions[id] {
             mir::Instruction::Call { function: function_value, arguments } => {
                 let typ = self.convert_function_type(&self.mir.type_of_value(function_value, function)).unwrap();
-                let function = self.lookup_value(*function_value).into_pointer_value();
-                let arguments = mapvec(arguments, |arg| self.lookup_value(*arg).into());
+                let function = self.lookup_value(function_value).into_pointer_value();
+                let arguments = mapvec(arguments, |arg| self.lookup_value(arg).into());
                 self.builder
                     .build_indirect_call(typ, function, &arguments, "")
                     .unwrap()
                     .try_as_basic_value()
                     .unwrap_basic()
             },
+            mir::Instruction::CallClosure { .. } => {
+                unreachable!("Exected CallClosure instructions to be removed before codegen")
+            },
             mir::Instruction::IndexTuple { tuple, index } => {
-                let tuple = self.lookup_value(*tuple).into_struct_value();
+                let tuple = self.lookup_value(tuple).into_struct_value();
                 self.builder.build_extract_value(tuple, *index, "").unwrap()
             },
             mir::Instruction::MakeString(string) => {
@@ -421,7 +424,7 @@ impl<'ctx> ModuleContext<'ctx> {
                 self.llvm.const_struct(&[c_string, length], false).into()
             },
             mir::Instruction::MakeTuple(fields) => {
-                let fields = mapvec(fields, |field| self.lookup_value(*field));
+                let fields = mapvec(fields, |field| self.lookup_value(field));
                 let const_fields =
                     mapvec(
                         &fields,
@@ -437,7 +440,7 @@ impl<'ctx> ModuleContext<'ctx> {
                 tuple.as_basic_value_enum()
             },
             mir::Instruction::StackAlloc(value) => {
-                let value = self.lookup_value(*value);
+                let value = self.lookup_value(value);
                 let alloca = self.builder.build_alloca(value.get_type(), "").unwrap();
                 self.builder.build_store(alloca, value).unwrap();
                 alloca.into()
@@ -445,166 +448,166 @@ impl<'ctx> ModuleContext<'ctx> {
             mir::Instruction::Transmute(value) => {
                 // Transmute the value by storing it in an alloca and loading it as a different type
                 let result_type = self.convert_type(function.instruction_result_type(id));
-                let value = self.lookup_value(*value);
+                let value = self.lookup_value(value);
                 let alloca = self.builder.build_alloca(value.get_type(), "").unwrap();
                 self.builder.build_store(alloca, value).unwrap();
                 self.builder.build_load(result_type, alloca, "").unwrap()
             },
-            mir::Instruction::Id(value) => self.lookup_value(*value),
+            mir::Instruction::Id(value) => self.lookup_value(value),
             mir::Instruction::Instantiate(..) => {
                 unreachable!("Instruction::Instantiate remaining in the code during llvm codegen")
             },
             mir::Instruction::AddInt(a, b) => {
-                let a = self.lookup_value(*a).into_int_value();
-                let b = self.lookup_value(*b).into_int_value();
+                let a = self.lookup_value(a).into_int_value();
+                let b = self.lookup_value(b).into_int_value();
                 self.builder.build_int_add(a, b, "").unwrap().as_basic_value_enum()
             },
             mir::Instruction::AddFloat(a, b) => {
-                let a = self.lookup_value(*a).into_float_value();
-                let b = self.lookup_value(*b).into_float_value();
+                let a = self.lookup_value(a).into_float_value();
+                let b = self.lookup_value(b).into_float_value();
                 self.builder.build_float_add(a, b, "").unwrap().as_basic_value_enum()
             },
             mir::Instruction::SubInt(a, b) => {
-                let a = self.lookup_value(*a).into_int_value();
-                let b = self.lookup_value(*b).into_int_value();
+                let a = self.lookup_value(a).into_int_value();
+                let b = self.lookup_value(b).into_int_value();
                 self.builder.build_int_sub(a, b, "").unwrap().as_basic_value_enum()
             },
             mir::Instruction::SubFloat(a, b) => {
-                let a = self.lookup_value(*a).into_float_value();
-                let b = self.lookup_value(*b).into_float_value();
+                let a = self.lookup_value(a).into_float_value();
+                let b = self.lookup_value(b).into_float_value();
                 self.builder.build_float_sub(a, b, "").unwrap().as_basic_value_enum()
             },
             mir::Instruction::MulInt(a, b) => {
-                let a = self.lookup_value(*a).into_int_value();
-                let b = self.lookup_value(*b).into_int_value();
+                let a = self.lookup_value(a).into_int_value();
+                let b = self.lookup_value(b).into_int_value();
                 self.builder.build_int_mul(a, b, "").unwrap().as_basic_value_enum()
             },
             mir::Instruction::MulFloat(a, b) => {
-                let a = self.lookup_value(*a).into_float_value();
-                let b = self.lookup_value(*b).into_float_value();
+                let a = self.lookup_value(a).into_float_value();
+                let b = self.lookup_value(b).into_float_value();
                 self.builder.build_float_mul(a, b, "").unwrap().as_basic_value_enum()
             },
             mir::Instruction::DivSigned(a, b) => {
-                let a = self.lookup_value(*a).into_int_value();
-                let b = self.lookup_value(*b).into_int_value();
+                let a = self.lookup_value(a).into_int_value();
+                let b = self.lookup_value(b).into_int_value();
                 self.builder.build_int_signed_div(a, b, "").unwrap().as_basic_value_enum()
             },
             mir::Instruction::DivUnsigned(a, b) => {
-                let a = self.lookup_value(*a).into_int_value();
-                let b = self.lookup_value(*b).into_int_value();
+                let a = self.lookup_value(a).into_int_value();
+                let b = self.lookup_value(b).into_int_value();
                 self.builder.build_int_unsigned_div(a, b, "").unwrap().as_basic_value_enum()
             },
             mir::Instruction::DivFloat(a, b) => {
-                let a = self.lookup_value(*a).into_float_value();
-                let b = self.lookup_value(*b).into_float_value();
+                let a = self.lookup_value(a).into_float_value();
+                let b = self.lookup_value(b).into_float_value();
                 self.builder.build_float_div(a, b, "").unwrap().as_basic_value_enum()
             },
             mir::Instruction::ModSigned(a, b) => {
-                let a = self.lookup_value(*a).into_int_value();
-                let b = self.lookup_value(*b).into_int_value();
+                let a = self.lookup_value(a).into_int_value();
+                let b = self.lookup_value(b).into_int_value();
                 self.builder.build_int_signed_div(a, b, "").unwrap().as_basic_value_enum()
             },
             mir::Instruction::ModUnsigned(a, b) => {
-                let a = self.lookup_value(*a).into_int_value();
-                let b = self.lookup_value(*b).into_int_value();
+                let a = self.lookup_value(a).into_int_value();
+                let b = self.lookup_value(b).into_int_value();
                 self.builder.build_int_unsigned_div(a, b, "").unwrap().as_basic_value_enum()
             },
             mir::Instruction::ModFloat(a, b) => {
-                let a = self.lookup_value(*a).into_float_value();
-                let b = self.lookup_value(*b).into_float_value();
+                let a = self.lookup_value(a).into_float_value();
+                let b = self.lookup_value(b).into_float_value();
                 self.builder.build_float_rem(a, b, "").unwrap().as_basic_value_enum()
             },
             mir::Instruction::LessSigned(a, b) => {
-                let a = self.lookup_value(*a).into_int_value();
-                let b = self.lookup_value(*b).into_int_value();
+                let a = self.lookup_value(a).into_int_value();
+                let b = self.lookup_value(b).into_int_value();
                 self.builder.build_int_compare(IntPredicate::SLT, a, b, "").unwrap().as_basic_value_enum()
             },
             mir::Instruction::LessUnsigned(a, b) => {
-                let a = self.lookup_value(*a).into_int_value();
-                let b = self.lookup_value(*b).into_int_value();
+                let a = self.lookup_value(a).into_int_value();
+                let b = self.lookup_value(b).into_int_value();
                 self.builder.build_int_compare(IntPredicate::ULT, a, b, "").unwrap().as_basic_value_enum()
             },
             mir::Instruction::LessFloat(a, b) => {
-                let a = self.lookup_value(*a).into_float_value();
-                let b = self.lookup_value(*b).into_float_value();
+                let a = self.lookup_value(a).into_float_value();
+                let b = self.lookup_value(b).into_float_value();
                 self.builder.build_float_compare(FloatPredicate::OLT, a, b, "").unwrap().as_basic_value_enum()
             },
             mir::Instruction::EqInt(a, b) => {
-                let a = self.lookup_value(*a).into_int_value();
-                let b = self.lookup_value(*b).into_int_value();
+                let a = self.lookup_value(a).into_int_value();
+                let b = self.lookup_value(b).into_int_value();
                 self.builder.build_int_compare(IntPredicate::EQ, a, b, "").unwrap().as_basic_value_enum()
             },
             mir::Instruction::EqFloat(a, b) => {
-                let a = self.lookup_value(*a).into_float_value();
-                let b = self.lookup_value(*b).into_float_value();
+                let a = self.lookup_value(a).into_float_value();
+                let b = self.lookup_value(b).into_float_value();
                 self.builder.build_float_compare(FloatPredicate::OEQ, a, b, "").unwrap().as_basic_value_enum()
             },
             mir::Instruction::BitwiseAnd(a, b) => {
-                let a = self.lookup_value(*a).into_int_value();
-                let b = self.lookup_value(*b).into_int_value();
+                let a = self.lookup_value(a).into_int_value();
+                let b = self.lookup_value(b).into_int_value();
                 self.builder.build_and(a, b, "").unwrap().as_basic_value_enum()
             },
             mir::Instruction::BitwiseOr(a, b) => {
-                let a = self.lookup_value(*a).into_int_value();
-                let b = self.lookup_value(*b).into_int_value();
+                let a = self.lookup_value(a).into_int_value();
+                let b = self.lookup_value(b).into_int_value();
                 self.builder.build_or(a, b, "").unwrap().as_basic_value_enum()
             },
             mir::Instruction::BitwiseXor(a, b) => {
-                let a = self.lookup_value(*a).into_int_value();
-                let b = self.lookup_value(*b).into_int_value();
+                let a = self.lookup_value(a).into_int_value();
+                let b = self.lookup_value(b).into_int_value();
                 self.builder.build_xor(a, b, "").unwrap().as_basic_value_enum()
             },
             mir::Instruction::BitwiseNot(value) => {
-                let value = self.lookup_value(*value).into_int_value();
+                let value = self.lookup_value(value).into_int_value();
                 self.builder.build_not(value, "").unwrap().as_basic_value_enum()
             },
             mir::Instruction::SignExtend(value) => {
-                let value = self.lookup_value(*value).into_int_value();
+                let value = self.lookup_value(value).into_int_value();
                 let int_type = self.convert_type(function.instruction_result_type(id)).into_int_type();
                 self.builder.build_int_s_extend(value, int_type, "").unwrap().as_basic_value_enum()
             },
             mir::Instruction::ZeroExtend(value) => {
-                let value = self.lookup_value(*value).into_int_value();
+                let value = self.lookup_value(value).into_int_value();
                 let int_type = self.convert_type(function.instruction_result_type(id)).into_int_type();
                 self.builder.build_int_z_extend(value, int_type, "").unwrap().as_basic_value_enum()
             },
             mir::Instruction::SignedToFloat(value) => {
-                let value = self.lookup_value(*value).into_int_value();
+                let value = self.lookup_value(value).into_int_value();
                 let float_type = self.convert_type(function.instruction_result_type(id)).into_float_type();
                 self.builder.build_signed_int_to_float(value, float_type, "").unwrap().as_basic_value_enum()
             },
             mir::Instruction::UnsignedToFloat(value) => {
-                let value = self.lookup_value(*value).into_int_value();
+                let value = self.lookup_value(value).into_int_value();
                 let float_type = self.convert_type(function.instruction_result_type(id)).into_float_type();
                 self.builder.build_unsigned_int_to_float(value, float_type, "").unwrap().as_basic_value_enum()
             },
             mir::Instruction::FloatToSigned(value) => {
-                let value = self.lookup_value(*value).into_float_value();
+                let value = self.lookup_value(value).into_float_value();
                 let int_type = self.convert_type(function.instruction_result_type(id)).into_int_type();
                 self.builder.build_float_to_signed_int(value, int_type, "").unwrap().as_basic_value_enum()
             },
             mir::Instruction::FloatToUnsigned(value) => {
-                let value = self.lookup_value(*value).into_float_value();
+                let value = self.lookup_value(value).into_float_value();
                 let int_type = self.convert_type(function.instruction_result_type(id)).into_int_type();
                 self.builder.build_float_to_unsigned_int(value, int_type, "").unwrap().as_basic_value_enum()
             },
             mir::Instruction::FloatPromote(value) => {
-                let value = self.lookup_value(*value).into_float_value();
+                let value = self.lookup_value(value).into_float_value();
                 let float_type = self.convert_type(function.instruction_result_type(id)).into_float_type();
                 self.builder.build_float_cast(value, float_type, "").unwrap().as_basic_value_enum()
             },
             mir::Instruction::FloatDemote(value) => {
-                let value = self.lookup_value(*value).into_float_value();
+                let value = self.lookup_value(value).into_float_value();
                 let float_type = self.convert_type(function.instruction_result_type(id)).into_float_type();
                 self.builder.build_float_cast(value, float_type, "").unwrap().as_basic_value_enum()
             },
             mir::Instruction::Truncate(value) => {
-                let value = self.lookup_value(*value).into_int_value();
+                let value = self.lookup_value(value).into_int_value();
                 let int_type = self.convert_type(function.instruction_result_type(id)).into_int_type();
                 self.builder.build_int_truncate(value, int_type, "").unwrap().as_basic_value_enum()
             },
             mir::Instruction::Deref(value) => {
-                let value = self.lookup_value(*value).into_pointer_value();
+                let value = self.lookup_value(value).into_pointer_value();
                 let result_type = self.convert_type(function.instruction_result_type(id));
                 self.builder.build_load(result_type, value, "").unwrap().as_basic_value_enum()
             },
@@ -628,7 +631,7 @@ impl<'ctx> ModuleContext<'ctx> {
     fn remember_incoming(&mut self, target: BlockId, argument: &Option<mir::Value>) {
         if let Some(argument) = argument {
             let current_block = self.builder.get_insert_block().unwrap();
-            let argument = self.lookup_value(*argument);
+            let argument = self.lookup_value(argument);
             self.incoming.entry(target).or_default().push((current_block, argument));
         }
     }
@@ -641,7 +644,7 @@ impl<'ctx> ModuleContext<'ctx> {
                 self.remember_incoming(*target_id, argument);
             },
             TerminatorInstruction::If { condition, then, else_, end: _ } => {
-                let condition = self.lookup_value(*condition).into_int_value();
+                let condition = self.lookup_value(condition).into_int_value();
 
                 let then_target = self.blocks[then.0];
                 let else_target = self.blocks[else_.0];
@@ -651,7 +654,7 @@ impl<'ctx> ModuleContext<'ctx> {
                 self.remember_incoming(else_.0, &else_.1);
             },
             TerminatorInstruction::Switch { int_value, cases, else_, end: _ } => {
-                let int_value = self.lookup_value(*int_value).into_int_value();
+                let int_value = self.lookup_value(int_value).into_int_value();
 
                 let cases = mapvec(cases.iter().enumerate(), |(i, (case_block, case_args))| {
                     self.remember_incoming(*case_block, case_args);
@@ -680,7 +683,7 @@ impl<'ctx> ModuleContext<'ctx> {
                 self.builder.build_unreachable().unwrap();
             },
             TerminatorInstruction::Return(value) => {
-                let value = self.lookup_value(*value);
+                let value = self.lookup_value(value);
                 self.builder.build_return(Some(&value)).unwrap();
             },
             TerminatorInstruction::Result(_) => {

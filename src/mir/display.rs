@@ -281,6 +281,12 @@ fn fmt_instruction(
                 write!(f, " {}", v(argument))?;
             }
         },
+        mir::Instruction::CallClosure { closure, arguments } => {
+            write!(f, "closure-call {}", v(closure))?;
+            for argument in arguments {
+                write!(f, " {}", v(argument))?;
+            }
+        },
         mir::Instruction::IndexTuple { tuple, index } => write!(f, "{}.{index}", v(tuple))?,
         mir::Instruction::MakeTuple(fields) => write!(f, "({})", comma_separated(fields, mir))?,
         mir::Instruction::MakeString(s) => write!(f, "\"{s}\"")?,

@@ -370,6 +370,15 @@ pub enum Instruction {
         function: Value,
         arguments: Vec<Value>,
     },
+    /// Similar to `Call` but expects a closure tuple of `(function, environment)`
+    /// instead of a raw function value. The environment should not be added to the
+    /// arguments but the function referred to should have an environment parameter.
+    ///
+    /// These instructions should be removed before codegen.
+    CallClosure {
+        closure: Value,
+        arguments: Vec<Value>,
+    },
     IndexTuple {
         tuple: Value,
         index: u32,
@@ -437,6 +446,10 @@ impl Instruction {
         };
         match self {
             Instruction::Call { function, arguments } => {
+                f(function);
+                arguments.iter().for_each(f);
+            },
+            Instruction::CallClosure { closure: function, arguments } => {
                 f(function);
                 arguments.iter().for_each(f);
             },

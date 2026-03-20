@@ -146,6 +146,33 @@ impl Definition {
                     }
                     instr_assert_eq!(function_type.return_type, *result_type, self, id, mir, "Function type result type does not match result type of call instruction");
                 },
+                Instruction::CallClosure { closure, arguments } => {
+                    let closure_type = mir.type_of_value(closure, self);
+                    let Type::Tuple(fields) = closure_type else {
+                        instr_panic!(self, id, mir, "Called value is not a closure, it is a(n) `{closure_type}`")
+                    };
+
+                    assert_eq!(fields.len(), 2);
+                    let environment_type = &fields[1];
+
+                    let Type::Function(function_type) = &fields[0] else {
+                        instr_panic!(self, id, mir, "Called value is not a function, it is a(n) `{}`", &fields[0])
+                    };
+
+                    instr_assert_eq!(function_type.parameters.len(), arguments.len() + 1, self, id, mir, "parameter type len does not match arg type len + 1");
+                    for (i, (parameter, argument)) in function_type.parameters.iter().zip(arguments).enumerate() {
+                        let arg_type = mir.type_of_value(argument, self);
+                        // Skip type mismatch checks involving Error types. Error occurs when a
+                        // value's type is unknown (e.g., captured env params not yet converted).
+                        if *parameter != Type::ERROR && arg_type != Type::ERROR {
+                            instr_assert_eq!(*parameter, arg_type, self, id, mir, "Type mismatch in arg {i} of call");
+                        }
+                    }
+                    let env_parameter = function_type.parameters.last().expect("Expected env parameter");
+                    instr_assert_eq!(env_parameter, environment_type, self, id, mir, "Type mismatch in env type of call");
+
+                    instr_assert_eq!(function_type.return_type, *result_type, self, id, mir, "Function type result type does not match result type of call instruction");
+                },
                 Instruction::IndexTuple { tuple, index } => {
                     let tuple_type = mir.type_of_value(tuple, self);
                     let Type::Tuple(tuple_type) = tuple_type else {

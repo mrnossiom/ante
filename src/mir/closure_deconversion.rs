@@ -8,8 +8,12 @@ use rustc_hash::FxHashMap;
 use crate::mir::{BlockId, Definition, DefinitionId, Instruction, Mir, Type, Value};
 
 impl Mir {
-    fn closure_deconvert(mut self) -> Self {
-        let definition_types = FxHashMap::default();
+    pub fn closure_deconvert(mut self) -> Self {
+        let definition_types = self.externals.iter()
+            .map(|(id, external)| (*id, external.typ.clone()))
+            .chain(self.definitions.iter().map(|(id, def)| (*id, def.typ.clone())))
+            .collect();
+
         for definition in self.definitions.values_mut() {
             closure_deconvert(definition, &definition_types);
         }

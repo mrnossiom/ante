@@ -75,6 +75,7 @@ where
         .assert_fully_linked()
         .assert_type_checks()
         .assert_no_unions_or_generics()
+        .closure_deconvert()
 }
 
 /// The entry point to monomorphization is any non-generic definition.

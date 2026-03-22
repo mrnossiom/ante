@@ -336,7 +336,10 @@ impl<'ctx> ModuleContext<'ctx> {
         };
 
         let return_type = self.convert_type(&function_type.return_type);
-        let parameters = mapvec(&function_type.parameters, |parameter| self.convert_type(parameter).into());
+        let mut parameters = mapvec(&function_type.parameters, |parameter| self.convert_type(parameter).into());
+        if let Some(env) = function_type.environment() {
+            parameters.push(self.convert_type(env).into());
+        }
         Some(return_type.fn_type(&parameters, false))
     }
 

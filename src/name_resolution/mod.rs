@@ -650,6 +650,7 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
             | TypeKind::String
             | TypeKind::Char
             | TypeKind::Pair
+            | TypeKind::NoClosureEnv
             | TypeKind::Reference(..) => (),
             TypeKind::Named(path) => self.link(*path, false, true),
             TypeKind::Variable(name) => self.resolve_variable(*name, declare_type_vars),

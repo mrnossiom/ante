@@ -116,6 +116,10 @@ pub enum TypeKind {
     Function(FunctionType),
     Application(Box<Type>, Vec<Type>),
     Reference(ReferenceKind),
+
+    /// This type can't be parsed, it is only used by `GetItem` to desugar
+    /// trait types into in some cases.
+    NoClosureEnv,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Copy, Clone, PartialOrd, Ord)]

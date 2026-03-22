@@ -10,7 +10,8 @@
 //! The MIR-builder will however, perform closure conversion on any functions with closure types
 //! it finds.
 use std::{
-    collections::{BTreeMap, BTreeSet}, sync::{Arc, LazyLock}
+    collections::{BTreeMap, BTreeSet},
+    sync::{Arc, LazyLock},
 };
 
 use dashmap::DashMap;
@@ -311,7 +312,7 @@ where
                 .local_variables
                 .get(&name)
                 .unwrap_or_else(|| panic!("No cached variable for {} with name {name}", self.context()[path_id])),
-            Some(origin @ Origin::Builtin(_)) =>  *self
+            Some(origin @ Origin::Builtin(_)) => *self
                 .global_variables
                 .get(&origin)
                 .unwrap_or_else(|| panic!("No cached variable for {} with origin {origin}", self.context()[path_id])),
@@ -346,8 +347,8 @@ where
         let tuple_type = Type::tuple(vec![Type::POINTER, Type::POINTER]);
         let typ = Type::Function(Arc::new(super::FunctionType {
             parameters: vec![Type::POINTER, Type::POINTER],
+            environment: Type::NO_CLOSURE_ENV,
             return_type: tuple_type,
-            is_closure: false,
         }));
 
         // TODO: We have no NameId to cache this definition so we'll end up
@@ -442,7 +443,7 @@ where
         let arguments = mapvec(&call.arguments, |expr| self.expression(expr.expr));
         let result_type = self.expr_type(id);
 
-        let instruction = if matches!(self.type_of_value(&function), Type::Tuple(_)) {
+        let instruction = if self.type_of_value(&function).is_closure() {
             Instruction::CallClosure { closure: function, arguments }
         } else {
             Instruction::Call { function, arguments }
@@ -509,16 +510,7 @@ where
     ) -> Value {
         let name = name.unwrap_or_else(|| Arc::new("lambda".to_string()));
         let full_type = self.convert_type(&self.types.result.maps.expr_types[&expr], None);
-
-        // Is this a closure?
-        let mut environment = None;
-        let function_type = if let Type::Tuple(fields) = &full_type {
-            assert_eq!(fields.len(), 2);
-            environment = Some(fields[1].clone());
-            fields[0].clone()
-        } else {
-            full_type.clone()
-        };
+        let Type::Function(function_type) = &full_type else { unreachable!("Lambda does not have a function type") };
 
         // Lambdas aren't really generic but they may capture generics from their containing
         // function. Marking them as generic here effectively hoists out the generic parameters.
@@ -527,7 +519,7 @@ where
         let generics_count = self.generics_in_scope.len() as u32;
         let old_scope = std::mem::take(&mut self.local_variables);
 
-        let id = self.new_definition(name.clone(), name_id, generics_count, function_type.clone(), |this| {
+        let id = self.new_definition(name.clone(), name_id, generics_count, full_type.clone(), |this| {
             for (i, parameter) in lambda.parameters.iter().enumerate() {
                 let parameter_type = &this.types.result.maps.pattern_types[&parameter.pattern];
                 this.push_parameter(this.convert_type(parameter_type, None));
@@ -537,7 +529,9 @@ where
             }
 
             if let Some(free_vars) = this.context().get_closure_environment(expr) {
-                this.push_parameter(environment.unwrap());
+                if let Some(env) = function_type.environment() {
+                    this.push_parameter(env.clone());
+                }
 
                 let environment = Value::Parameter(this.current_block, lambda.parameters.len() as u32);
                 this.unpack_closure_environment(free_vars.iter().copied(), environment);
@@ -551,10 +545,10 @@ where
 
         // If this is a generic lambda, it will have generics forward from the currenty context
         // which we need to manually instantiate.
-        let mut value = self.make_definition_value(id, name, function_type.clone());
+        let mut value = self.make_definition_value(id, name, full_type.clone());
         if !is_global && !self.generics_in_scope.is_empty() {
             let bindings = Arc::new(mapvec(0..self.generics_in_scope.len() as u32, |i| Type::Generic(Generic(i))));
-            value = self.push_instruction(Instruction::Instantiate(id, bindings), function_type);
+            value = self.push_instruction(Instruction::Instantiate(id, bindings), full_type.clone());
         }
         if let Some(free_vars) = self.context().get_closure_environment(expr) {
             let environment = self.pack_closure_environment(free_vars);
@@ -977,8 +971,8 @@ where
                 wrapper_params.push(struct_type.clone());
                 let wrapper_type = Type::Function(Arc::new(super::FunctionType {
                     parameters: wrapper_params.clone(),
+                    environment: Type::NO_CLOSURE_ENV,
                     return_type: return_type.clone(),
-                    is_closure: false,
                 }));
 
                 let name = self.context()[*field_name_id].clone();

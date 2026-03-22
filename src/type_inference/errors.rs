@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     diagnostics::Location,
     parser::ids::{ExprId, NameId, PathId, PatternId, TopLevelId},
-    type_inference::TypeChecker,
+    type_inference::{TypeChecker, types::NO_CLOSURE_ENV_STRING},
 };
 
 /// Different kinds of type errors.
@@ -71,7 +71,7 @@ impl TypeErrorKind {
                 format!("Expected non-reference type {expected}, but this expression always produces a reference")
             },
             TypeErrorKind::ClosureEnv => {
-                if expected_type == "Unit" {
+                if expected_type == NO_CLOSURE_ENV_STRING {
                     format!(
                         "Expected a free function, but this closure captures variable(s) in the outer scope. The captured environment is of type {actual}"
                     )

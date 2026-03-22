@@ -24,7 +24,9 @@ use crate::{
     parser::cst::Name,
     vecmap::VecMap,
 };
+
 pub(crate) mod builder;
+mod closure_deconversion;
 mod display;
 pub(crate) mod monomorphization;
 mod validation;
@@ -661,6 +663,7 @@ impl Type {
     pub const BOOL: Type = Type::Primitive(PrimitiveType::Bool);
     pub const POINTER: Type = Type::Primitive(PrimitiveType::Pointer);
     pub const CHAR: Type = Type::Primitive(PrimitiveType::Char);
+    pub const NO_CLOSURE_ENV: Type = Type::Primitive(PrimitiveType::NoClosureEnv);
 
     pub fn int(kind: IntegerKind) -> Type {
         Type::Primitive(PrimitiveType::Int(kind))
@@ -684,18 +687,11 @@ impl Type {
     }
 
     pub fn tuple(fields: Vec<Type>) -> Type {
-        //if fields.is_empty() { Type::UNIT } else { Type::Tuple(Arc::new(fields)) }
         Type::Tuple(Arc::new(fields))
     }
 
     pub fn union(variants: Vec<Type>) -> Type {
-        // if variants.is_empty() {
-        //     Type::UNIT
-        // } else if variants.len() == 1 {
-        //     variants.pop().unwrap()
-        // } else {
         Type::Union(Arc::new(variants))
-        // }
     }
 
     fn function_return_type(&self) -> Option<&Type> {
@@ -725,8 +721,9 @@ impl Type {
             Type::Tuple(elements) => Type::Tuple(Arc::new(mapvec(elements.iter(), |typ| typ.substitute(generic_args)))),
             Type::Function(function_type) => {
                 let parameters = mapvec(&function_type.parameters, |typ| typ.substitute(generic_args));
+                let environment = function_type.environment.substitute(generic_args);
                 let return_type = function_type.return_type.substitute(generic_args);
-                Type::Function(Arc::new(FunctionType { parameters, return_type, is_closure: function_type.is_closure }))
+                Type::Function(Arc::new(FunctionType { parameters, environment, return_type }))
             },
             Type::Union(variants) => Type::Union(Arc::new(mapvec(variants.iter(), |typ| typ.substitute(generic_args)))),
         }
@@ -773,6 +770,27 @@ impl Type {
             _ => false,
         }
     }
+
+    fn is_closure(&self) -> bool {
+        match self {
+            Type::Function(function) => function.is_closure(),
+            _ => false,
+        }
+    }
+
+    fn contains_generic(&self) -> bool {
+        match self {
+            Type::Primitive(_) => false,
+            Type::Tuple(fields) => fields.iter().any(Type::contains_generic),
+            Type::Union(variants) => variants.iter().any(Type::contains_generic),
+            Type::Function(function) => {
+                function.parameters.iter().any(Type::contains_generic)
+                    || function.environment.contains_generic()
+                    || function.return_type.contains_generic()
+            },
+            Type::Generic(_) => true,
+        }
+    }
 }
 
 /// Generics are represented as their index into their function's generic_count
@@ -792,13 +810,13 @@ pub enum PrimitiveType {
     Char,
     Int(IntegerKind),
     Float(FloatKind),
+    NoClosureEnv,
 }
 
 impl PrimitiveType {
     fn size_in_bytes(self, ptr_size: u32) -> u32 {
         match self {
-            PrimitiveType::Error => 0,
-            PrimitiveType::Unit => 0,
+            PrimitiveType::Error | PrimitiveType::NoClosureEnv | PrimitiveType::Unit => 0,
             PrimitiveType::Bool => 1,
             PrimitiveType::Pointer => ptr_size,
             PrimitiveType::Char => 4,
@@ -811,12 +829,25 @@ impl PrimitiveType {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FunctionType {
     pub parameters: Vec<Type>,
-    pub return_type: Type,
 
-    // true if this function should also carry around its closure
-    // environment with it. The closure environment is assumed to have
-    // the same type as the last parameter of this function.
-    pub is_closure: bool,
+    /// If this is anything other than Type::NO_CLOSURE_ENV, then this function is a closure
+    pub environment: Type,
+    pub return_type: Type,
+}
+
+impl FunctionType {
+    pub fn is_closure(&self) -> bool {
+        !matches!(self.environment, Type::NO_CLOSURE_ENV)
+    }
+
+    /// Returns `Some(env)` if the environment is not `Type::NO_CLOSURE_ENV`,
+    /// otherwise returns `None`
+    pub fn environment(&self) -> Option<&Type> {
+        match &self.environment {
+            Type::Primitive(PrimitiveType::NoClosureEnv) => None,
+            other => Some(other),
+        }
+    }
 }
 
 #[cfg(test)]

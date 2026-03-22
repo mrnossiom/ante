@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
+    diagnostics::Location,
     incremental::{DbHandle, GetItem, GetItemRaw},
     iterator_extensions::mapvec,
     parser::{
@@ -10,13 +11,13 @@ use crate::{
             TraitImpl, Type, TypeDefinitionBody, TypeKind,
         },
     },
-    diagnostics::Location,
 };
 
 fn make_tuple_type(location: &Location, mut types: impl ExactSizeIterator<Item = Type>) -> Type {
     let Some(first) = types.next() else {
-        return Type::new(TypeKind::Unit, location.clone());
+        return Type::new(TypeKind::NoClosureEnv, location.clone());
     };
+
     if types.len() == 0 {
         first
     } else {
@@ -86,38 +87,41 @@ fn desugar_impl(impl_: &TraitImpl, context: &mut TopLevelContext) -> TopLevelIte
     let mut trait_type = Type::new(TypeKind::Named(impl_.trait_path), location.clone());
 
     // Collect existing parameter info before mutating context.
-    let param_infos: Vec<(bool, crate::parser::ids::PatternId, Type)> = impl_.parameters.iter().map(|param| {
-        match &context.patterns[param.pattern] {
+    let param_infos: Vec<(bool, crate::parser::ids::PatternId, Type)> = impl_
+        .parameters
+        .iter()
+        .map(|param| match &context.patterns[param.pattern] {
             Pattern::TypeAnnotation(inner, typ) => (param.is_implicit, *inner, typ.clone()),
             _ => unreachable!("impl parameters are expected to have type annotations"),
-        }
-    }).collect();
+        })
+        .collect();
 
     // Build new parameters with expanded env types (e.g. `Print a` → `Print a [env_0]`).
     // This prevents `from_cst_type_no_type_variables` from auto-inserting fresh type variables.
-    let expanded_parameters: Vec<cst::Parameter> = param_infos.iter().enumerate().map(|(i, (is_implicit, inner, typ))| {
-        let env_name = context.names.push(Arc::new(format!("[env_{}]", i)));
-        context.name_locations.push(location.clone());
+    let expanded_parameters: Vec<cst::Parameter> = param_infos
+        .iter()
+        .enumerate()
+        .map(|(i, (is_implicit, inner, typ))| {
+            let env_name = context.names.push(Arc::new(format!("[env_{}]", i)));
+            context.name_locations.push(location.clone());
 
-        let expanded_type = add_env_to_trait_type(typ, env_name, &location);
+            let expanded_type = add_env_to_trait_type(typ, env_name, &location);
 
-        let new_pattern = context.patterns.push(Pattern::TypeAnnotation(*inner, expanded_type));
-        assert_eq!(new_pattern, context.pattern_locations.push(location.clone()));
+            let new_pattern = context.patterns.push(Pattern::TypeAnnotation(*inner, expanded_type));
+            assert_eq!(new_pattern, context.pattern_locations.push(location.clone()));
 
-        cst::Parameter { is_implicit: *is_implicit, pattern: new_pattern }
-    }).collect();
+            cst::Parameter { is_implicit: *is_implicit, pattern: new_pattern }
+        })
+        .collect();
 
     if !impl_.trait_arguments.is_empty() || !impl_.parameters.is_empty() {
         let app_location = location.clone();
         let mut arguments = impl_.trait_arguments.clone();
 
         // Assume the returned trait captures each parameter.
-        // Impls which capture 0 parameters capture the unit type instead.
-        let parameter_types = expanded_parameters.iter().map(|param| {
-            match &context.patterns[param.pattern] {
-                Pattern::TypeAnnotation(_, typ) => typ.clone(),
-                _ => unreachable!("impl parameters are expected to have type annotations"),
-            }
+        let parameter_types = expanded_parameters.iter().map(|param| match &context.patterns[param.pattern] {
+            Pattern::TypeAnnotation(_, typ) => typ.clone(),
+            _ => unreachable!("impl parameters are expected to have type annotations"),
         });
         arguments.push(make_tuple_type(&location, parameter_types));
 

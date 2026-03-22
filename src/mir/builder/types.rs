@@ -61,19 +61,10 @@ where
             },
             TCType::Function(function_type) => {
                 // TODO: Effects
-                let mut parameters = mapvec(&function_type.parameters, |typ| self.convert_type(&typ.typ, None));
+                let parameters = mapvec(&function_type.parameters, |typ| self.convert_type(&typ.typ, None));
                 let environment = self.convert_type(&function_type.environment, None);
                 let return_type = self.convert_type(&function_type.return_type, None);
-
-                // Check if this is a free function or a closure
-                let is_closure = environment != Type::UNIT;
-                if is_closure {
-                    parameters.push(environment.clone());
-                    let f = Type::Function(Arc::new(FunctionType { parameters, return_type, is_closure }));
-                    Type::tuple(vec![f, environment])
-                } else {
-                    Type::Function(Arc::new(FunctionType { parameters, return_type, is_closure }))
-                }
+                Type::Function(Arc::new(FunctionType { parameters, environment, return_type }))
             },
             TCType::Application(constructor, new_args) => {
                 assert!(args.is_none());
@@ -158,6 +149,7 @@ where
             crate::type_inference::types::PrimitiveType::Int(kind) => Type::int(kind),
             crate::type_inference::types::PrimitiveType::Float(kind) => Type::float(kind),
             crate::type_inference::types::PrimitiveType::Reference(..) => Type::POINTER,
+            crate::type_inference::types::PrimitiveType::NoClosureEnv => Type::NO_CLOSURE_ENV,
         }
     }
 

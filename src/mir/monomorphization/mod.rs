@@ -156,7 +156,7 @@ impl<'local> FunctionContext<'local> {
 
         // We can skip the blocks and go right to the instructions themselves. There shouldn't be
         // any that aren't used in a block.
-        for (_instruction_id, instruction) in definition.instructions.iter_mut() {
+        for instruction in definition.instructions.values_mut() {
             if let Instruction::Instantiate(id, bindings) = instruction {
                 assert!(!bindings.is_empty());
                 if !self.generic_mapping.is_empty() {
@@ -198,25 +198,27 @@ impl<'local> FunctionContext<'local> {
     /// Replace any instances of generics in `self.generic_mapping` of the given type with their mapping.
     /// The resulting type should be guaranteed free of [Type::Generic].
     fn specialize_type(&self, typ: &mut Type) {
-        let recur = |typ| self.specialize_type(typ);
+        // Avoid allocating new `Arc`s if there are no generics to specialize away
+        if !typ.contains_generic() {
+            return;
+        }
 
+        let recur = |typ| self.specialize_type(typ);
         match typ {
             Type::Primitive(_) => (),
             Type::Tuple(fields) => {
                 let mut new_fields = fields.to_vec();
                 new_fields.iter_mut().for_each(recur);
-                // TODO: It may be faster if we avoid calling `specialize_type`
-                // on types without generics to avoid creating new Arcs everywhere
                 *fields = Arc::new(new_fields);
             },
             Type::Function(function) => {
                 let mut new_function = function.as_ref().clone();
                 new_function.parameters.iter_mut().for_each(recur);
+                recur(&mut new_function.environment);
                 recur(&mut new_function.return_type);
                 *function = Arc::new(new_function);
             },
             Type::Union(variants) => {
-                // TODO: Can we restructure the repr of Type so that this work is not repeated?
                 let mut new_variants = variants.to_vec();
                 new_variants.iter_mut().for_each(recur);
                 *variants = Arc::new(new_variants);

@@ -12,7 +12,10 @@ use crate::{
         cst::{Argument, Constructor, ReferenceKind, TopLevelItemKind},
         ids::{IdStore, NameId, PathId},
     },
-    type_inference::{patterns::DecisionTree, types},
+    type_inference::{
+        patterns::DecisionTree,
+        types::{self, NO_CLOSURE_ENV_STRING},
+    },
 };
 
 use super::{
@@ -349,7 +352,8 @@ impl<'a> CstDisplay<'a> {
     }
 
     fn fmt_function(
-        &mut self, definition: &Definition, lambda: &Lambda, lambda_id: ExprId, context: &impl IdStore, f: &mut Formatter,
+        &mut self, definition: &Definition, lambda: &Lambda, lambda_id: ExprId, context: &impl IdStore,
+        f: &mut Formatter,
     ) -> std::fmt::Result {
         self.fmt_pattern_atom(definition.pattern, context, f)?;
         self.fmt_lambda_inner(lambda, lambda_id, context, f, false)
@@ -513,6 +517,7 @@ impl<'a> CstDisplay<'a> {
             TypeKind::Char => write!(f, "Char"),
             TypeKind::Pair => write!(f, ","),
             TypeKind::Reference(kind) => self.fmt_reference_type(*kind, f),
+            TypeKind::NoClosureEnv => write!(f, "{}", NO_CLOSURE_ENV_STRING),
         }
     }
 
@@ -855,7 +860,9 @@ impl<'a> CstDisplay<'a> {
         self.fmt_declaration(&extern_.declaration, context, f)
     }
 
-    fn fmt_lambda(&mut self, lambda: &Lambda, id: ExprId, context: &impl IdStore, f: &mut Formatter) -> std::fmt::Result {
+    fn fmt_lambda(
+        &mut self, lambda: &Lambda, id: ExprId, context: &impl IdStore, f: &mut Formatter,
+    ) -> std::fmt::Result {
         write!(f, "fn")?;
         self.fmt_lambda_inner(lambda, id, context, f, true)
     }

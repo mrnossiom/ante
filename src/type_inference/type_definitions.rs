@@ -110,7 +110,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
 
         Type::Function(Arc::new(types::FunctionType {
             parameters,
-            environment: Type::UNIT,
+            environment: Type::NO_CLOSURE_ENV,
             return_type: data_type,
             effects: Type::UNIT,
         }))

@@ -97,10 +97,12 @@ impl Display for BlockId {
     }
 }
 
+fn is_atom(t: &Type) -> bool {
+    matches!(t, Type::Primitive(_) | Type::Generic(_) | Type::Union(_))
+}
+
 impl Display for Type {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        let is_atom = |t: &Type| matches!(t, Type::Primitive(_) | Type::Generic(_) | Type::Union(_));
-
         match self {
             Type::Primitive(primitive_type) => primitive_type.fmt(f),
             Type::Tuple(items) => {
@@ -115,23 +117,7 @@ impl Display for Type {
 
                 if type_string.is_empty() { write!(f, "#empty_tuple") } else { write!(f, "{type_string}") }
             },
-            Type::Function(function_type) => {
-                write!(f, "fn")?;
-                for parameter in &function_type.parameters {
-                    write!(f, " ")?;
-                    if is_atom(parameter) {
-                        write!(f, "{parameter}")?;
-                    } else {
-                        write!(f, "({parameter})")?;
-                    }
-                }
-
-                if is_atom(&function_type.return_type) {
-                    write!(f, " -> {}", function_type.return_type)
-                } else {
-                    write!(f, " -> ({})", function_type.return_type)
-                }
-            },
+            Type::Function(function_type) => write!(f, "{function_type}"),
             Type::Generic(id) => write!(f, "'{}", id.0),
             Type::Union(variants) => {
                 write!(f, "{{")?;
@@ -151,6 +137,30 @@ impl Display for Type {
     }
 }
 
+impl Display for crate::mir::FunctionType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        write!(f, "fn")?;
+        for parameter in &self.parameters {
+            write!(f, " ")?;
+            if is_atom(parameter) {
+                write!(f, "{parameter}")?;
+            } else {
+                write!(f, "({parameter})")?;
+            }
+        }
+
+        if let Some(env) = self.environment() {
+            write!(f, " [{env}]")?;
+        }
+
+        if is_atom(&self.return_type) {
+            write!(f, " -> {}", self.return_type)
+        } else {
+            write!(f, " -> ({})", self.return_type)
+        }
+    }
+}
+
 impl Display for PrimitiveType {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         match self {
@@ -161,6 +171,7 @@ impl Display for PrimitiveType {
             PrimitiveType::Char => write!(f, "Char"),
             PrimitiveType::Int(kind) => kind.fmt(f),
             PrimitiveType::Float(kind) => kind.fmt(f),
+            PrimitiveType::NoClosureEnv => write!(f, "NoClosureEnv"),
         }
     }
 }
@@ -289,7 +300,7 @@ fn fmt_instruction(
         },
         mir::Instruction::PackClosure { function, environment } => {
             write!(f, "pack-closure {}, {}", function, environment)?;
-        }
+        },
         mir::Instruction::IndexTuple { tuple, index } => write!(f, "{}.{index}", v(tuple))?,
         mir::Instruction::MakeTuple(fields) => write!(f, "({})", comma_separated(fields, mir))?,
         mir::Instruction::MakeString(s) => write!(f, "\"{s}\"")?,

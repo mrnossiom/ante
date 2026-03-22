@@ -309,6 +309,7 @@ impl<'ctx> ModuleContext<'ctx> {
             PrimitiveType::Int(kind) => self.convert_integer_kind(kind).into(),
             PrimitiveType::Float(FloatKind::F32) => self.llvm.f32_type().into(),
             PrimitiveType::Float(FloatKind::F64) => self.llvm.f64_type().into(),
+            PrimitiveType::NoClosureEnv => unreachable!("Cannot convert NoClosureEnv"),
         }
     }
 

@@ -17,6 +17,8 @@ use crate::{
     type_inference::{generics::Generic, kinds::Kind},
 };
 
+pub(crate) const NO_CLOSURE_ENV_STRING: &str = "NoClosureEnv";
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Type {
     /// Any primitive type which can be compared for unification via primitive equality
@@ -46,8 +48,8 @@ pub struct FunctionType {
     pub parameters: Vec<ParameterType>,
 
     /// Closures and functions are unified by all having an environment type.
-    /// Free functions will have an environment of [Type::UNIT] while closures will
-    /// have non-unit environment types and will be subject to closure conversion.
+    /// Free functions will have an environment of [Type::NO_CLOSURE_ENV] while closures will
+    /// have other environment types and will be subject to closure conversion.
     pub environment: Type,
 
     pub return_type: Type,
@@ -89,6 +91,10 @@ pub enum PrimitiveType {
     Int(IntegerKind),
     Float(FloatKind),
     Reference(ReferenceKind),
+
+    /// A special tag a closure's environment can be unified to, at
+    /// which point it becomes a free function
+    NoClosureEnv,
 }
 
 /// Maps type variables to their bindings
@@ -125,6 +131,8 @@ impl Type {
     pub const IMM: Type = Type::Primitive(PrimitiveType::Reference(ReferenceKind::Imm));
     pub const UNIQ: Type = Type::Primitive(PrimitiveType::Reference(ReferenceKind::Uniq));
 
+    pub const NO_CLOSURE_ENV: Type = Type::Primitive(PrimitiveType::NoClosureEnv);
+
     pub fn integer(kind: crate::lexer::token::IntegerKind) -> Type {
         match kind {
             crate::lexer::token::IntegerKind::I8 => Type::I8,
@@ -144,21 +152,6 @@ impl Type {
         match kind {
             crate::lexer::token::FloatKind::F32 => Type::F32,
             crate::lexer::token::FloatKind::F64 => Type::F64,
-        }
-    }
-
-    pub fn primitive(primitive_type: super::types::PrimitiveType) -> Type {
-        match primitive_type {
-            super::types::PrimitiveType::Error => Type::ERROR,
-            super::types::PrimitiveType::Unit => Type::UNIT,
-            super::types::PrimitiveType::Bool => Type::BOOL,
-            super::types::PrimitiveType::Pointer => Type::POINTER,
-            super::types::PrimitiveType::Char => Type::CHAR,
-            super::types::PrimitiveType::String => Type::STRING,
-            super::types::PrimitiveType::Pair => Type::PAIR,
-            super::types::PrimitiveType::Int(kind) => Self::integer(kind),
-            super::types::PrimitiveType::Float(kind) => Self::float(kind),
-            super::types::PrimitiveType::Reference(kind) => Self::reference(kind),
         }
     }
 
@@ -416,7 +409,7 @@ impl Type {
                 let environment = if let Some(environment) = function.environment.as_ref() {
                     Self::from_cst_type(environment, resolve, db, next_id)
                 } else {
-                    Type::UNIT
+                    Type::NO_CLOSURE_ENV
                 };
                 let return_type = Self::from_cst_type(&function.return_type, resolve, db, next_id);
                 // TODO: Effects
@@ -461,6 +454,7 @@ impl Type {
                 Type::Primitive(PrimitiveType::Reference(*kind)),
                 Kind::TypeConstructorSimple(NonZeroUsize::new(1).unwrap()),
             ),
+            crate::parser::cst::TypeKind::NoClosureEnv => (Type::NO_CLOSURE_ENV, Kind::Type),
         }
     }
 
@@ -613,7 +607,7 @@ where
                     }
                 }
 
-                if *function.environment.follow(&self.bindings) != Type::UNIT {
+                if *function.environment.follow(&self.bindings) != Type::NO_CLOSURE_ENV {
                     write!(f, " [")?;
                     self.fmt_type(&function.environment, false, f)?;
                     write!(f, "]")?;
@@ -698,6 +692,7 @@ impl std::fmt::Display for PrimitiveType {
             PrimitiveType::Char => write!(f, "Char"),
             PrimitiveType::Pair => write!(f, ","),
             PrimitiveType::Reference(kind) => write!(f, "{kind}"),
+            PrimitiveType::NoClosureEnv => write!(f, "{NO_CLOSURE_ENV_STRING}"),
         }
     }
 }

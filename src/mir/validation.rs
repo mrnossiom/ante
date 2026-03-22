@@ -109,16 +109,32 @@ impl Definition {
             let parameters = entry_block.parameter_types.len();
             assert_eq!(parameters, 0, "\n{}\n\nGlobal should have 0 parameters", self.display(Some(mir)));
         } else {
-            let parameters = match &self.typ {
-                Type::Function(function_type) => &function_type.parameters,
+            let (parameters, env) = match &self.typ {
+                Type::Function(function_type) => (&function_type.parameters, &function_type.environment),
                 _ => panic!("\n{}\n\nFunction does not have a function type!", self.display(Some(mir))),
             };
+
+            let env_adjustment = self.typ.is_closure() as usize;
             assert_eq!(
-                *parameters,
-                entry_block.parameter_types,
+                parameters.len() + env_adjustment,
+                entry_block.parameter_types.len(),
+                "Entry block parameter count should match the number of parameters in the function type + 1 if the closure environment is non-empty"
+            );
+
+            assert_eq!(
+                parameters,
+                &entry_block.parameter_types[0..parameters.len()],
                 "\n{}\n\nFunction parameters in type do not match entry block parameters",
                 self.display(Some(mir))
             );
+
+            if self.typ.is_closure() {
+                assert_eq!(
+                    env,
+                    entry_block.parameter_types.last().unwrap(),
+                    "Closure env type does not match the type of the last parameter"
+                );
+            }
         }
     }
 
@@ -129,49 +145,8 @@ impl Definition {
             let result_type = &self.instruction_result_types[id];
 
             match instruction {
-                Instruction::Call { function, arguments } => {
-                    let function_type = mir.type_of_value(function, self);
-                    let Type::Function(function_type) = function_type else {
-                        instr_panic!(self, id, mir, "Called value is not a function, it is a(n) `{function_type}`")
-                    };
-
-                    instr_assert_eq!(function_type.parameters.len(), arguments.len(), self, id, mir, "parameter type len does not match arg type len");
-                    for (i, (parameter, argument)) in function_type.parameters.iter().zip(arguments).enumerate() {
-                        let arg_type = mir.type_of_value(argument, self);
-                        // Skip type mismatch checks involving Error types. Error occurs when a
-                        // value's type is unknown (e.g., captured env params not yet converted).
-                        if *parameter != Type::ERROR && arg_type != Type::ERROR {
-                            instr_assert_eq!(*parameter, arg_type, self, id, mir, "Type mismatch in arg {i} of call");
-                        }
-                    }
-                    instr_assert_eq!(function_type.return_type, *result_type, self, id, mir, "Function type result type does not match result type of call instruction");
-                },
-                Instruction::CallClosure { closure, arguments } => {
-                    let closure_type = mir.type_of_value(closure, self);
-                    let Type::Tuple(fields) = closure_type else {
-                        instr_panic!(self, id, mir, "Called value is not a closure, it is a(n) `{closure_type}`")
-                    };
-
-                    assert_eq!(fields.len(), 2);
-                    let environment_type = &fields[1];
-
-                    let Type::Function(function_type) = &fields[0] else {
-                        instr_panic!(self, id, mir, "Called value is not a function, it is a(n) `{}`", &fields[0])
-                    };
-
-                    instr_assert_eq!(function_type.parameters.len(), arguments.len() + 1, self, id, mir, "parameter type len does not match arg type len + 1");
-                    for (i, (parameter, argument)) in function_type.parameters.iter().zip(arguments).enumerate() {
-                        let arg_type = mir.type_of_value(argument, self);
-                        // Skip type mismatch checks involving Error types. Error occurs when a
-                        // value's type is unknown (e.g., captured env params not yet converted).
-                        if *parameter != Type::ERROR && arg_type != Type::ERROR {
-                            instr_assert_eq!(*parameter, arg_type, self, id, mir, "Type mismatch in arg {i} of call");
-                        }
-                    }
-                    let env_parameter = function_type.parameters.last().expect("Expected env parameter");
-                    instr_assert_eq!(env_parameter, environment_type, self, id, mir, "Type mismatch in env type of call");
-
-                    instr_assert_eq!(function_type.return_type, *result_type, self, id, mir, "Function type result type does not match result type of call instruction");
+                Instruction::Call { function, arguments } | Instruction::CallClosure { closure: function, arguments } => {
+                    self.type_check_call(function, arguments, id, result_type, mir);
                 },
                 Instruction::PackClosure { function, environment } => {
                     let function_type = mir.type_of_value(function, self);
@@ -181,12 +156,12 @@ impl Definition {
                         instr_panic!(self, id, mir, "PackClosure function is not a function type, it is a(n) `{function_type}`")
                     };
 
-                    instr_assert_eq!(*function_type.parameters.last().unwrap(), environment_type, self, id, mir, "Last parameter of function is not the environment type");
+                    instr_assert_eq!(function_type.environment, environment_type, self, id, mir, "Closure env type doesn't match the environment value packed here");
 
                     let Type::Function(closure_type) = result_type else {
                         instr_panic!(self, id, mir, "PackClosure result is not a function type, it is a(n) `{result_type}`")
                     };
-                    instr_assert!(closure_type.is_closure, self, id, mir, "PackClosure result is not a closure");
+                    instr_assert!(closure_type.is_closure(), self, id, mir, "PackClosure result is not a closure");
                 }
                 Instruction::IndexTuple { tuple, index } => {
                     let tuple_type = mir.type_of_value(tuple, self);
@@ -348,6 +323,25 @@ impl Definition {
                 Instruction::SizeOf(_) => (),
             }
         }
+    }
+
+    #[rustfmt::skip]
+    fn type_check_call(&self, function: &Value, arguments: &[Value], id: InstructionId, result_type: &Type, mir: &Mir) {
+        let function_type = mir.type_of_value(function, self);
+        let Type::Function(function_type) = function_type else {
+            instr_panic!(self, id, mir, "Called value is not a function, it is a(n) `{function_type}`")
+        };
+
+        instr_assert_eq!(function_type.parameters.len(), arguments.len(), self, id, mir, "parameter type len does not match arg type len");
+        for (i, (parameter, argument)) in function_type.parameters.iter().zip(arguments).enumerate() {
+            let arg_type = mir.type_of_value(argument, self);
+            // Skip type mismatch checks involving Error types. Error occurs when a
+            // value's type is unknown (e.g., captured env params not yet converted).
+            if *parameter != Type::ERROR && arg_type != Type::ERROR {
+                instr_assert_eq!(*parameter, arg_type, self, id, mir, "Type mismatch in arg {i} of call");
+            }
+        }
+        instr_assert_eq!(function_type.return_type, *result_type, self, id, mir, "Function type result type does not match result type of call instruction");
     }
 
     fn type_check_block_terminators(&self, mir: &Mir) {

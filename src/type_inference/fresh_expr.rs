@@ -2,7 +2,11 @@
 //! during type-inference. This is most notably used when compiling match expressions
 //! where intermediate variables are created to simplify the decision tree structure.
 
-use std::{collections::{BTreeMap, BTreeSet}, ops::Index, sync::Arc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    ops::Index,
+    sync::Arc,
+};
 
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};

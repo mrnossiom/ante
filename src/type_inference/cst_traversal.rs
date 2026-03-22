@@ -19,12 +19,8 @@ use crate::{
 
 impl<'local, 'inner> TypeChecker<'local, 'inner> {
     pub(super) fn check_definition(&mut self, definition: &Definition) {
-        let expected_generalized_type = try_get_type(
-            definition,
-            self.current_context(),
-            &self.current_resolve(),
-            self.compiler,
-        );
+        let expected_generalized_type =
+            try_get_type(definition, self.current_context(), &self.current_resolve(), self.compiler);
         let expected_type = match expected_generalized_type {
             // Ignore a possible `forall` here, we don't support polymorphic recursion
             Some(typ) => typ.ignore_forall().clone(),
@@ -63,6 +59,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             },
             Expr::Definition(definition) => {
                 self.check_definition(definition);
+                self.unify(&Type::UNIT, expected, TypeErrorKind::General, id);
             },
             Expr::MemberAccess(member_access) => self.check_member_access(member_access, expected, id),
             Expr::If(if_) => self.check_if(if_, expected, id),
@@ -128,7 +125,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                     Type::Function(Arc::new(types::FunctionType {
                         parameters: parameters.clone(),
                         // Any type constructor we can match on shouldn't be a closure
-                        environment: Type::UNIT,
+                        environment: Type::NO_CLOSURE_ENV,
                         return_type: expected.clone(),
                         effects: self.next_type_variable(),
                     }))
@@ -282,7 +279,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 let pair = Type::Application(Arc::new(Type::PAIR), Arc::new(vec![a.clone(), b.clone()]));
                 Type::Function(Arc::new(types::FunctionType {
                     parameters: vec![types::ParameterType::explicit(a), types::ParameterType::explicit(b)],
-                    environment: Type::UNIT,
+                    environment: Type::NO_CLOSURE_ENV,
                     return_type: pair,
                     effects: Type::UNIT,
                 }))

@@ -21,18 +21,24 @@ main () =
 main ()
 
 // args: --delete-binary
-// expected exit status: 101
 // expected stderr:
-// thread 'main' panicked at /Users/jakefecher/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/inc-complete-0.9.1/src/db/mod.rs:354:9:
-// inc-complete: Cycle Detected!
+// examples/regressions/85_type_defaulting_rules.an:14:4	error: Expected fn _ [_] -> _ can _ but found fn I32 (fn I32 [_] -> _ can _) -> Unit can _
+//     count_down 3 fn x ->
 // 
-// Cycle:
-//   1. GetType(`cast_i32_usz`)
-//   2. TypeCheck(`cast_i32_usz`)
-//   3. TypeCheckSCC(`cast_i32_usz`)
-//   4. GetType(`print_bool`)
-//   5. TypeCheck(`print_bool`)
-//   6. TypeCheckSCC(`print_bool`)
-//   7. GetType(`cast_i32_usz`)
-// note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+// examples/regressions/85_type_defaulting_rules.an:14:17	error: Expected an unindent but found `fn`
+//     count_down 3 fn x ->
+// 
+// examples/regressions/85_type_defaulting_rules.an:17:27	error: `offset` not found in scope
+//     print_offset _ = print offset
+// 
+// examples/regressions/85_type_defaulting_rules.an:18:25	error: `_` not found in scope
+//     closure = count_down _ print_offset
+// 
+// examples/regressions/85_type_defaulting_rules.an:19:12	error: Expected `=` to begin the function body but found `2`
+//     closure 2
+// 
+// examples/regressions/85_type_defaulting_rules.an:21:5	error: Expected `=` to begin the function body but found `()`
+// main ()
+// 
+// Found 6 errors and 0 warnings
 

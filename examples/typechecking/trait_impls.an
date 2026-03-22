@@ -29,17 +29,17 @@ bar "four" "five"
 // type Bar a [env] =
 //     bar: fn a a [[env]] -> b
 // 
-// implicit (bar1: Bar I32 String) = Bar I32 String with
-//     (bar: fn I32 I32 [String] -> (error) pure) = fn (_: I32) (_: I32) -> "good"
+// implicit (bar1: (error)) = Bar I32 String NoClosureEnv with
+//     (bar: (error)) = fn (_: _) (_: _) -> "good"
 // 
-// implicit (bar2: Bar I32 I32) = Bar I32 I32 with
-//     (bar: fn I32 I32 [I32] -> (error) pure) = fn (_: I32) (_: I32) -> "bad return type"
+// implicit (bar2: (error)) = Bar I32 I32 NoClosureEnv with
+//     (bar: (error)) = fn (_: _) (_: _) -> "bad return type"
 // 
-// implicit (bar3: (error)) = Bar I32 Char String F64 Unit with
+// implicit (bar3: (error)) = Bar I32 Char String F64 Unit NoClosureEnv with
 //     (bar: (error)) = fn (_: _) (_: _) -> "bad impl args"
 // 
-// implicit (bar4: Bar I32 F64) = Bar I32 F64 with
-//     (bar: fn I32 I32 [F64] -> (error) pure) = fn (_: I32) (_: I32) -> 23.2
+// implicit (bar4: (error)) = Bar I32 F64 NoClosureEnv with
+//     (bar: (error)) = fn (_: _) (_: _) -> 23.2
 // 
 // (foo: fn _ _ -> _ can _) (a: _) (b: _) = (bar: (error)) (a: _) (b: _)
 // 
@@ -49,17 +49,17 @@ bar "four" "five"
 // examples/typechecking/trait_impls.an:3:16	error: `b` not found in scope
 //     bar: fn a a -> b
 // 
-// examples/typechecking/trait_impls.an:7:4	error: Expected the closure environment String, but the actual environment was of type Unit
-//     bar _ _ = "good"
+// examples/typechecking/trait_impls.an:6:0	error: Function has 3 arguments but 1 was expected
+// impl bar1: Bar I32 String with
 // 
-// examples/typechecking/trait_impls.an:10:4	error: Expected the closure environment I32, but the actual environment was of type Unit
-//     bar _ _ = "bad return type"
+// examples/typechecking/trait_impls.an:9:0	error: Function has 3 arguments but 1 was expected
+// impl bar2: Bar I32 I32 with
 // 
-// examples/typechecking/trait_impls.an:12:0	error: Function has 5 arguments but 1 was expected
+// examples/typechecking/trait_impls.an:12:0	error: Function has 6 arguments but 1 was expected
 // impl bar3: Bar I32 Char String F64 Unit with
 // 
-// examples/typechecking/trait_impls.an:18:4	error: Expected the closure environment F64, but the actual environment was of type Unit
-//     bar _ _ = 23.2 // Should be an error, we already have a Bar I32
+// examples/typechecking/trait_impls.an:17:0	error: Function has 3 arguments but 1 was expected
+// impl bar4: Bar I32 F64 with
 // 
 // examples/typechecking/trait_impls.an:20:10	error: `bar` not found in scope
 // foo a b = bar a b

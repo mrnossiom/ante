@@ -18,18 +18,39 @@ my_iter iterable f =
 main () = my_iter 10 print
 
 // args: --delete-binary
-// expected exit status: 101
 // expected stderr:
-// thread 'main' panicked at /Users/jakefecher/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/inc-complete-0.9.1/src/db/mod.rs:354:9:
-// inc-complete: Cycle Detected!
+// examples/codegen/iter.an:3:27	error: `elem` not found in scope
+//     mynext: fn it -> Maybe (elem, it)
 // 
-// Cycle:
-//   1. GetType(`cast_i32_usz`)
-//   2. TypeCheck(`cast_i32_usz`)
-//   3. TypeCheckSCC(`cast_i32_usz`)
-//   4. GetType(`print_bool`)
-//   5. TypeCheck(`print_bool`)
-//   6. TypeCheckSCC(`print_bool`)
-//   7. GetType(`cast_i32_usz`)
-// note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+// examples/codegen/iter.an:6:0	error: Function has 3 arguments but 1 was expected
+// impl countdown: MyIterable I32 I32 with
+// 
+// examples/codegen/iter.an:8:13	error: Multiple matching implicits found for type Cmp I32 NoClosureEnv required by parameter 3 of function: cmp_i32, countdown
+//         if x <= 0 then None
+// 
+// examples/codegen/iter.an:8:23	error: `None` not found in scope
+//         if x <= 0 then None
+// 
+// examples/codegen/iter.an:9:13	error: `Some` not found in scope
+//         else Some (x, x - 1)
+// 
+// examples/codegen/iter.an:9:24	error: Multiple matching implicits found for type Sub I32 NoClosureEnv required by parameter 3 of function: countdown, sub_i32
+//         else Some (x, x - 1)
+// 
+// examples/codegen/iter.an:12:10	error: `mynext` not found in scope
+//     match mynext iterable
+// 
+// examples/codegen/iter.an:13:6	error: `None` not found in scope
+//     | None -> ()
+// 
+// examples/codegen/iter.an:14:6	error: `Some` not found in scope
+//     | Some (elem, rest) ->
+// 
+// examples/codegen/iter.an:18:21	error: Expected the closure environment Unit, but the actual environment was empty
+// main () = my_iter 10 print
+// 
+// examples/codegen/iter.an:18:21	error: Multiple matching implicits found for type Print Bool NoClosureEnv required by parameter 2 of function: countdown, print_bool
+// main () = my_iter 10 print
+// 
+// Found 11 errors and 0 warnings
 

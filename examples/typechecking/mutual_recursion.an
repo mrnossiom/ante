@@ -15,18 +15,35 @@ main () = is_even 4
 // TODO: is_odd here uses `forall a c.` instead of `forall a b.`
 
 // args: -e ast-t
-// expected exit status: 101
-// expected stderr:
-// thread 'main' panicked at /Users/jakefecher/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/inc-complete-0.9.1/src/db/mod.rs:354:9:
-// inc-complete: Cycle Detected!
+// expected stdout:
+// (is_even: Bool) (n: I32) =
+//     if (fn (p6: I32) (p7: I32) -> (==: fn I32 I32 {Eq I32 NoClosureEnv} -> Bool pure) (p6: I32) (p7: I32) {(eq_i32: Eq I32 NoClosureEnv)}) (n: I32) 0 then true else 
+//         (fn (p8: I32) -> (print: fn I32 {Print I32 NoClosureEnv} -> Unit pure) (p8: I32) {(print_i32: Print I32 NoClosureEnv)}) (n: I32)
+//         (not: fn Bool -> Bool can _) (is_odd: fn I32 -> _ can _)
 // 
-// Cycle:
-//   1. GetType(`cast_i32_usz`)
-//   2. TypeCheck(`cast_i32_usz`)
-//   3. TypeCheckSCC(`cast_i32_usz`)
-//   4. GetType(`print_bool`)
-//   5. TypeCheck(`print_bool`)
-//   6. TypeCheckSCC(`print_bool`)
-//   7. GetType(`cast_i32_usz`)
-// note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+// (is_odd: fn I32 -> _ can _) (n: I32) =
+//     (or: (error)) ((fn (p5: I32) (p6: I32) -> (==: fn I32 I32 {Eq I32 NoClosureEnv} -> Bool pure) (p5: I32) (p6: I32) {(eq_i32: Eq I32 NoClosureEnv)}) (n: I32) 1) ((not: fn Bool -> Bool can _) (is_even: Bool))
+// 
+// (main: fn Unit -> _ can _) () = (is_even: Bool) 4
+
+// expected stderr:
+// examples/typechecking/mutual_recursion.an:3:0	error: Expected a function with 1 parameter, but found Bool
+// is_even n =
+// 
+// examples/typechecking/mutual_recursion.an:6:12	error: Expected Bool but found fn I32 -> _ can _
+//         not is_odd (n - 1)
+// 
+// examples/typechecking/mutual_recursion.an:6:19	error: Expected an unindent but found `(`
+//         not is_odd (n - 1)
+// 
+// examples/typechecking/mutual_recursion.an:9:11	error: `or` not found in scope
+//     n == 1 or not is_even (n - 1)
+// 
+// examples/typechecking/mutual_recursion.an:9:26	error: Expected an unindent but found `(`
+//     n == 1 or not is_even (n - 1)
+// 
+// examples/typechecking/mutual_recursion.an:11:10	error: Expected fn _ [_] -> _ can _ but found Bool
+// main () = is_even 4
+// 
+// Found 6 errors and 0 warnings
 

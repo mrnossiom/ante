@@ -75,6 +75,8 @@ impl TypeErrorKind {
                     format!(
                         "Expected a free function, but this closure captures variable(s) in the outer scope. The captured environment is of type {actual}"
                     )
+                } else if actual_type == NO_CLOSURE_ENV_STRING {
+                    format!("Expected the closure environment {expected}, but the actual environment was empty")
                 } else {
                     format!(
                         "Expected the closure environment {expected}, but the actual environment was of type {actual}"

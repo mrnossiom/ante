@@ -4,7 +4,7 @@ impl print_impl {_: DoesNotExist a}: Print a with
 
 // args: -e ast-t
 // expected stdout:
-// implicit (print_impl: fn {(error) a} -> Print a ((error) a) pure) {(_: (error) a)} : Print a (DoesNotExist a) pure = Print a (DoesNotExist a) with
+// implicit (print_impl: fn {(error) a [env_0]} -> Print a ((error) a [env_0]) pure) {(_: (error) a [env_0])} : Print a (DoesNotExist a [env_0]) pure = Print a (DoesNotExist a [env_0]) with
 //     (printne: (error)) = fn (_: _) -> ()
 
 // expected stderr:
@@ -14,7 +14,7 @@ impl print_impl {_: DoesNotExist a}: Print a with
 // examples/typechecking/given_constraint_error.an:2:20	error: `DoesNotExist` not found in scope
 // impl print_impl {_: DoesNotExist a}: Print a with
 // 
-// examples/typechecking/given_constraint_error.an:3:0	error: Print a (DoesNotExist a) has no field named `printne`
+// examples/typechecking/given_constraint_error.an:3:0	error: Print a (DoesNotExist a [env_0]) has no field named `printne`
 //     printne _ = ()
 // 
 // Found 3 errors and 0 warnings

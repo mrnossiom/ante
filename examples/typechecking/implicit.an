@@ -30,18 +30,50 @@ implicit_call () =
     requires_string ()
 
 // args: -e ast-t
-// expected exit status: 101
-// expected stderr:
-// thread 'main' panicked at /Users/jakefecher/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/inc-complete-0.9.1/src/db/mod.rs:354:9:
-// inc-complete: Cycle Detected!
+// expected stdout:
+// (requires_string: fn {String} Unit -> Unit pure) {(s: String)} () : Unit = ()
 // 
-// Cycle:
-//   1. GetType(`cast_i32_usz`)
-//   2. TypeCheck(`cast_i32_usz`)
-//   3. TypeCheckSCC(`cast_i32_usz`)
-//   4. GetType(`print_bool`)
-//   5. TypeCheck(`print_bool`)
-//   6. TypeCheckSCC(`print_bool`)
-//   7. GetType(`cast_i32_usz`)
-// note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+// (requires_u32: fn {U32} Unit -> Unit pure) {(x: U32)} () : Unit = ()
+// 
+// (requires_bool: fn {Bool} Unit -> Unit pure) {(b: Bool)} () : Unit = ()
+// 
+// (zero_matching: fn Unit -> Unit can _) () =
+//     (fn (p1: Unit) -> (requires_string: fn {String} Unit -> Unit pure) {(error)} (p1: Unit)) ()
+// 
+// (one_matching: fn Unit -> Unit can _) () =
+//     implicit (hello: String) = "hello"
+//     (fn (p1: Unit) [(hello: String)] -> (requires_string: fn {String} Unit -> Unit pure) {(hello: String)} (p1: Unit)) ()
+// 
+// (multiple_matching: fn Unit -> Unit can _) () =
+//     implicit (empty: String) = ""
+//     implicit (spaces: String) = "  "
+//     implicit (greeting: String) = "hi!"
+//     (fn (p1: Unit) -> (requires_string: fn {String} Unit -> Unit pure) {(error)} (p1: Unit)) ()
+// 
+// (one_matching_global: fn Unit -> Unit can _) () =
+//     (fn (p1: Unit) -> (requires_bool: fn {Bool} Unit -> Unit pure) {(false_: Bool)} (p1: Unit)) ()
+// 
+// (multiple_matching_with_global: fn Unit -> Unit can _) () =
+//     implicit (zero: U32) = 0_U32
+//     (fn (p1: Unit) -> (requires_u32: fn {U32} Unit -> Unit pure) {(error)} (p1: Unit)) ()
+// 
+// implicit (false_: Bool) = false
+// 
+// implicit (one: U32) = 1_U32
+// 
+// (implicit_call: fn Unit -> Unit can _) () =
+//     implicit (make_string: fn {Bool} -> String can _) {(_: Bool)} = ""
+//     (fn (p2: Unit) [(make_string: fn {Bool} -> String can _)] -> (requires_string: fn {String} Unit -> Unit pure) {(make_string: fn {Bool} -> String can _) {(false_: Bool)}} (p2: Unit)) ()
+
+// expected stderr:
+// examples/typechecking/implicit.an:6:4	error: No implicit found for type String required by parameter 1 of function
+//     requires_string ()
+// 
+// examples/typechecking/implicit.an:16:4	error: Multiple matching implicits found for type String required by parameter 1 of function: empty, spaces, greeting
+//     requires_string ()
+// 
+// examples/typechecking/implicit.an:23:4	error: Multiple matching implicits found for type U32 required by parameter 1 of function: zero, one
+//     requires_u32 ()
+// 
+// Found 3 errors and 0 warnings
 

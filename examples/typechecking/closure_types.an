@@ -22,7 +22,7 @@ use y = ()
 
 // args: -east-t
 // expected stdout:
-// (main: fn Unit -> _ can _) () =
+// (main: fn Unit -> Unit can _) () =
 //     (a: I32) = 1
 //     (b: I32) = 2
 //     (c: I32) = 3

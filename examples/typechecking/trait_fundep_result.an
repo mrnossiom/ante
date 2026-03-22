@@ -12,8 +12,8 @@ str = foo 0i32
 // type Foo a [env] =
 //     foo: fn a [[env]] -> b
 // 
-// implicit (foo_impl: Foo I32 String) = Foo I32 String with
-//     (foo: fn I32 [String] -> (error) pure) = fn (_: I32) -> "hi"
+// implicit (foo_impl: (error)) = Foo I32 String NoClosureEnv with
+//     (foo: (error)) = fn (_: _) -> "hi"
 // 
 // (str: _) = (foo: (error)) 0_I32
 
@@ -21,8 +21,8 @@ str = foo 0i32
 // examples/typechecking/trait_fundep_result.an:3:14	error: `b` not found in scope
 //     foo: fn a -> b
 // 
-// examples/typechecking/trait_fundep_result.an:6:4	error: Expected the closure environment String, but the actual environment was of type Unit
-//     foo _ = "hi"
+// examples/typechecking/trait_fundep_result.an:5:0	error: Function has 3 arguments but 1 was expected
+// impl foo_impl: Foo I32 String with
 // 
 // examples/typechecking/trait_fundep_result.an:8:6	error: `foo` not found in scope
 // str = foo 0i32

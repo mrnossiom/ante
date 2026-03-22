@@ -19,7 +19,7 @@ main () =
 //     bar_c1m488_1237_6: a_1
 // 
 // // id = c1m488_7510
-// implicit foo_i32_string_c1m488_7510_0: Foo_c1m488_1237_0 I32 String_bString = Foo_c1m488_1237_0 I32 String_bString with
+// implicit foo_i32_string_c1m488_7510_0: Foo_c1m488_1237_0 I32 String_bString NoClosureEnv = Foo_c1m488_1237_0 I32 String_bString NoClosureEnv with
 //     foo_? = fn _x_2 -> "test"
 //     baz_? = 2
 // 
@@ -32,7 +32,7 @@ main () =
 // examples/nameresolution/Trait.an:6:0	error: Missing field: bar
 // impl foo_i32_string: Foo I32 String with
 // 
-// examples/nameresolution/Trait.an:8:0	error: Foo I32 String has no field named `baz`
+// examples/nameresolution/Trait.an:8:0	error: Foo I32 String NoClosureEnv has no field named `baz`
 //     baz = 2
 // 
 // examples/nameresolution/Trait.an:11:4	error: `foo` not found in scope

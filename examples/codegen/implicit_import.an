@@ -1,9 +1,8 @@
-var v = Vec.empty ()
-
-Vec.push (mut v) 3i32
-Vec.push (mut v) 4
-
-print v
+main () =
+    var v = Vec.empty ()
+    Vec.push (mut v) 3i32
+    Vec.push (mut v) 4
+    print v
 
 // args: --delete-binary
 // expected stderr:

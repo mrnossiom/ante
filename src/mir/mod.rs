@@ -819,7 +819,7 @@ impl PrimitiveType {
             PrimitiveType::Error | PrimitiveType::NoClosureEnv | PrimitiveType::Unit => 0,
             PrimitiveType::Bool => 1,
             PrimitiveType::Pointer => ptr_size,
-            PrimitiveType::Char => 4,
+            PrimitiveType::Char => 1,
             PrimitiveType::Int(kind) => kind.size_in_bytes(ptr_size),
             PrimitiveType::Float(kind) => kind.size_in_bytes(),
         }

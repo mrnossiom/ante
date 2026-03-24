@@ -166,7 +166,7 @@ impl<'ctx> ModuleContext<'ctx> {
         match value {
             mir::Value::Unit => self.llvm.const_struct(&[], false).into(),
             mir::Value::Bool(b) => self.llvm.bool_type().const_int(b as u64, false).into(),
-            mir::Value::Char(c) => self.llvm.i32_type().const_int(c as u64, false).into(),
+            mir::Value::Char(c) => self.llvm.i8_type().const_int(c as u64, false).into(),
             mir::Value::Integer(constant) => {
                 let kind = constant.kind();
                 let typ = self.convert_integer_kind(kind);
@@ -208,7 +208,28 @@ impl<'ctx> ModuleContext<'ctx> {
                 let value = *value;
                 self.constant_value(value)
             },
-            mir::Instruction::Transmute(value) => self.transmute(value, global, id),
+            mir::Instruction::Transmute(value) => {
+                // In global initializer context the builder cannot emit SSA instructions, so we
+                // cannot use alloca/store/load. When the source is zero-sized (e.g. unit `{}`
+                // being reinterpreted as a None variant's inner field) the content is undefined,
+                // so we use undef of the destination type. If the source has a non-zero size,
+                // the transmute cannot be evaluated as a compile-time constant.
+                let source = self.constant_value(*value);
+                // Only zero-sized sources (e.g. unit `{}` reinterpreted as a None variant's
+                // inner field) can be represented as a compile-time constant. The result is
+                // undef since no source bytes exist to define the destination value.
+                let is_empty_struct = matches!(
+                    source.get_type(),
+                    BasicTypeEnum::StructType(s) if s.count_fields() == 0
+                );
+                assert!(
+                    is_empty_struct,
+                    "Transmute in global initializer requires a zero-sized source type, got {:?}",
+                    source.get_type()
+                );
+                let result_type = self.convert_type(global.instruction_result_type(id));
+                Self::undef_value(result_type)
+            },
             other => panic!("Unsupported instruction in global initializer: {other:?}"),
         }
     }
@@ -306,7 +327,7 @@ impl<'ctx> ModuleContext<'ctx> {
             PrimitiveType::Unit => self.llvm.struct_type(&[], false).into(),
             PrimitiveType::Bool => self.llvm.bool_type().into(),
             PrimitiveType::Pointer => self.llvm.ptr_type(AddressSpace::default()).into(),
-            PrimitiveType::Char => self.llvm.i32_type().into(),
+            PrimitiveType::Char => self.llvm.i8_type().into(),
             PrimitiveType::Int(kind) => self.convert_integer_kind(kind).into(),
             PrimitiveType::Float(FloatKind::F32) => self.llvm.f32_type().into(),
             PrimitiveType::Float(FloatKind::F64) => self.llvm.f64_type().into(),
@@ -360,7 +381,7 @@ impl<'ctx> ModuleContext<'ctx> {
             mir::Value::Error => unreachable!("Error value encountered during llvm codegen"),
             mir::Value::Unit => self.llvm.const_struct(&[], false).into(),
             mir::Value::Bool(value) => self.llvm.bool_type().const_int(*value as u64, false).into(),
-            mir::Value::Char(value) => self.llvm.i32_type().const_int(*value as u64, false).into(),
+            mir::Value::Char(value) => self.llvm.i8_type().const_int(*value as u64, false).into(),
             mir::Value::Integer(constant) => {
                 let kind = constant.kind();
                 let typ = self.convert_integer_kind(kind);
@@ -372,20 +393,35 @@ impl<'ctx> ModuleContext<'ctx> {
                 *self.values.get(&value).unwrap_or_else(|| panic!("llvm codegen: mir value is not cached: {value}"))
             },
             mir::Value::Definition(function_id) => {
-                if let Some(gv) = self.global_values.get(&value) {
-                    return gv.as_pointer_value().into();
-                }
-
                 let function = self.try_get_function(self.current_function.unwrap()).unwrap();
                 let typ = self.mir.type_of_value(&value, function);
+                let is_function = self.convert_function_type(&typ).is_some();
 
-                if let Some(fn_type) = self.convert_function_type(&typ) {
+                // A `let` definition is a global variable even if its type is a function type.
+                // It stores a function pointer that must be loaded, not called directly.
+                let is_let_global = self.mir.definitions.get(function_id).map_or(false, |d| d.is_global());
+
+                if self.global_values.contains_key(&value) {
+                    let gv = self.global_values[&value];
+                    if is_function && !is_let_global && gv.as_any_value_enum().is_function_value() {
+                        // Actual LLVM function — return the pointer directly
+                        return gv.as_pointer_value().into();
+                    } else {
+                        // Global variable (non-function type, or `let` holding a function pointer)
+                        let llvm_type = self.convert_type(&typ);
+                        return self.builder.build_load(llvm_type, gv.as_pointer_value(), "").unwrap();
+                    }
+                }
+
+                if is_function && !is_let_global {
+                    // True function definition or extern function — create a declaration
+                    let fn_type = self.convert_function_type(&typ).unwrap();
                     let name = self.get_name(*function_id);
                     let function_value = self.module.add_function(name, fn_type, None).as_global_value();
                     self.global_values.insert(*value, function_value);
                     function_value.as_pointer_value().into()
                 } else {
-                    // It's a global variable — codegen it now if not yet done
+                    // Global variable (non-function type, or `let` holding a function pointer)
                     let def =
                         self.mir.definitions.get(&function_id).expect("lookup_value: definition not found").clone();
                     self.codegen_global(&def, *function_id);
@@ -428,7 +464,7 @@ impl<'ctx> ModuleContext<'ctx> {
                 self.builder.build_extract_value(tuple, *index, "").unwrap()
             },
             mir::Instruction::MakeString(string) => {
-                let string_data = self.llvm.const_string(string.as_bytes(), false);
+                let string_data = self.llvm.const_string(string.as_bytes(), true);
                 // Need to create a unique name across modules. Llvm will auto-rename within
                 // the same module so duplicate names within one function won't matter.
                 let name = format!("{}_str", self.current_function.unwrap());
@@ -501,12 +537,12 @@ impl<'ctx> ModuleContext<'ctx> {
             mir::Instruction::ModSigned(a, b) => {
                 let a = self.lookup_value(a).into_int_value();
                 let b = self.lookup_value(b).into_int_value();
-                self.builder.build_int_signed_div(a, b, "").unwrap().as_basic_value_enum()
+                self.builder.build_int_signed_rem(a, b, "").unwrap().as_basic_value_enum()
             },
             mir::Instruction::ModUnsigned(a, b) => {
                 let a = self.lookup_value(a).into_int_value();
                 let b = self.lookup_value(b).into_int_value();
-                self.builder.build_int_unsigned_div(a, b, "").unwrap().as_basic_value_enum()
+                self.builder.build_int_unsigned_rem(a, b, "").unwrap().as_basic_value_enum()
             },
             mir::Instruction::ModFloat(a, b) => {
                 let a = self.lookup_value(a).into_float_value();

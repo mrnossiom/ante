@@ -10,9 +10,5 @@ main () =
     0
 
 // args: --delete-binary
-// expected exit status: 101
-// expected stderr:
-// thread 'main' panicked at src/codegen/llvm/mod.rs:211:18:
-// Unsupported instruction in global initializer
-// note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+// expected stdout: foo
 

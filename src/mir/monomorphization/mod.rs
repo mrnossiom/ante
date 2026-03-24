@@ -41,7 +41,8 @@ where
         .into_iter()
         //.into_par_iter()
         .flat_map(|item| build_initial_mir_with_shared_map(compiler, item))
-        .fold(Mir::default(), Mir::extend);
+        .fold(Mir::default(), Mir::extend)
+        .remove_internal_externs();
     //.reduce(Mir::default, Mir::extend);
 
     let shared = SharedDefinitions::default();
@@ -171,6 +172,13 @@ impl<'local> FunctionContext<'local> {
                 });
 
                 *instruction = Instruction::Id(Value::Definition(new_id));
+            } else if !self.generic_mapping.is_empty() {
+                // When a generic function directly calls another definition (e.g. a recursive
+                // self-call) without going through `Instantiate`, the `Value::Definition` ID must
+                // still be remapped to the monomorphized version.  We only do this when the
+                // mapping already exists in `self.definitions`; if it is absent the reference is
+                // already monomorphic and needs no update.
+                self.remap_definition_values_in_instruction(instruction);
             }
         }
 
@@ -186,6 +194,74 @@ impl<'local> FunctionContext<'local> {
             for parameter in block.parameter_types.iter_mut() {
                 self.specialize_type(parameter);
             }
+        }
+    }
+
+    /// Remap any `Value::Definition(old_id)` inside `instruction` to the already-computed
+    /// monomorphized ID when `(old_id, generic_mapping)` is already present in `self.definitions`.
+    /// This handles direct calls to generic functions (e.g. recursive self-calls) that bypass
+    /// the `Instantiate` instruction path.
+    fn remap_definition_values_in_instruction(&self, instruction: &mut Instruction) {
+        let remap = |v: &mut Value| {
+            if let Value::Definition(id) = v {
+                if let Some(new_id) = self.definitions.get(&(*id, self.generic_mapping.clone())) {
+                    *id = *new_id;
+                }
+            }
+        };
+
+        match instruction {
+            Instruction::Call { function, arguments } => {
+                remap(function);
+                arguments.iter_mut().for_each(remap);
+            },
+            Instruction::CallClosure { closure: function, arguments } => {
+                remap(function);
+                arguments.iter_mut().for_each(remap);
+            },
+            Instruction::PackClosure { function, environment } => {
+                remap(function);
+                remap(environment);
+            },
+            Instruction::IndexTuple { tuple, .. } => remap(tuple),
+            Instruction::MakeTuple(elements) => elements.iter_mut().for_each(remap),
+            Instruction::StackAlloc(v) | Instruction::Transmute(v) | Instruction::Id(v) => remap(v),
+            Instruction::AddInt(a, b)
+            | Instruction::AddFloat(a, b)
+            | Instruction::SubInt(a, b)
+            | Instruction::SubFloat(a, b)
+            | Instruction::MulInt(a, b)
+            | Instruction::MulFloat(a, b)
+            | Instruction::DivSigned(a, b)
+            | Instruction::DivUnsigned(a, b)
+            | Instruction::DivFloat(a, b)
+            | Instruction::ModSigned(a, b)
+            | Instruction::ModUnsigned(a, b)
+            | Instruction::ModFloat(a, b)
+            | Instruction::LessSigned(a, b)
+            | Instruction::LessUnsigned(a, b)
+            | Instruction::LessFloat(a, b)
+            | Instruction::EqInt(a, b)
+            | Instruction::EqFloat(a, b)
+            | Instruction::BitwiseAnd(a, b)
+            | Instruction::BitwiseOr(a, b)
+            | Instruction::BitwiseXor(a, b) => {
+                remap(a);
+                remap(b);
+            },
+            Instruction::BitwiseNot(v)
+            | Instruction::SignExtend(v)
+            | Instruction::ZeroExtend(v)
+            | Instruction::SignedToFloat(v)
+            | Instruction::UnsignedToFloat(v)
+            | Instruction::FloatToSigned(v)
+            | Instruction::FloatToUnsigned(v)
+            | Instruction::FloatPromote(v)
+            | Instruction::FloatDemote(v)
+            | Instruction::Truncate(v)
+            | Instruction::Deref(v)
+            | Instruction::SizeOf(v) => remap(v),
+            Instruction::MakeString(_) | Instruction::Instantiate(..) => {},
         }
     }
 

@@ -2,42 +2,21 @@ type T = a: I32, b: String
 
 main () =
     t = T 1 "one"
-    printne "t = "
-    printne (t.a)
-    printne ", "
+    print "t = "
+    print (t.a)
+    print ", "
 
     puts t.b.c_string
 
-    s = Some 2
+    s = Maybe.Some 2
 
     match s
     | Some x -> 
-        printne "s = "
-        print x
-    | None -> print "s = None"
+        print "s = "
+        println x
+    | None -> println "s = None"
 
 // args: --delete-binary
-// expected stderr:
-// examples/codegen/data.an:5:4	error: `printne` not found in scope
-//     printne "t = "
-// 
-// examples/codegen/data.an:6:4	error: `printne` not found in scope
-//     printne (t.a)
-// 
-// examples/codegen/data.an:7:4	error: `printne` not found in scope
-//     printne ", "
-// 
-// examples/codegen/data.an:11:8	error: `Some` not found in scope
-//     s = Some 2
-// 
-// examples/codegen/data.an:14:6	error: `Some` not found in scope
-//     | Some x -> 
-// 
-// examples/codegen/data.an:15:8	error: `printne` not found in scope
-//         printne "s = "
-// 
-// examples/codegen/data.an:17:6	error: `None` not found in scope
-//     | None -> print "s = None"
-// 
-// Found 7 errors and 0 warnings
-
+// expected stdout:
+// t = 1, one
+// s = 2

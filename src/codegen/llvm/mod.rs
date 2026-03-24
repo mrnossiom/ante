@@ -315,7 +315,16 @@ impl<'ctx> ModuleContext<'ctx> {
                 let struct_type = self.llvm.struct_type(&fields, false);
                 BasicTypeEnum::StructType(struct_type)
             },
-            mir::Type::Function(_) => self.llvm.ptr_type(AddressSpace::default()).into(),
+            mir::Type::Function(f) => {
+                if let Some(env) = f.environment() {
+                    // A closure value is a {fn_ptr, env} struct, matching what PackClosure produces.
+                    let ptr = self.llvm.ptr_type(AddressSpace::default()).into();
+                    let env_type = self.convert_type(env);
+                    self.llvm.struct_type(&[ptr, env_type], false).into()
+                } else {
+                    self.llvm.ptr_type(AddressSpace::default()).into()
+                }
+            },
             mir::Type::Union(_) => self.llvm.ptr_type(AddressSpace::default()).into(),
             mir::Type::Generic(_) => self.llvm.ptr_type(AddressSpace::default()).into(),
         }

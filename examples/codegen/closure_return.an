@@ -8,9 +8,4 @@ main () =
     foo ()
 
 // args: --delete-binary
-// expected exit status: 101
-// expected stderr:
-// thread 'main' panicked at src/codegen/llvm/mod.rs:456:58:
-// Found PointerValue(PointerValue { ptr_value: Value { name: "", address: 0xa8dce2fc0, is_const: false, is_null: false, is_undef: false, llvm_value: "  %2 = call ptr @get_closure({} zeroinitializer)", llvm_type: "ptr" } }) but expected the StructValue variant
-// note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
-
+// expected stdout: hi there

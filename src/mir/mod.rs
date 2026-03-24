@@ -366,7 +366,7 @@ impl Block {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum Instruction {
     Call {
         function: Value,

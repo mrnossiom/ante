@@ -17,7 +17,7 @@ use crate::{
     incremental::Db,
     iterator_extensions::mapvec,
     lexer::token::{FloatKind, IntegerKind},
-    mir::{self, BlockId, DefinitionId, FloatConstant, PrimitiveType, TerminatorInstruction},
+    mir::{self, BlockId, DefinitionId, FloatConstant, InstructionId, PrimitiveType, TerminatorInstruction},
     vecmap::VecMap,
 };
 
@@ -208,7 +208,8 @@ impl<'ctx> ModuleContext<'ctx> {
                 let value = *value;
                 self.constant_value(value)
             },
-            _ => panic!("Unsupported instruction in global initializer"),
+            mir::Instruction::Transmute(value) => self.transmute(value, global, id),
+            other => panic!("Unsupported instruction in global initializer: {other:?}"),
         }
     }
 
@@ -301,7 +302,7 @@ impl<'ctx> ModuleContext<'ctx> {
 
     fn convert_primitive_type(&self, primitive_type: PrimitiveType) -> BasicTypeEnum<'ctx> {
         match primitive_type {
-            PrimitiveType::Error => self.llvm.struct_type(&[], false).into(), //unreachable!("Cannot codegen llvm with errors"),
+            PrimitiveType::Error => unreachable!("Cannot codegen llvm with errors"),
             PrimitiveType::Unit => self.llvm.struct_type(&[], false).into(),
             PrimitiveType::Bool => self.llvm.bool_type().into(),
             PrimitiveType::Pointer => self.llvm.ptr_type(AddressSpace::default()).into(),
@@ -408,8 +409,18 @@ impl<'ctx> ModuleContext<'ctx> {
                     .try_as_basic_value()
                     .unwrap_basic()
             },
-            mir::Instruction::CallClosure { .. } => {
-                unreachable!("Exected CallClosure instructions to be removed before codegen")
+            mir::Instruction::CallClosure { closure, arguments } => {
+                let typ = self.convert_function_type(&self.mir.type_of_value(closure, function)).unwrap();
+                let closure = self.lookup_value(closure).into_struct_value();
+                let mut arguments = mapvec(arguments, |arg| self.lookup_value(arg).into());
+                let function = self.builder.build_extract_value(closure, 0, "").unwrap().into_pointer_value();
+                let environment = self.builder.build_extract_value(closure, 1, "").unwrap();
+                arguments.push(environment.into());
+                self.builder
+                    .build_indirect_call(typ, function, &arguments, "")
+                    .unwrap()
+                    .try_as_basic_value()
+                    .unwrap_basic()
             },
             mir::Instruction::PackClosure { function, environment } => self.make_tuple(&[*function, *environment]),
             mir::Instruction::IndexTuple { tuple, index } => {
@@ -436,12 +447,7 @@ impl<'ctx> ModuleContext<'ctx> {
                 alloca.into()
             },
             mir::Instruction::Transmute(value) => {
-                // Transmute the value by storing it in an alloca and loading it as a different type
-                let result_type = self.convert_type(function.instruction_result_type(id));
-                let value = self.lookup_value(value);
-                let alloca = self.builder.build_alloca(value.get_type(), "").unwrap();
-                self.builder.build_store(alloca, value).unwrap();
-                self.builder.build_load(result_type, alloca, "").unwrap()
+                self.transmute(value, function, id)
             },
             mir::Instruction::Id(value) => self.lookup_value(value),
             mir::Instruction::Instantiate(..) => {
@@ -606,6 +612,15 @@ impl<'ctx> ModuleContext<'ctx> {
         self.values.insert(mir::Value::InstructionResult(id), result);
     }
 
+    fn transmute(&mut self, value: &mir::Value, function: &mir::Definition, id: InstructionId) -> BasicValueEnum<'ctx> {
+        // Transmute the value by storing it in an alloca and loading it as a different type
+        let result_type = self.convert_type(function.instruction_result_type(id));
+        let value = self.lookup_value(value);
+        let alloca = self.builder.build_alloca(value.get_type(), "").unwrap();
+        self.builder.build_store(alloca, value).unwrap();
+        self.builder.build_load(result_type, alloca, "").unwrap()
+    }
+
     fn make_tuple(&mut self, fields: &[mir::Value]) -> BasicValueEnum<'ctx> {
         let fields = mapvec(fields, |field| self.lookup_value(field));
         let const_fields =
@@ -698,7 +713,9 @@ impl<'ctx> ModuleContext<'ctx> {
 
     fn codegen_extern(&mut self, id: DefinitionId, external: &mir::Extern) {
         if !self.values.contains_key(&mir::Value::Definition(id)) {
-            let function_type = self.convert_function_type(&external.typ).unwrap();
+            let function_type = self.convert_function_type(&external.typ).unwrap_or_else(|| {
+                panic!("convert_function_type failed for {}: {}", external.name, external.typ)
+            });
             let name = &external.name;
             let function_value = self.module.add_function(name, function_type, None);
             self.values.insert(mir::Value::Definition(id), function_value.as_global_value().as_pointer_value().into());

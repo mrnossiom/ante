@@ -523,6 +523,7 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
                 self.resolve_type(&type_annotation.rhs, false);
             },
             Expr::Constructor(constructor) => self.resolve_constructor(constructor, expr),
+            Expr::Loop(_) => unreachable!("Loops should be desugared before name resolution"),
             Expr::Quoted(_) => (),
             Expr::Error => (),
         }

@@ -100,6 +100,7 @@ impl FreeVars {
                     self.find_free_variables(*expr, checker);
                 }
             },
+            cst::Expr::Loop(_) => unreachable!("Loops should be desugared before finding free variables"),
             cst::Expr::Quoted(_) => (),
         }
     }

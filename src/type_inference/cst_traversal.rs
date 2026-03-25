@@ -76,6 +76,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 let location = id.locate(self);
                 UnimplementedItem::Comptime.issue(self.compiler, location);
             },
+            Expr::Loop(_) => unreachable!("Loops should be desugared before type inference"),
             Expr::Error => (),
         }
     }

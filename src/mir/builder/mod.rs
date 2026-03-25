@@ -250,6 +250,7 @@ where
             cst::Expr::TypeAnnotation(type_annotation) => self.expression(type_annotation.lhs),
             cst::Expr::Constructor(constructor) => self.constructor(constructor, expr),
             cst::Expr::Quoted(quoted) => self.quoted(quoted),
+            cst::Expr::Loop(_) => unreachable!("Loops should be desugared before MIR generation"),
         }
     }
 

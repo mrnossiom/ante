@@ -13,7 +13,7 @@ use crate::{
     name_resolution::namespace::SourceFileId,
     parser::{
         context::TopLevelContext,
-        cst::{Argument, HandlePattern, ParameterType},
+        cst::{Argument, HandlePattern, Loop, LoopParameter, ParameterType},
     },
 };
 
@@ -1482,29 +1482,20 @@ impl<'tokens> Parser<'tokens> {
     fn parse_loop(&mut self) -> Result<ExprId> {
         self.with_expr_id_and_location(|this| {
             this.expect(Token::Loop, "`loop` to start a loop expression")?;
-            let _parameters = this.many1(Self::loop_parameter)?;
+            let parameters = this.many1(Self::loop_parameter)?;
             this.expect(Token::RightArrow, "`->` to separate the loop parameters from its body")?;
-            let _body = this.parse_block_or_expression();
+            let body = this.parse_block_or_expression()?;
 
             // Now throw everything away because we don't have a loop Cst node.
-            Ok(Expr::Error)
+            Ok(Expr::Loop(Loop { parameters, body }))
         })
     }
 
-    fn loop_parameter(&mut self) -> Result<(PatternId, ExprId)> {
+    fn loop_parameter(&mut self) -> Result<LoopParameter> {
         match self.current_token() {
-            Token::Identifier(name) => {
-                // Parse the same name twice as a pattern and expression
-                let arc_name = Arc::new(name.clone());
-                let location = self.current_token_location();
-                let name_id = self.push_name(arc_name, location.clone());
-                let pattern_id = self.push_pattern(Pattern::Variable(name_id), location.clone());
-
-                let path = Path { components: vec![(name.clone(), location.clone())] };
-                let path_id = self.push_path(path, location.clone());
-                let name_expr = self.push_expr(Expr::Variable(path_id), location);
-                self.advance();
-                Ok((pattern_id, name_expr))
+            Token::Identifier(_) => {
+                let name = self.parse_ident_id()?;
+                Ok(LoopParameter::Variable(name))
             },
             Token::ParenthesisLeft => {
                 self.advance();
@@ -1512,7 +1503,7 @@ impl<'tokens> Parser<'tokens> {
                 self.expect(Token::Equal, "`=` to separate the loop parameter's name from its initial valeu")?;
                 let expr = self.parse_expression()?;
                 self.expect(Token::ParenthesisRight, "`)` to close the opening `(` of this loop parameter")?;
-                Ok((pattern, expr))
+                Ok(LoopParameter::PatternAndExpr(pattern, expr))
             },
             _ => self.expected("an identifier or `(` to begin a loop parameter"),
         }

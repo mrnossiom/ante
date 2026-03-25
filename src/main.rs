@@ -326,8 +326,8 @@ fn llvm_codegen_all(compiler: &Db, files: &[PathBuf], delete_binary: bool) -> BT
 
     // Run the program
     // Use an absolute path so the binary can be found regardless of PATH.
-    let binary_path = std::fs::canonicalize(module_name.as_ref())
-        .unwrap_or_else(|_| std::path::PathBuf::from(module_name.as_ref()));
+    let binary_path =
+        std::fs::canonicalize(module_name.as_ref()).unwrap_or_else(|_| std::path::PathBuf::from(module_name.as_ref()));
     Command::new(&binary_path).spawn().unwrap().wait().unwrap();
     if delete_binary {
         std::fs::remove_file(module_name.as_ref()).unwrap();

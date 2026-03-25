@@ -218,6 +218,7 @@ pub enum Expr {
     Reference(Reference),
     TypeAnnotation(TypeAnnotation),
     Constructor(Constructor),
+    Loop(Loop),
     Quoted(Quoted),
 }
 
@@ -378,6 +379,23 @@ pub struct Reference {
 pub struct Constructor {
     pub typ: Type,
     pub fields: Vec<(NameId, ExprId)>,
+}
+
+/// Sugar for an immediately invoked helper function: `loop x (i = 0) -> ...`
+/// The `recur` identifier is defined within bound to the name of the new helper.
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
+pub struct Loop {
+    pub parameters: Vec<LoopParameter>,
+    pub body: ExprId,
+}
+
+/// A `loop` parameter is either an existing variable in scope (e.g. `x`)
+/// or a pattern, expression pair where the pattern is the loop helper function
+/// parameter and the expression is its initial value - e.g `(y = 3)`.
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
+pub enum LoopParameter {
+    Variable(NameId),
+    PatternAndExpr(PatternId, ExprId),
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]

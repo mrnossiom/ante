@@ -9,7 +9,7 @@ use crate::{
     lexer::token::INDEX_OPERATOR_FUNCTION_NAME,
     name_resolution::{Origin, namespace::SourceFileId},
     parser::{
-        cst::{Argument, Constructor, ReferenceKind, TopLevelItemKind},
+        cst::{Argument, Constructor, Loop, LoopParameter, ReferenceKind, TopLevelItemKind},
         ids::{IdStore, NameId, PathId},
     },
     type_inference::{
@@ -619,6 +619,7 @@ impl<'a> CstDisplay<'a> {
             Expr::TypeAnnotation(type_annotation) => self.fmt_type_annotation(type_annotation, context, f),
             Expr::Quoted(quoted) => self.fmt_quoted(quoted, f),
             Expr::Constructor(constructor) => self.fmt_constructor(constructor, context, f),
+            Expr::Loop(loop_) => self.fmt_loop(loop_, context, f),
         }
     }
 
@@ -1143,6 +1144,27 @@ impl<'a> CstDisplay<'a> {
             crate::type_inference::patterns::Constructor::Range(start, end) => write!(f, "{start}..={end}"),
             crate::type_inference::patterns::Constructor::Variant(_, variant_index) => write!(f, "{variant_index}"),
         }
+    }
+
+    fn fmt_loop(&mut self, loop_: &Loop, context: &impl IdStore, f: &mut Formatter) -> std::fmt::Result {
+        write!(f, "loop")?;
+
+        for parameter in &loop_.parameters {
+            write!(f, " ")?;
+            match parameter {
+                LoopParameter::Variable(name) => self.fmt_name(*name, context, f)?,
+                LoopParameter::PatternAndExpr(pattern, expr) => {
+                    write!(f, "(")?;
+                    self.fmt_pattern(*pattern, context, f)?;
+                    write!(f, " = ")?;
+                    self.fmt_expr(*expr, context, f)?;
+                    write!(f, ")")?;
+                },
+            }
+        }
+
+        write!(f, " -> ")?;
+        self.fmt_expr(loop_.body, context, f)
     }
 }
 

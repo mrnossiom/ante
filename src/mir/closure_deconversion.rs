@@ -9,7 +9,9 @@ use crate::mir::{BlockId, Definition, DefinitionId, Instruction, Mir, Type, Valu
 
 impl Mir {
     pub fn closure_deconvert(mut self) -> Self {
-        let definition_types = self.externals.iter()
+        let definition_types = self
+            .externals
+            .iter()
             .map(|(id, external)| (*id, external.typ.clone()))
             .chain(self.definitions.iter().map(|(id, def)| (*id, def.typ.clone())))
             .collect();

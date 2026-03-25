@@ -491,9 +491,7 @@ impl<'ctx> ModuleContext<'ctx> {
                 self.builder.build_store(alloca, value).unwrap();
                 alloca.into()
             },
-            mir::Instruction::Transmute(value) => {
-                self.transmute(value, function, id)
-            },
+            mir::Instruction::Transmute(value) => self.transmute(value, function, id),
             mir::Instruction::Id(value) => self.lookup_value(value),
             mir::Instruction::Instantiate(..) => {
                 unreachable!("Instruction::Instantiate remaining in the code during llvm codegen")
@@ -758,9 +756,9 @@ impl<'ctx> ModuleContext<'ctx> {
 
     fn codegen_extern(&mut self, id: DefinitionId, external: &mir::Extern) {
         if !self.values.contains_key(&mir::Value::Definition(id)) {
-            let function_type = self.convert_function_type(&external.typ).unwrap_or_else(|| {
-                panic!("convert_function_type failed for {}: {}", external.name, external.typ)
-            });
+            let function_type = self
+                .convert_function_type(&external.typ)
+                .unwrap_or_else(|| panic!("convert_function_type failed for {}: {}", external.name, external.typ));
             let name = &external.name;
             let function_value = self.module.add_function(name, function_type, None);
             self.values.insert(mir::Value::Definition(id), function_value.as_global_value().as_pointer_value().into());

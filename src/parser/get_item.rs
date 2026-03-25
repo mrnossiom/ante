@@ -10,6 +10,7 @@ use crate::{
             self, Constructor, Definition, Expr, Lambda, Pattern, TopLevelItem, TopLevelItemKind, TraitDefinition,
             TraitImpl, Type, TypeDefinitionBody, TypeKind,
         },
+        ids::ExprId,
     },
 };
 
@@ -41,6 +42,12 @@ pub fn get_item_impl(context: &GetItem, db: &DbHandle) -> (Arc<TopLevelItem>, Ar
             // TODO: Reduce cloning costs for context, comments
             let mut new_context = context.as_ref().clone();
             let new_kind = desugar_impl(trait_impl, &mut new_context);
+            let new_item = Arc::new(TopLevelItem { comments: item.comments.clone(), kind: new_kind, id: item.id });
+            (new_item, Arc::new(new_context))
+        },
+        TopLevelItemKind::Definition(definition) => {
+            let mut new_context = context.as_ref().clone();
+            let new_kind = desugar_expression(definition.rhs, &mut new_context);
             let new_item = Arc::new(TopLevelItem { comments: item.comments.clone(), kind: new_kind, id: item.id });
             (new_item, Arc::new(new_context))
         },
@@ -205,4 +212,30 @@ fn desugar_trait(trait_: &TraitDefinition, context: &mut TopLevelContext) -> Top
         generics,
         body: TypeDefinitionBody::Struct(fields),
     })
+}
+
+/// Traverse the expression recursively, desugaring along the way looking for the following cases:
+/// - `loop`: All loops are sugar for an immediately invoked helper function
+/// - `|>` and `<|`: Apply operators are sugar for direct application
+/// - `foo _ x _`: Function calls with `_` as arguments are automatically converted into lambdas
+///                with the `_` parameters as the remaining lambda parameters in source order.
+fn desugar_expression(expr: ExprId, context: &mut TopLevelContext) {
+    match &context.exprs[expr] {
+        Expr::Error => (),
+        Expr::Literal(_) => (),
+        Expr::Variable(_) => (),
+        Expr::Quoted(_) => (),
+        Expr::Sequence(sequence) => todo!(),
+        Expr::Definition(definition) => todo!(),
+        Expr::MemberAccess(access) => todo!(),
+        Expr::Call(call) => todo!(),
+        Expr::Lambda(lambda) => todo!(),
+        Expr::If(_) => todo!(),
+        Expr::Match(_) => todo!(),
+        Expr::Handle(handle) => todo!(),
+        Expr::Reference(reference) => todo!(),
+        Expr::TypeAnnotation(type_annotation) => todo!(),
+        Expr::Constructor(constructor) => todo!(),
+        Expr::Loop(_) => todo!(),
+    }
 }

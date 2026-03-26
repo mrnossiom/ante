@@ -100,8 +100,8 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 UnimplementedItem::Comptime.issue(self.compiler, location);
             },
             Expr::Loop(_) => unreachable!("Loops should be desugared before type inference"),
-            Expr::Return(_return) => todo!("Unify return type with function return type"),
-            Expr::Assignment(_assignment) => todo!("type check assignments"),
+            Expr::Return(return_) => self.check_return(return_.expression, id),
+            Expr::Assignment(assignment) => self.check_assignment(assignment, expected, id),
             Expr::Error => (),
         }
     }
@@ -353,6 +353,10 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             },
         };
 
+        // Remember the return type so that it can be checked by `return` statements
+        let old_return_type =
+            std::mem::replace(&mut self.function_return_type, Some(function_type.return_type.clone()));
+
         self.push_implicits_scope();
         self.check_function_parameter_count(&function_type.parameters, lambda.parameters.len(), expr);
         let parameter_lengths_match = function_type.parameters.len() == lambda.parameters.len();
@@ -382,6 +386,8 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         };
 
         self.check_expr(lambda.body, &return_type);
+
+        self.function_return_type = old_return_type;
         self.pop_implicits_scope();
 
         // pop_implicits_scope modifies the function by inserting implicit arguments, we need
@@ -548,6 +554,26 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     fn check_handle(&mut self, _handle: &cst::Handle, _expected: &Type, expr: ExprId) {
         let location = self.current_context().expr_locations[expr].clone();
         UnimplementedItem::Effects.issue(self.compiler, location);
+    }
+
+    fn check_assignment(&mut self, assignment: &cst::Assignment, expected: &Type, id: ExprId) {
+        let expr_type = self.next_type_variable();
+        self.check_expr(assignment.lhs, &expr_type);
+        self.check_expr(assignment.rhs, &expr_type);
+        self.unify(&Type::UNIT, expected, TypeErrorKind::General, id);
+    }
+
+    /// Return can unify with any type locally so we don't need the expected type here
+    fn check_return(&mut self, returned_expr: ExprId, id: ExprId) {
+        match self.function_return_type.as_ref().cloned() {
+            Some(expected_return) => {
+                self.check_expr(returned_expr, &expected_return);
+            },
+            None => {
+                let location = id.locate(self);
+                self.compiler.accumulate(Diagnostic::ReturnNotInFunction { location });
+            },
+        }
     }
 
     pub(super) fn check_extern(&mut self, extern_: &cst::Extern) {

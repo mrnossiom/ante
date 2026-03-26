@@ -21,5 +21,8 @@ double x = x * 2
 // examples/codegen/mutability.an:11:16	error: Expected ref I32 but found mut I32
 //     x = double @n
 // 
-// Found 2 errors and 0 warnings
+// examples/codegen/mutability.an:12:9	error: Expected mut I32 but found I32
+//     n := x
+// 
+// Found 3 errors and 0 warnings
 

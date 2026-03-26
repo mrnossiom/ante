@@ -143,6 +143,9 @@ struct TypeChecker<'local, 'inner> {
     /// while type checking, this should always be non-empty.
     current_item: Option<TopLevelId>,
 
+    /// The return type of the current function. Used to type check `return` statements.
+    function_return_type: Option<Type>,
+
     /// Types of each top-level item in the current SCC being worked on
     item_types: Rc<FxHashMap<TopLevelName, Type>>,
 
@@ -208,6 +211,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             pattern_types: Default::default(),
             item_types: Default::default(),
             current_item: None,
+            function_return_type: None,
             item_contexts,
             id_contexts,
             implicits: vec![Default::default()],

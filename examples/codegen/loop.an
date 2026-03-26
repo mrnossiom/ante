@@ -8,7 +8,7 @@ main () =
 
     loop (collatz = 7) ->
         if collatz == 1 then 
-            print ""
+            println ""
             return ()
         print collatz
         print " "
@@ -23,15 +23,8 @@ main () =
         else recur (s + 1) (t + 1)
 
 // args: --delete-binary
-// expected stderr:
-// examples/codegen/loop.an:5:32	error: Expected _ but found _
-//         else recur (start - 1) (sum + start)
-// 
-// examples/codegen/loop.an:19:4	error: Expected an unindent but found `loop`
-//     loop (s: I32) (t: I32 = 0) ->
-// 
-// examples/codegen/loop.an:44:0	error: Expected a top-level item but found an unindent
-// 
-// 
-// Found 3 errors and 0 warnings
+// expected stdout:
+// 55
+// 7 22 11 34 17 52 26 13 40 20 10 5 16 8 4 2 
+// 00112233
 

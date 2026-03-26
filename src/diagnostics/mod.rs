@@ -169,6 +169,7 @@ pub enum Diagnostic {
         parameter_index: usize,
         location: Location,
     },
+    ReturnNotInFunction { location: Location },
 }
 
 impl Ord for Diagnostic {
@@ -385,6 +386,9 @@ impl Diagnostic {
                     format!("Expected a type constructor of kind {expected}, but found one of kind {actual}")
                 }
             },
+            Diagnostic::ReturnNotInFunction { location: _ } => {
+                "`return` can only be used in a function".to_string()
+            }
         }
     }
 
@@ -424,6 +428,7 @@ impl Diagnostic {
             | Diagnostic::MultipleImplicitsFound { location, .. }
             | Diagnostic::ExpectedTypeKind { location, .. }
             | Diagnostic::ExpectedKind { location, .. }
+            | Diagnostic::ReturnNotInFunction { location }
             | Diagnostic::Unimplemented { location, .. } => location,
         }
     }

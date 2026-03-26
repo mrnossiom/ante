@@ -193,8 +193,9 @@ where
     /// Terminate the current block with the given terminator instruction
     fn terminate_block(&mut self, terminator: TerminatorInstruction) {
         let block = self.current_block();
-        assert!(block.terminator.is_none());
-        block.terminator = Some(terminator);
+        if block.terminator.is_none() {
+            block.terminator = Some(terminator);
+        }
     }
 
     fn expr_type(&self, expr: ExprId) -> Type {
@@ -251,7 +252,7 @@ where
             cst::Expr::Constructor(constructor) => self.constructor(constructor, expr),
             cst::Expr::Quoted(quoted) => self.quoted(quoted),
             cst::Expr::Loop(_) => unreachable!("Loops should be desugared before MIR generation"),
-            cst::Expr::Return(_return) => todo!("MIR generation for return"),
+            cst::Expr::Return(return_) => self.return_(return_.expression),
             cst::Expr::Assignment(_assignment) => todo!("MIR generation for assignment"),
         }
     }
@@ -820,6 +821,14 @@ where
 
     fn quoted(&self, _quoted: &cst::Quoted) -> Value {
         unreachable!("Should never convert a Quoted expr to mir")
+    }
+
+    fn return_(&mut self, returned_expression: ExprId) -> Value {
+        let value = self.expression(returned_expression);
+        self.terminate_block(TerminatorInstruction::Return(value));
+        // TODO: We'll need to try to filter these return blocks from
+        // matches & ifs, and potentially check for instructions after returns.
+        Value::Error
     }
 
     /// Bind the given value to the given pattern

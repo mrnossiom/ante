@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{BTreeSet, HashMap},
     env::set_current_dir,
     path::PathBuf,
     sync::{
@@ -245,16 +245,18 @@ fn collect_lsp_diagnostics(
         return result;
     };
 
+    // Using a BTreeSet here deduplicates the diagnostics returned by get_accumulated
+    let mut all_diags = BTreeSet::new();
     for file_id in local_crate.source_files.values() {
         let parse = Parse(*file_id).get(compiler);
         for item in &parse.cst.top_level_items {
-            for diag in compiler.get_accumulated(TypeCheck(item.id)) {
-                if let Some((uri, lsp_diag)) =
-                    to_lsp_diagnostic(&diag, compiler, current_uri, current_rope, document_map)
-                {
-                    result.entry(uri).or_default().push(lsp_diag);
-                }
-            }
+            all_diags.extend(compiler.get_accumulated(TypeCheck(item.id)));
+        }
+    }
+
+    for diag in &all_diags {
+        if let Some((uri, lsp_diag)) = to_lsp_diagnostic(diag, compiler, current_uri, current_rope, document_map) {
+            result.entry(uri).or_default().push(lsp_diag);
         }
     }
 

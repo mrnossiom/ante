@@ -1334,7 +1334,7 @@ impl<'tokens> Parser<'tokens> {
 
     fn parse_term_inner(&mut self) -> Result<ExprId> {
         match self.current_token() {
-            Token::Subtract | Token::Ref | Token::Mut | Token::Imm | Token::Uniq | Token::At | Token::Not => {
+            Token::Subtract | Token::Ref | Token::Mut | Token::Imm | Token::Uniq | Token::Not => {
                 self.parse_left_unary()
             },
             _ => self.parse_function_call_or_atom(),
@@ -1348,7 +1348,6 @@ impl<'tokens> Parser<'tokens> {
             | Token::Mut
             | Token::Imm
             | Token::Uniq
-            | Token::At
             | Token::Not) => {
                 let call_id = self.reserve_expr();
                 let function_id = self.reserve_expr();
@@ -1375,15 +1374,6 @@ impl<'tokens> Parser<'tokens> {
     /// we may parse `{function_name} -{arg}` instead of `{lhs} - {rhs}`.
     fn parse_function_arg(&mut self) -> Result<Argument> {
         let expr = match self.current_token() {
-            Token::At => self.with_expr_id_and_location(|this| {
-                let operator_location = this.current_token_location();
-                this.advance();
-                let rhs = Argument { expr: this.parse_left_unary()?, is_implicit: false };
-                let components = vec![(Token::At.to_string(), operator_location.clone())];
-                let path_id = this.push_path(Path { components }, operator_location.clone());
-                let function = this.push_expr(Expr::Variable(path_id), operator_location);
-                Ok(Expr::Call(Call { function, arguments: vec![rhs] }))
-            }),
             Token::BraceLeft => {
                 self.advance();
                 let expr = self.parse_expression()?;
@@ -1403,6 +1393,18 @@ impl<'tokens> Parser<'tokens> {
         loop {
             let token = self.current_token();
             match token {
+                Token::Copy => {
+                    result = self.with_expr_id_and_location(|this| {
+                        let location = this.current_token_location();
+                        this.advance();
+                        // Transform this into a call to copy
+                        let argument = Argument::explicit(result);
+                        let path = Path::ident(".*".to_string(), location.clone());
+                        let path = this.push_path(path, location.clone());
+                        let function = this.push_expr(Expr::Variable(path), location);
+                        Ok(Expr::Call(Call { function, arguments: vec![argument] }))
+                    })?;
+                }
                 Token::MemberAccess => {
                     result = self.with_expr_id_and_location(|this| {
                         this.advance();

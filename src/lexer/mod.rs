@@ -572,6 +572,7 @@ impl<'contents> Iterator for Lexer<'contents> {
                 self.advance2_with(Token::RightArrow)
             },
             ('.', '[') => self.advance2_with(Token::Index),
+            ('.', '*') => self.advance2_with(Token::Copy),
             ('.', _) => self.advance_with(Token::MemberAccess),
             ('-', _) => self.lex_negative(),
             ('!', '=') => self.advance2_with(Token::NotEqual),

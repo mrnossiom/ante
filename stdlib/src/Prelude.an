@@ -402,7 +402,7 @@ deref_ptr (p: Ptr t): t =
 // 
 // ptr_to_ref: fn (Ptr a) -> mut a = transmute
 // 
-(@) = deref
+(.*) = deref
 
 null (): Ptr a = transmute 0usz
 
@@ -486,7 +486,7 @@ impl print_maybe {Print a}: Print (Maybe a) with
         | None -> print "None"
 
 impl print_ref {Print a}: Print (ref a) with
-    print r = print @r
+    print r = print r.*
 
 // Naive replacement for printf which isn't supported by the cranelift backend
 print_unsigned (x: U64): Unit =
@@ -661,7 +661,7 @@ panic (msg: t) {Print t} =
 //     if eof f then return ""
 // 
 //     var capacity = 32
-//     var cstr = malloc @capacity
+//     var cstr = malloc capacity.*
 // 
 //     len = loop (len = 0) ->
 //         next = next_char f
@@ -674,15 +674,15 @@ panic (msg: t) {Print t} =
 //             if peek >= 0 then ungetc (cast peek) f
 //             return len
 // 
-//         if len + 1 >= @capacity then
-//             capacity := @capacity * 2
-//             cstr := realloc (@cstr) (@capacity)
+//         if len + 1 >= capacity.* then
+//             capacity := capacity.* * 2
+//             cstr := realloc cstr.* capacity.*
 // 
-//         array_insert (@cstr) len c
+//         array_insert cstr.* len c
 //         recur (len + 1)
 // 
-//     array_insert (@cstr) len c"\0"
-//     String (@cstr) len
+//     array_insert cstr.* len c"\0"
+//     String cstr.* len
 // 
 // // Read a line from stdin, ending with (and not including) a terminating c"\n"
 // read_line (): String =

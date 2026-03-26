@@ -61,7 +61,7 @@ pub fn type_check_impl(context: &TypeCheckSCC, compiler: &DbHandle) -> TypeCheck
             TopLevelItemKind::Comptime(comptime) => checker.check_comptime(comptime),
         };
 
-        checker.finish_item()
+        (*item_id, checker.finish_item())
     });
 
     incremental::exit_query();
@@ -97,7 +97,7 @@ pub struct IndividualTypeCheckResult {
     pub generalized: BTreeMap<NameId, Type>,
 }
 
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct TypeMaps {
     pub name_types: BTreeMap<NameId, Type>,
     pub path_types: BTreeMap<PathId, Type>,
@@ -283,12 +283,12 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         origin.or_else(|| self.current_extended_context().path_origin(path))
     }
 
-    fn finish(mut self, items: Vec<TypeMaps>) -> TypeCheckSCCResult {
-        let items = self
-            .generalize_all()
+    fn finish(mut self, items: Vec<(TopLevelId, TypeMaps)>) -> TypeCheckSCCResult {
+        let mut generalized = self.generalize_all();
+        let items = items
             .into_iter()
-            .zip(items)
-            .map(|((id, generalized), maps)| {
+            .map(|(id, maps)| {
+                let generalized = generalized.remove(&id).unwrap_or_default();
                 let mut context = self.id_contexts.remove(&id).unwrap();
                 let item_context = self.item_contexts.get(&id).unwrap();
                 context.extend_from_resolution_result(&item_context.2);

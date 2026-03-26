@@ -266,7 +266,8 @@ pub enum Token {
     At,                 // @
     ExclamationMark,    // !
     QuestionMark,       // ?
-    Index,              // .[]
+    Index,              // .[
+    Copy,               // .*
     Octothorpe,         // #
 }
 
@@ -297,6 +298,7 @@ impl Token {
                 | Divide
                 | Range
                 | Index
+                | Copy
         )
     }
 }
@@ -470,6 +472,7 @@ impl Display for Token {
             Token::ExclamationMark => write!(f, "!"),
             Token::QuestionMark => write!(f, "?"),
             Token::Index => write!(f, ".[]"),
+            Token::Copy => write!(f, ".*"),
             Token::Octothorpe => write!(f, "#"),
             Token::Quoted(tokens) => {
                 write!(f, "'")?;

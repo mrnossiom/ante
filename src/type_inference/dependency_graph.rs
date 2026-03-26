@@ -15,7 +15,8 @@ use crate::{
         ids::{NameId, TopLevelId},
     },
     type_inference::{
-        IndividualTypeCheckResult,
+        IndividualTypeCheckResult, TypeMaps,
+        fresh_expr::ExtendedTopLevelContext,
         get_type::try_get_type,
         types::{Type, TypeBindings},
     },
@@ -153,7 +154,18 @@ pub fn type_check_impl(context: &TypeCheck, db: &DbHandle) -> Arc<TypeCheckResul
     let scc = GetTypeCheckSCC(context.0).get(db);
     let result = TypeCheckSCC(scc).get(db);
 
-    Arc::new(TypeCheckResult { result: result.items[&context.0].clone(), bindings: result.bindings })
+    let item_result = result.items.get(&context.0).cloned().unwrap_or_else(|| {
+        // This item has no top-level names (e.g. it failed to parse). Return an empty result
+        // so that callers can continue without panicking.
+        let (_, item_context) = GetItem(context.0).get(db);
+        IndividualTypeCheckResult {
+            maps: TypeMaps::default(),
+            generalized: BTreeMap::default(),
+            context: ExtendedTopLevelContext::new(item_context),
+        }
+    });
+
+    Arc::new(TypeCheckResult { result: item_result, bindings: result.bindings })
 }
 
 impl TypeCheckResult {

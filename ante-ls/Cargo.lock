@@ -68,6 +68,7 @@ dependencies = [
  "clap",
  "clap_complete",
  "colored",
+ "dashmap 6.1.0",
  "deterministic-hash",
  "inc-complete",
  "inkwell",
@@ -615,9 +616,9 @@ dependencies = [
 
 [[package]]
 name = "inc-complete"
-version = "0.8.1"
+version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ea2be60386cfbd549162d350bf6c1625cc80f01a645e1cb42aa19ea732723ef3"
+checksum = "e9cc6c7554503093ebf01a82e3aefa3cc35baa97c00d920878eb84865cb4dbf9"
 dependencies = [
  "dashmap 6.1.0",
  "inc-complete-derive",

@@ -1,32 +1,42 @@
 use std::{
     collections::HashMap,
     env::set_current_dir,
-    path::{Path, PathBuf},
+    path::PathBuf,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
 };
 
 use ante::{
-    diagnostics::{Diagnostic, DiagnosticKind, Location},
-    incremental::Db, name_resolution::namespace::SourceFileId,
+    diagnostics::{Diagnostic as AnteDiagnostic, DiagnosticKind, Location as AnteLocation},
+    find_files,
+    incremental::{Db, GetCrateGraph, GetItem, Parse, Resolve, SourceFile, TargetPointerSize, TypeCheck},
+    name_resolution::{namespace::{CrateId, SourceFileId}, Origin},
+    type_inference::types::TypeBindings,
 };
 
 use dashmap::DashMap;
 use futures::future::join_all;
 use ropey::Rope;
+use tokio::sync::RwLock;
 use tower_lsp::{
-    jsonrpc::{Error, ErrorCode, Result},
+    jsonrpc::{Error, Result},
     lsp_types::*,
     Client, LanguageServer, LspService, Server,
 };
 
 mod util;
-use util::{lsp_range_to_rope_range, node_at_index, position_to_index, rope_range_to_lsp_range};
+use util::{byte_range_to_lsp_range, lsp_range_to_rope_range, position_to_byte_offset};
 
 struct Backend {
     client: Client,
     document_map: DashMap<Url, Rope>,
-    compiler: Db,
-    metadata_file: Option<PathBuf>,
+    compiler: RwLock<Db>,
+    db_initialized: AtomicBool,
 }
+
+// ── LSP protocol implementation ───────────────────────────────────────────────
 
 #[tower_lsp::async_trait]
 impl LanguageServer for Backend {
@@ -38,7 +48,7 @@ impl LanguageServer for Backend {
                 self.client
                     .log_message(MessageType::ERROR, format!("Failed to set root directory to {:?}", root))
                     .await;
-            };
+            }
         }
 
         Ok(InitializeResult {
@@ -61,264 +71,400 @@ impl LanguageServer for Backend {
         Ok(())
     }
 
-    async fn did_save(&self, params: DidSaveTextDocumentParams) {
-        self.client.log_message(MessageType::LOG, format!("ante-ls did_save: {:?}", params)).await;
-        if let Some(text) = params.text {
-            let rope = Rope::from_str(&text);
-            self.document_map.insert(params.text_document.uri.clone(), rope);
-        }
-        if let Some(rope) = self.document_map.get(&params.text_document.uri) {
-            self.update_diagnostics(params.text_document.uri, &rope).await;
-        };
-    }
-
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
-        self.client.log_message(MessageType::LOG, format!("ante-ls did_open: {:?}", params)).await;
+        self.client.log_message(MessageType::LOG, format!("ante-ls did_open: {:?}", params.text_document.uri)).await;
         let rope = Rope::from_str(&params.text_document.text);
         self.document_map.insert(params.text_document.uri.clone(), rope.clone());
         self.update_diagnostics(params.text_document.uri, &rope).await;
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
-        self.client.log_message(MessageType::LOG, format!("ante_ls did_change: {:?}", params)).await;
+        self.client.log_message(MessageType::LOG, format!("ante-ls did_change: {:?}", params.text_document.uri)).await;
         self.document_map.alter(&params.text_document.uri, |_, mut rope| {
             for change in params.content_changes {
                 if let Some(range) = change.range {
-                    let range = lsp_range_to_rope_range(range, &rope).unwrap();
-                    rope.remove(range.clone());
-                    rope.insert(range.start, &change.text);
+                    if let Ok(range) = lsp_range_to_rope_range(range, &rope) {
+                        rope.remove(range.clone());
+                        rope.insert(range.start, &change.text);
+                    }
                 } else {
-                    rope = Rope::from_str(&change.text)
+                    rope = Rope::from_str(&change.text);
                 }
             }
             rope
         });
         if let Some(rope) = self.document_map.get(&params.text_document.uri) {
             self.update_diagnostics(params.text_document.uri, &rope).await;
-        };
+        }
+    }
+
+    async fn did_save(&self, params: DidSaveTextDocumentParams) {
+        self.client.log_message(MessageType::LOG, format!("ante-ls did_save: {:?}", params.text_document.uri)).await;
+        if let Some(text) = params.text {
+            let rope = Rope::from_str(&text);
+            self.document_map.insert(params.text_document.uri.clone(), rope);
+        }
+        if let Some(rope) = self.document_map.get(&params.text_document.uri) {
+            self.update_diagnostics(params.text_document.uri, &rope).await;
+        }
     }
 
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
-        self.client.log_message(MessageType::LOG, format!("ante-ls hover: {:?}", params)).await;
         let uri = params.text_document_position_params.text_document.uri;
+        let position = params.text_document_position_params.position;
+
         let rope = match self.document_map.get(&uri) {
-            Some(rope) => rope,
+            Some(r) => r.clone(),
             None => return Ok(None),
         };
-
-        let cache = self.create_cache(&uri, &rope);
-        let ast = match cache.parse_trees.get_mut(0) {
-            Some(ast) => ast,
+        let byte_offset = match position_to_byte_offset(position, &rope) {
+            Some(b) => b,
             None => return Ok(None),
         };
+        let path = match uri.to_file_path() {
+            Ok(p) => p,
+            Err(_) => return Ok(None),
+        };
+        let file_id = SourceFileId::new_in_local_crate(&path);
 
-        let index = position_to_index(params.text_document_position_params.position, &rope).map_err(|_| Error {
-            code: ErrorCode::InternalError,
-            message: "Failed to convert hover position to range".into(),
-            data: None,
-        })?;
-        let hovered_node = node_at_index(ast, index);
-
-        let result = match hovered_node {
-            Ast::Variable(v) => {
-                let info = match v.definition {
-                    Some(definition_id) => &cache[definition_id],
-                    _ => return Ok(None),
-                };
-
-                let typ = match &info.typ {
-                    Some(typ) => typ,
-                    None => return Ok(None),
-                };
-
-                let name = v.kind.name();
-
-                let value = typeprinter::show_type_and_traits(
-                    &name,
-                    typ,
-                    &info.required_traits,
-                    &info.trait_info,
-                    &cache,
-                    false,
-                );
-
-                let location = v.locate();
-                let range =
-                    Some(rope_range_to_lsp_range(location.start.index..location.end.index, &rope).map_err(|_| {
-                        Error {
-                            code: ErrorCode::InternalError,
-                            message: "Failed to convert range to hover location".into(),
-                            data: None,
-                        }
-                    })?);
-
-                Ok(Some(Hover {
-                    contents: HoverContents::Markup(MarkupContent { kind: MarkupKind::PlainText, value }),
-                    range,
-                }))
-            },
-            _ => Ok(None),
+        let hover_text = {
+            let compiler = self.compiler.read().await;
+            hover_at(&compiler, file_id, byte_offset)
         };
 
-        self.save_document();
-        result
+        match hover_text {
+            Some(value) => Ok(Some(Hover {
+                contents: HoverContents::Markup(MarkupContent { kind: MarkupKind::PlainText, value }),
+                range: None,
+            })),
+            None => Err(Error::method_not_found()),
+        }
     }
 
     async fn goto_definition(&self, params: GotoDefinitionParams) -> Result<Option<GotoDefinitionResponse>> {
-        self.client.log_message(MessageType::LOG, format!("ante-ls goto_definition: {:?}", params)).await;
         let uri = params.text_document_position_params.text_document.uri;
+        let position = params.text_document_position_params.position;
+
         let rope = match self.document_map.get(&uri) {
-            Some(rope) => rope,
-            None => return Ok(None),
+            Some(r) => r.clone(),
+            None => return Err(Error::method_not_found()),
+        };
+        let byte_offset = match position_to_byte_offset(position, &rope) {
+            Some(b) => b,
+            None => return Err(Error::method_not_found()),
+        };
+        let path = match uri.to_file_path() {
+            Ok(p) => p,
+            Err(_) => return Err(Error::method_not_found()),
+        };
+        let file_id = SourceFileId::new_in_local_crate(&path);
+
+        let lsp_location = {
+            let compiler = self.compiler.read().await;
+            let ante_loc = match definition_at(&compiler, file_id, byte_offset) {
+                Some(loc) => loc,
+                None => return Err(Error::method_not_found()),
+            };
+            let source_file = ante_loc.file_id.get(&*compiler);
+            let def_uri = match Url::from_file_path(source_file.path.as_ref()) {
+                Ok(u) => u,
+                Err(_) => return Err(Error::method_not_found()),
+            };
+            let def_rope = rope_for_file(&def_uri, &source_file.contents, &uri, &rope, &self.document_map);
+            let range = match byte_range_to_lsp_range(
+                ante_loc.span.start.byte_index,
+                ante_loc.span.end.byte_index,
+                &def_rope,
+            ) {
+                Ok(r) => r,
+                Err(_) => return Err(Error::method_not_found()),
+            };
+            Location { uri: def_uri, range }
         };
 
-        let cache = self.create_cache(&uri, &rope);
-        let ast = match cache.parse_trees.get_mut(0) {
-            Some(ast) => ast,
-            None => return Ok(None),
-        };
-
-        let index = position_to_index(params.text_document_position_params.position, &rope).map_err(|_| Error {
-            code: ErrorCode::InternalError,
-            message: "Failed to convert hover position to range".into(),
-            data: None,
-        })?;
-        let hovered_node = node_at_index(ast, index);
-
-        let result = match hovered_node {
-            Cst::Variable(v) => {
-                let info = match v.definition {
-                    Some(definition_id) => &cache[definition_id],
-                    _ => return Ok(None),
-                };
-                let loc = info.location;
-                let uri = match Url::from_file_path(loc.filename) {
-                    Ok(uri) => uri,
-                    Err(_) => {
-                        return Err(Error {
-                            code: ErrorCode::InternalError,
-                            message: "Failed to convert path to uri".into(),
-                            data: None,
-                        })
-                    },
-                };
-                let rope = match self.document_map.get(&uri) {
-                    Some(rope) => rope,
-                    None => {
-                        let contents = cached_read(&cache.file_cache, loc.filename).unwrap();
-                        let rope = Rope::from_str(&contents);
-                        self.document_map.insert(uri.clone(), rope);
-                        self.document_map.get(&uri).unwrap()
-                    },
-                };
-
-                let range = loc.start.index..loc.end.index;
-                let range = rope_range_to_lsp_range(range, &rope).map_err(|_| Error {
-                    code: ErrorCode::InternalError,
-                    message: "Failed to convert range to definition location".into(),
-                    data: None,
-                })?;
-
-                Ok(Some(GotoDefinitionResponse::Scalar(Location { uri, range })))
-            },
-            _ => Ok(None),
-        };
-
-        self.save_document();
-        result
+        Ok(Some(GotoDefinitionResponse::Scalar(lsp_location)))
     }
 }
 
-impl Backend {
-    fn uri_to_source_file(&self, url: &Url) -> SourceFileId {
-        let path = Path::new(url.path());
-        SourceFileId::new_in_local_crate(path)
-    }
+// ── Compiler interaction ──────────────────────────────────────────────────────
 
-    /// Is this still needed?
-    fn save_document(&self) {
-        for (path, content) in cache.file_cache {
-            let uri = Url::from_file_path(path).unwrap();
-            if self.document_map.get(&uri).is_none() {
-                self.document_map.insert(uri.clone(), Rope::from_str(content));
+impl Backend {
+    /// Update the compiler database with the latest in-memory file content, then
+    /// collect and publish diagnostics for the local crate.
+    async fn update_diagnostics(&self, uri: Url, rope: &Rope) {
+        let path = match uri.to_file_path() {
+            Ok(p) => p,
+            Err(_) => {
+                self.client.log_message(MessageType::ERROR, format!("Failed to convert URI to path: {uri}")).await;
+                return;
+            },
+        };
+
+        // Write phase: initialize once, then update the changed file's content.
+        {
+            let mut compiler = self.compiler.write().await;
+            if !self.db_initialized.swap(true, Ordering::SeqCst) {
+                init_db(&mut compiler, &path);
+            }
+            set_file_content(&mut compiler, &path, rope);
+        }
+
+        // Read phase: collect diagnostics without blocking writers unnecessarily.
+        let lsp_diagnostics = {
+            let compiler = self.compiler.read().await;
+            collect_lsp_diagnostics(&compiler, &uri, rope, &self.document_map)
+        };
+
+        join_all(lsp_diagnostics.into_iter().map(|(u, d)| self.client.publish_diagnostics(u, d, None))).await;
+    }
+}
+
+/// One-time setup: pointer size + full crate graph scan (local files + stdlib).
+fn init_db(db: &mut Db, starting_file: &std::path::Path) {
+    TargetPointerSize.set(db, 8);
+    find_files::populate_crates_and_files(db, &[starting_file.to_path_buf()]);
+}
+
+/// Incrementally update a single file's content. inc-complete invalidates only
+/// the cached queries that depend on this input.
+fn set_file_content(db: &mut Db, path: &std::path::Path, rope: &Rope) {
+    let file_id = SourceFileId::new_in_local_crate(path);
+    file_id.set(db, Arc::new(SourceFile::new(Arc::new(path.to_path_buf()), rope.to_string())));
+}
+
+/// Walk all items in the local crate, run TypeCheck on each, and convert the
+/// accumulated compiler diagnostics to LSP diagnostics grouped by file URI.
+/// The current file starts with an empty list so stale diagnostics are cleared.
+fn collect_lsp_diagnostics(
+    compiler: &Db, current_uri: &Url, current_rope: &Rope, document_map: &DashMap<Url, Rope>,
+) -> HashMap<Url, Vec<Diagnostic>> {
+    let mut result: HashMap<Url, Vec<Diagnostic>> = HashMap::from([(current_uri.clone(), Vec::new())]);
+
+    let crates = GetCrateGraph.get(compiler);
+    let Some(local_crate) = crates.get(&CrateId::LOCAL) else {
+        return result;
+    };
+
+    for file_id in local_crate.source_files.values() {
+        let parse = Parse(*file_id).get(compiler);
+        for item in &parse.cst.top_level_items {
+            for diag in compiler.get_accumulated(TypeCheck(item.id)) {
+                if let Some((uri, lsp_diag)) =
+                    to_lsp_diagnostic(&diag, compiler, current_uri, current_rope, document_map)
+                {
+                    result.entry(uri).or_default().push(lsp_diag);
+                }
             }
         }
     }
 
-    async fn update_diagnostics(&self, uri: Url, rope: &Rope) {
-        let cache = self.create_cache(&uri, rope);
+    result
+}
 
-        // Diagnostics for a document get cleared only when an empty list is sent for it's Uri.
-        // This presents an issue, as when we have files A and B, where file A imports the file B,
-        // and we provide a diagnostic for file A about incorrect usage of a function in file B,
-        // the diagnostic will not be cleared when we update  file B, as the compiler currently
-        // has no way of knowing that file A imports file B. Because of this, we're initialising
-        // the diagnostics with an empty list only for the current file, and not for all files,
-        // as we don't want to clear the diagnostics for errors unrelated to changes we made.
-        // The diagnostics for file A will only be updated when the function is ran against that file,
-        // ie. when it's saved or reopened. Once ante gets a way of defining projects, and there's a way
-        // to generate a list of files in one, we could run the compiler on the root of the project.
-        // That should provide an exhaustive list of diagnostics, and allow us to clear all diagnostics
-        // for files that had none in the new list.
-        let mut diagnostics = HashMap::from([(uri.clone(), Vec::new())]);
+/// Convert a single compiler `Diagnostic` to an LSP `Diagnostic`, returning the
+/// file URI it belongs to alongside it. Returns `None` if the location cannot be
+/// mapped (e.g. the file path cannot be expressed as a URI).
+fn to_lsp_diagnostic(
+    diag: &AnteDiagnostic, compiler: &Db, current_uri: &Url, current_rope: &Rope, document_map: &DashMap<Url, Rope>,
+) -> Option<(Url, Diagnostic)> {
+    let loc = diag.location();
+    let source_file = loc.file_id.get(compiler);
 
-        for diagnostic in cache.get_diagnostics() {
-            let severity = Some(match diagnostic.error_type() {
-                DiagnosticKind::Note => DiagnosticSeverity::HINT,
-                DiagnosticKind::Warning => DiagnosticSeverity::WARNING,
-                DiagnosticKind::Error => DiagnosticSeverity::ERROR,
-            });
+    let uri = Url::from_file_path(source_file.path.as_ref()).ok()?;
 
-            let loc = diagnostic.locate();
-            let uri = Url::from_file_path(loc.filename).unwrap();
+    let rope = rope_for_file(&uri, &source_file.contents, current_uri, current_rope, document_map);
 
-            let rope = match self.document_map.get(&uri) {
-                Some(rope) => rope,
-                None => {
-                    let contents = cached_read(&cache.file_cache, loc.filename).unwrap();
-                    let rope = Rope::from_str(&contents);
-                    self.document_map.insert(uri.clone(), rope);
-                    self.document_map.get(&uri).unwrap()
-                },
-            };
+    let range = byte_range_to_lsp_range(loc.span.start.byte_index, loc.span.end.byte_index, &rope).ok()?;
 
-            let range = match rope_range_to_lsp_range(loc.start.index..loc.end.index, &rope) {
-                Ok(range) => range,
-                Err(e) => {
-                    self.client.log_message(MessageType::ERROR, format!("Failed to convert range: {:?}", e)).await;
-                    return;
-                },
-            };
+    let lsp_diag = Diagnostic {
+        range,
+        severity: Some(to_severity(diag.kind())),
+        message: diag.message(),
+        source: Some("ante-ls".to_string()),
+        ..Default::default()
+    };
 
-            let diagnostic = Diagnostic {
-                code: None,
-                code_description: None,
-                data: None,
-                message: diagnostic.msg().to_string(),
-                range,
-                related_information: None,
-                severity,
-                source: Some(String::from("ante-ls")),
-                tags: None,
-            };
+    Some((uri, lsp_diag))
+}
 
-            match diagnostics.get_mut(&uri) {
-                Some(diagnostics) => diagnostics.push(diagnostic),
-                None => {
-                    diagnostics.insert(uri, vec![diagnostic]);
-                },
-            };
-        }
-
-        let handle = join_all(
-            diagnostics.into_iter().map(|(uri, diagnostics)| self.client.publish_diagnostics(uri, diagnostics, None)),
-        );
-
-        self.save_document();
-
-        handle.await;
+/// Return the in-memory rope for a file: the live rope for the file currently
+/// being edited, a cached rope for other open files, or a rope built from the
+/// on-disk content stored in the compiler database as a last resort.
+fn rope_for_file<'a>(
+    uri: &Url, disk_contents: &str, current_uri: &Url, current_rope: &'a Rope, document_map: &'a DashMap<Url, Rope>,
+) -> Rope {
+    if uri == current_uri {
+        current_rope.clone()
+    } else {
+        document_map.get(uri).map(|r| r.clone()).unwrap_or_else(|| Rope::from_str(disk_contents))
     }
 }
+
+fn to_severity(kind: DiagnosticKind) -> DiagnosticSeverity {
+    match kind {
+        DiagnosticKind::Note => DiagnosticSeverity::HINT,
+        DiagnosticKind::Warning => DiagnosticSeverity::WARNING,
+        DiagnosticKind::Error => DiagnosticSeverity::ERROR,
+    }
+}
+
+// ── Hover ─────────────────────────────────────────────────────────────────────
+
+/// Find the innermost node (path, name, or pattern) at `byte_offset` in
+/// `file_id` and return a hover string of the form `name : Type`.
+///
+/// Position lookups are done against the **desugared** context from `GetItem`
+/// rather than the raw parse result, because type-checking runs on the
+/// desugared form and the node IDs must match.
+fn hover_at(compiler: &Db, file_id: SourceFileId, byte_offset: usize) -> Option<String> {
+    use ante::parser::cst::Pattern;
+    use ante::parser::ids::{NameId, PathId, PatternId};
+
+    enum Best {
+        Path(PathId, ante::parser::ids::TopLevelId),
+        Name(NameId, ante::parser::ids::TopLevelId),
+        Pattern(PatternId, ante::parser::ids::TopLevelId),
+    }
+
+    let parse = Parse(file_id).get(compiler);
+
+    let mut best_span_len = usize::MAX;
+    let mut best: Option<Best> = None;
+
+    for item in &parse.cst.top_level_items {
+        // Use the DESUGARED context so node IDs match what TypeCheck stored.
+        let (_, ctx) = GetItem(item.id).get(compiler);
+
+        let mut check = |start: usize, end: usize, make_best: Best| {
+            if start <= byte_offset && byte_offset < end {
+                let span_len = end - start;
+                if span_len < best_span_len {
+                    best_span_len = span_len;
+                    best = Some(make_best);
+                }
+            }
+        };
+
+        for (path_id, loc) in ctx.path_locations.iter() {
+            check(loc.span.start.byte_index, loc.span.end.byte_index, Best::Path(path_id, item.id));
+        }
+        for (name_id, loc) in ctx.name_locations.iter() {
+            check(loc.span.start.byte_index, loc.span.end.byte_index, Best::Name(name_id, item.id));
+        }
+        for (pattern_id, loc) in ctx.pattern_locations.iter() {
+            check(loc.span.start.byte_index, loc.span.end.byte_index, Best::Pattern(pattern_id, item.id));
+        }
+    }
+
+    match best? {
+        Best::Path(path_id, item_id) => {
+            let (_, ctx) = GetItem(item_id).get(compiler);
+            let tc = TypeCheck(item_id).get(compiler);
+            let typ = tc.result.maps.path_types.get(&path_id)?.follow(&tc.bindings);
+            if is_sentinel(typ) {
+                return None;
+            }
+            let name = ctx.paths.get(path_id)?.last_ident().to_owned();
+            let type_str = type_to_string(typ, &tc.bindings, &tc.result.context, compiler);
+            Some(format!("{name} : {type_str}"))
+        },
+        Best::Name(name_id, item_id) => {
+            let (_, ctx) = GetItem(item_id).get(compiler);
+            let tc = TypeCheck(item_id).get(compiler);
+            let typ = tc.result.maps.name_types.get(&name_id)?.follow(&tc.bindings);
+            if is_sentinel(typ) {
+                return None;
+            }
+            let name = ctx.names.get(name_id).map(|n| n.as_str()).unwrap_or("_");
+            let type_str = type_to_string(typ, &tc.bindings, &tc.result.context, compiler);
+            Some(format!("{name} : {type_str}"))
+        },
+        Best::Pattern(pattern_id, item_id) => {
+            let (_, ctx) = GetItem(item_id).get(compiler);
+            let tc = TypeCheck(item_id).get(compiler);
+            let typ = tc.result.maps.pattern_types.get(&pattern_id)?.follow(&tc.bindings);
+            if is_sentinel(typ) {
+                return None;
+            }
+            // Extract the variable name from Pattern::Variable; skip other pattern kinds.
+            let name = match ctx.patterns.get(pattern_id)? {
+                Pattern::Variable(name_id) => ctx.names.get(*name_id)?.as_str().to_owned(),
+                _ => return None,
+            };
+            let type_str = type_to_string(typ, &tc.bindings, &tc.result.context, compiler);
+            Some(format!("{name} : {type_str}"))
+        },
+    }
+}
+
+fn is_sentinel(typ: &ante::type_inference::types::Type) -> bool {
+    use ante::type_inference::types::PrimitiveType;
+    matches!(typ, ante::type_inference::types::Type::Primitive(PrimitiveType::Error | PrimitiveType::NoClosureEnv))
+}
+
+/// Thin wrapper so callers don't need to import all the generic bounds of
+/// `Type::to_string`.
+fn type_to_string(
+    typ: &ante::type_inference::types::Type, bindings: &TypeBindings, names: &impl ante::parser::ids::NameStore,
+    compiler: &Db,
+) -> String {
+    typ.to_string(bindings, names, compiler)
+}
+
+// ── Go-to-definition ──────────────────────────────────────────────────────────
+
+/// Find the definition location of the symbol (path) under `byte_offset`.
+///
+/// Paths (variable uses, function calls) are looked up via the `Resolve` query
+/// which maps each `PathId` to its `Origin`. The definition location is then
+/// read from the **raw** parse context (not desugared), because that is what
+/// `TopLevelName::location` uses and where source positions are stored.
+///
+/// Returns `None` for builtins, unresolved names, or when no path covers the
+/// given byte offset.
+fn definition_at(compiler: &Db, file_id: SourceFileId, byte_offset: usize) -> Option<AnteLocation> {
+    use ante::parser::ids::PathId;
+
+    let parse = Parse(file_id).get(compiler);
+
+    let mut best_span_len = usize::MAX;
+    let mut best: Option<(PathId, ante::parser::ids::TopLevelId)> = None;
+
+    for item in &parse.cst.top_level_items {
+        // Use desugared context: Resolve also operates on the desugared form,
+        // so PathIds must come from the same source.
+        let (_, ctx) = GetItem(item.id).get(compiler);
+        for (path_id, loc) in ctx.path_locations.iter() {
+            let start = loc.span.start.byte_index;
+            let end = loc.span.end.byte_index;
+            if start <= byte_offset && byte_offset < end && (end - start) < best_span_len {
+                best_span_len = end - start;
+                best = Some((path_id, item.id));
+            }
+        }
+    }
+
+    let (path_id, item_id) = best?;
+    let resolve = Resolve(item_id).get(compiler);
+
+    match *resolve.path_origins.get(&path_id)? {
+        Origin::TopLevelDefinition(top_level_name) => {
+            // Definition is in a (possibly different) top-level item's raw parse context.
+            let def_parse = Parse(top_level_name.top_level_item.source_file).get(compiler);
+            let def_ctx = def_parse.top_level_data.get(&top_level_name.top_level_item)?;
+            def_ctx.name_locations.get(top_level_name.local_name_id).cloned()
+        },
+        Origin::Local(name_id) => {
+            // Local binding (parameter, let-binding, etc.) in the same top-level item.
+            let def_parse = Parse(item_id.source_file).get(compiler);
+            let def_ctx = def_parse.top_level_data.get(&item_id)?;
+            def_ctx.name_locations.get(name_id).cloned()
+        },
+        Origin::TypeResolution | Origin::Builtin(_) => None,
+    }
+}
+
+// ── Entry point ───────────────────────────────────────────────────────────────
 
 #[tokio::main]
 async fn main() {
@@ -327,7 +473,13 @@ async fn main() {
     let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
 
-    let (service, socket) = LspService::build(|client| Backend { client, document_map: DashMap::new() }).finish();
+    let (service, socket) = LspService::build(|client| Backend {
+        client,
+        document_map: DashMap::new(),
+        compiler: RwLock::new(Db::default()),
+        db_initialized: AtomicBool::new(false),
+    })
+    .finish();
 
     Server::new(stdin, stdout, socket).serve(service).await;
 }

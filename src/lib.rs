@@ -2,7 +2,7 @@
 
 pub mod codegen;
 mod definition_collection;
-mod find_files;
+pub mod find_files;
 mod lexer;
 mod mir;
 pub mod name_resolution;

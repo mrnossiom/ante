@@ -39,6 +39,25 @@ impl TopLevelContext {
             name_locations: VecMap::default(),
         }
     }
+
+    /// Utility function for pushing an expression and its location
+    pub fn push_expr(&mut self, expr: Expr, location: Location) -> ExprId {
+        let id = self.exprs.push(expr);
+        self.expr_locations.push_existing(id, location);
+        id
+    }
+
+    pub fn push_path(&mut self, path: Path, location: Location) -> PathId {
+        let id = self.paths.push(path);
+        self.path_locations.push_existing(id, location);
+        id
+    }
+
+    pub fn push_pattern(&mut self, pattern: Pattern, location: Location) -> PatternId {
+        let id = self.patterns.push(pattern);
+        self.pattern_locations.push_existing(id, location);
+        id
+    }
 }
 
 impl IdStore for TopLevelContext {

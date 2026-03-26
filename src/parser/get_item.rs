@@ -7,8 +7,8 @@ use crate::{
     parser::{
         context::TopLevelContext,
         cst::{
-            self, Constructor, Definition, Expr, Lambda, Pattern, TopLevelItem, TopLevelItemKind, TraitDefinition,
-            TraitImpl, Type, TypeDefinitionBody, TypeKind,
+            self, Argument, Constructor, Definition, Expr, Lambda, Loop, Parameter, Pattern, SequenceItem,
+            TopLevelItem, TopLevelItemKind, TraitDefinition, TraitImpl, Type, TypeDefinitionBody, TypeKind,
         },
         ids::ExprId,
     },
@@ -47,9 +47,8 @@ pub fn get_item_impl(context: &GetItem, db: &DbHandle) -> (Arc<TopLevelItem>, Ar
         },
         TopLevelItemKind::Definition(definition) => {
             let mut new_context = context.as_ref().clone();
-            let new_kind = desugar_expression(definition.rhs, &mut new_context);
-            let new_item = Arc::new(TopLevelItem { comments: item.comments.clone(), kind: new_kind, id: item.id });
-            (new_item, Arc::new(new_context))
+            desugar_expression(definition.rhs, &mut new_context);
+            (item, Arc::new(new_context))
         },
         _ => (item, context),
     }
@@ -225,17 +224,110 @@ fn desugar_expression(expr: ExprId, context: &mut TopLevelContext) {
         Expr::Literal(_) => (),
         Expr::Variable(_) => (),
         Expr::Quoted(_) => (),
-        Expr::Sequence(sequence) => todo!(),
-        Expr::Definition(definition) => todo!(),
-        Expr::MemberAccess(access) => todo!(),
-        Expr::Call(call) => todo!(),
-        Expr::Lambda(lambda) => todo!(),
-        Expr::If(_) => todo!(),
-        Expr::Match(_) => todo!(),
-        Expr::Handle(handle) => todo!(),
-        Expr::Reference(reference) => todo!(),
-        Expr::TypeAnnotation(type_annotation) => todo!(),
-        Expr::Constructor(constructor) => todo!(),
-        Expr::Loop(_) => todo!(),
+        Expr::Definition(definition) => desugar_expression(definition.rhs, context),
+        Expr::MemberAccess(access) => desugar_expression(access.object, context),
+        Expr::Lambda(lambda) => desugar_expression(lambda.body, context),
+        Expr::Reference(reference) => desugar_expression(reference.rhs, context),
+        Expr::TypeAnnotation(annotation) => desugar_expression(annotation.lhs, context),
+        Expr::Sequence(sequence) => {
+            // TODO: Refactor to avoid the need for clones
+            for item in sequence.clone() {
+                desugar_expression(item.expr, context);
+            }
+        },
+        Expr::Call(call) => {
+            let arguments = call.arguments.clone();
+            desugar_expression(call.function, context);
+            for arg in arguments {
+                desugar_expression(arg.expr, context);
+            }
+        },
+        Expr::If(if_) => {
+            let if_ = if_.clone();
+            desugar_expression(if_.condition, context);
+            desugar_expression(if_.then, context);
+            if let Some(else_) = if_.else_ {
+                desugar_expression(else_, context);
+            }
+        },
+        Expr::Match(match_) => {
+            let cases = match_.cases.clone();
+            desugar_expression(match_.expression, context);
+            for case in cases {
+                desugar_expression(case.1, context);
+            }
+        },
+        Expr::Handle(handle) => {
+            let cases = handle.cases.clone();
+            desugar_expression(handle.expression, context);
+            for case in cases {
+                desugar_expression(case.1, context);
+            }
+        },
+        Expr::Constructor(constructor) => {
+            for field in constructor.fields.clone() {
+                desugar_expression(field.1, context);
+            }
+        },
+        Expr::Loop(loop_) => desugar_loop(loop_.clone(), expr, context),
     }
+}
+
+/// `loop (p1 = e1) ... -> body`
+/// gets desugared to
+/// `{ recur p1 ... = body; recur e1 ... }`
+fn desugar_loop(loop_: Loop, expr: ExprId, context: &mut TopLevelContext) {
+    let location = context.expr_locations[expr].clone();
+    let body = loop_.body;
+    let parameters = loop_.parameters.clone().into_iter();
+
+    // parameters and arg list
+    let (parameters, arguments) = parameters
+        .map(|parameter| {
+            let (pattern, expr) = match parameter {
+                cst::LoopParameter::Variable(name) => {
+                    let pattern = cst::Pattern::Variable(name);
+                    let pattern = context.push_pattern(pattern, location.clone());
+
+                    let name_string = context.names[name].clone();
+                    let path = cst::Path::ident(name_string.to_string(), location.clone());
+                    let path = context.push_path(path, location.clone());
+                    let expr = cst::Expr::Variable(path);
+                    let expr = context.push_expr(expr, location.clone());
+                    (pattern, expr)
+                },
+                cst::LoopParameter::PatternAndExpr(pattern, expr) => (pattern, expr),
+            };
+            (Parameter { is_implicit: false, pattern }, Argument::explicit(expr))
+        })
+        .unzip();
+
+    // Create `recur = fn params... -> body`
+    let name = cst::Name::new("recur".to_string());
+    let name_id = context.names.push(name);
+    context.name_locations.push_existing(name_id, location.clone());
+
+    let recur = cst::Pattern::Variable(name_id);
+    let recur = context.push_pattern(recur, location.clone());
+
+    let lambda = cst::Expr::Lambda(cst::Lambda { parameters, return_type: None, effects: None, body });
+    let lambda = context.push_expr(lambda, location.clone());
+
+    let definition =
+        cst::Expr::Definition(cst::Definition { implicit: false, mutable: false, pattern: recur, rhs: lambda });
+    let definition = context.push_expr(definition, location.clone());
+
+    // Create `recur args...`
+    let function_path = cst::Path::ident("recur".to_string(), location.clone());
+    let function_path = context.push_path(function_path, location.clone());
+    let function = cst::Expr::Variable(function_path);
+    let function = context.push_expr(function, location.clone());
+    let call = cst::Expr::Call(cst::Call { function, arguments });
+    let call = context.push_expr(call, location);
+
+    let definition = SequenceItem { expr: definition, comments: Vec::new() };
+    let call = SequenceItem { expr: call, comments: Vec::new() };
+
+    let replacement_expr = cst::Expr::Sequence(vec![definition, call]);
+    context.exprs[expr] = replacement_expr;
 }

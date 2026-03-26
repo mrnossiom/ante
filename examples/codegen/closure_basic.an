@@ -1,12 +1,8 @@
 main () =
     foo = "hi there"
-    stuff () = print foo
+    stuff () = println foo
     stuff ()
 
 // args: --delete-binary
-// expected stderr:
-// examples/codegen/closure_basic.an:6:5	error: Expected `=` to begin the function body but found `()`
-// main ()
-// 
-// Found 1 error and 0 warnings
+// expected stdout: hi there
 

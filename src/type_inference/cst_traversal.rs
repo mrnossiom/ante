@@ -28,7 +28,30 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         };
 
         self.check_pattern(definition.pattern, &expected_type);
-        self.check_expr(definition.rhs, &expected_type);
+
+        // If the RHS is a lambda, call check_lambda directly so we can pass the definition's
+        // own name as `self_name`. This prevents self-recursive local functions (such as the
+        // `recur` helper produced by loop desugaring) from treating themselves as a captured
+        // free variable.
+        let self_name = match &self.current_extended_context()[definition.pattern] {
+            Pattern::Variable(name) => Some(*name),
+            _ => None,
+        };
+
+        let rhs = definition.rhs;
+        let rhs_expr = match self.current_extended_context().extended_expr(rhs) {
+            Some(e) => Cow::Owned(e.clone()),
+            None => Cow::Borrowed(&self.current_context().exprs[rhs]),
+        };
+
+        match rhs_expr.as_ref() {
+            Expr::Lambda(lambda) => {
+                let lambda = lambda.clone();
+                self.expr_types.insert(rhs, expected_type.clone());
+                self.check_lambda(&lambda, &expected_type, rhs, self_name);
+            },
+            _ => self.check_expr(rhs, &expected_type),
+        }
 
         if definition.implicit {
             self.add_implicit(definition.pattern);
@@ -48,7 +71,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             Expr::Literal(literal) => self.check_literal(literal, id, expected),
             Expr::Variable(path) => self.check_path(*path, expected, Some(id)),
             Expr::Call(call) => self.check_call(call, expected),
-            Expr::Lambda(lambda) => self.check_lambda(lambda, expected, id),
+            Expr::Lambda(lambda) => self.check_lambda(lambda, expected, id, None),
             Expr::Sequence(items) => {
                 self.push_implicits_scope();
                 for (i, item) in items.iter().enumerate() {
@@ -310,7 +333,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         }
     }
 
-    fn check_lambda(&mut self, lambda: &cst::Lambda, expected: &Type, expr: ExprId) {
+    fn check_lambda(&mut self, lambda: &cst::Lambda, expected: &Type, expr: ExprId, self_name: Option<NameId>) {
         let function_type = match self.follow_type(expected) {
             Type::Function(function_type) => function_type.clone(),
             _ => {
@@ -369,7 +392,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 scope.deferred_closure_checks.push((expr, function_type.environment.clone()));
             }
         } else {
-            self.check_for_closure(expr, &function_type.environment);
+            self.check_for_closure(expr, &function_type.environment, self_name);
         }
     }
 

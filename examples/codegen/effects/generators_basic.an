@@ -19,11 +19,20 @@ for (fn () -> iota 10) print
 // examples/codegen/effects/generators_basic.an:2:12	error: Expected an unindent but found `->`
 //     emit: a -> Unit
 // 
+// examples/codegen/effects/generators_basic.an:4:26	error: Expected U32 but found I32
+// iota (n: U32) = loop (i = 0) ->
+// 
+// examples/codegen/effects/generators_basic.an:6:8	error: `emit` not found in scope
+//         emit i
+// 
+// examples/codegen/effects/generators_basic.an:7:19	error: Expected U32 but found I32
+//         recur (i + 1)
+// 
 // examples/codegen/effects/generators_basic.an:9:0	error: Expected a top-level item but found `for`
 // for stream f =
 // 
 // examples/codegen/effects/generators_basic.an:15:0	error: Expected a top-level item but found `for`
 // for (fn () -> iota 10) print
 // 
-// Found 3 errors and 0 warnings
+// Found 6 errors and 0 warnings
 

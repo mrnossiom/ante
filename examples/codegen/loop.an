@@ -24,11 +24,20 @@ main () =
 
 // args: --delete-binary
 // expected stderr:
+// examples/codegen/loop.an:5:32	error: Expected _ but found _
+//         else recur (start - 1) (sum + start)
+// 
+// examples/codegen/loop.an:13:8	error: `printne` not found in scope
+//         printne collatz
+// 
+// examples/codegen/loop.an:14:8	error: `printne` not found in scope
+//         printne " "
+// 
 // examples/codegen/loop.an:19:4	error: Expected an unindent but found `loop`
 //     loop (s: I32) (t: I32 = 0) ->
 // 
-// examples/codegen/loop.an:35:0	error: Expected a top-level item but found an unindent
+// examples/codegen/loop.an:44:0	error: Expected a top-level item but found an unindent
 // 
 // 
-// Found 2 errors and 0 warnings
+// Found 5 errors and 0 warnings
 

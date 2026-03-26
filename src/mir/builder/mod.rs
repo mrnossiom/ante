@@ -538,6 +538,23 @@ where
                 this.unpack_closure_environment(free_vars.iter().copied(), environment);
             }
 
+            // Pre-populate the self-reference so recursive calls within the body
+            // (e.g. `recur` in desugared loop expressions) can resolve via Origin::Local.
+            // The entry is discarded automatically when `old_scope` is restored after
+            // `new_definition` returns.
+            if let Some(self_name_id) = name_id {
+                let self_def_id = this.current_function.as_ref().unwrap().id;
+                let mut self_value = Value::Definition(self_def_id);
+                if this.context().get_closure_environment(expr).is_some() {
+                    let environment = Value::Parameter(this.current_block, lambda.parameters.len() as u32);
+                    self_value = this.push_instruction(
+                        Instruction::PackClosure { function: self_value, environment },
+                        full_type.clone(),
+                    );
+                }
+                this.local_variables.insert(self_name_id, self_value);
+            }
+
             let return_value = this.expression(lambda.body);
             this.terminate_block(TerminatorInstruction::Return(return_value));
         });

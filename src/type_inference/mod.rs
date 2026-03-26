@@ -488,6 +488,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             },
             Type::Function(function_type) => {
                 function_type.parameters.iter().any(|param| self.occurs(&param.typ, variable))
+                    || self.occurs(&function_type.environment, variable)
                     || self.occurs(&function_type.return_type, variable)
                     || self.occurs(&function_type.effects, variable)
             },

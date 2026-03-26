@@ -88,7 +88,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             // Run deferred closure checks after delayed implicits are resolved so that
             // free-variable analysis sees the fully-resolved implicit arguments.
             for (expr, env_type) in deferred {
-                self.check_for_closure(expr, &env_type);
+                self.check_for_closure(expr, &env_type, None);
             }
         }
 

@@ -30,7 +30,12 @@ main () =
 // effect Emit a with
 //     (emit: (error)): fn a -> Unit
 // 
-// (iota: fn U32 -> _ can _) ((n: U32)) = (error)
+// (iota: fn U32 -> Unit can _) ((n: U32)) =
+//     (recur: fn U32 [U32] -> Unit can _) (i: U32) [(n: U32)] =
+//         if (fn (p9: U32) (p10: U32) -> (<: fn U32 U32 {Cmp U32 NoClosureEnv} -> Bool pure) (p9: U32) (p10: U32) {(cmp_u32: Cmp U32 NoClosureEnv)}) (i: U32) (n: U32) then 
+//             (emit: (error)) (i: U32)
+//             (recur: fn U32 [U32] -> Unit can _) ((fn (p11: U32) (p12: U32) -> (+: fn U32 U32 {Add U32 NoClosureEnv} -> U32 pure) (p11: U32) (p12: U32) {(add_u32: Add U32 NoClosureEnv)}) (i: U32) 1)
+//     (recur: fn U32 [U32] -> Unit can _) 0
 // 
 // (filter: fn _ _ -> _ can _) (stream: _) (predicate: _) =
 //     handle (stream: (error)) ()
@@ -45,10 +50,19 @@ main () =
 //         (f: (error)) (x: (error))
 //         (resume: (error)) ()
 // 
-// (main: fn Unit -> _ can _) () =
-//     (iota: fn U32 -> _ can _) 10
+// (main: fn Unit -> Unit can _) () =
+//     (iota: fn U32 -> Unit can _) 10
 
 // expected stderr:
+// examples/typechecking/effects_subset.an:5:26	error: Expected U32 but found I32
+// iota (n: U32) = loop (i = 0) ->
+// 
+// examples/typechecking/effects_subset.an:7:8	error: `emit` not found in scope
+//         emit i
+// 
+// examples/typechecking/effects_subset.an:8:19	error: Expected U32 but found I32
+//         recur (i + 1)
+// 
 // examples/typechecking/effects_subset.an:11:4	error: Effects and handle expressions are currently unimplemented
 //     handle stream ()
 // 
@@ -61,5 +75,5 @@ main () =
 // examples/typechecking/effects_subset.an:25:8	error: Expected an unindent but found `with`
 //         with filter (fn x -> x % 2 == 0)
 // 
-// Found 4 errors and 0 warnings
+// Found 7 errors and 0 warnings
 

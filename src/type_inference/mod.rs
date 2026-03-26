@@ -462,9 +462,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     /// to a recursive type.
     ///
     /// Before calling this function its argument must be zonked! `binding == binding.follow(...)`
-    fn try_bind_type_variable(
-        &mut self, id: TypeVariableId, binding: Type,
-    ) -> Result<(), ()> {
+    fn try_bind_type_variable(&mut self, id: TypeVariableId, binding: Type) -> Result<(), ()> {
         if binding == Type::Variable(id) {
             // Already equal, don't recursively bind self to self
             Ok(())

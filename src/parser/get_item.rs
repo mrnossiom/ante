@@ -229,6 +229,7 @@ fn desugar_expression(expr: ExprId, context: &mut TopLevelContext) {
         Expr::Lambda(lambda) => desugar_expression(lambda.body, context),
         Expr::Reference(reference) => desugar_expression(reference.rhs, context),
         Expr::TypeAnnotation(annotation) => desugar_expression(annotation.lhs, context),
+        Expr::Return(return_) => desugar_expression(return_.expression, context),
         Expr::Sequence(sequence) => {
             // TODO: Refactor to avoid the need for clones
             for item in sequence.clone() {
@@ -270,6 +271,11 @@ fn desugar_expression(expr: ExprId, context: &mut TopLevelContext) {
             }
         },
         Expr::Loop(loop_) => desugar_loop(loop_.clone(), expr, context),
+        Expr::Assignment(assignment) => {
+            let rhs = assignment.rhs;
+            desugar_expression(assignment.lhs, context);
+            desugar_expression(rhs, context);
+        },
     }
 }
 

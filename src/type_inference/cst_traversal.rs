@@ -100,6 +100,8 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 UnimplementedItem::Comptime.issue(self.compiler, location);
             },
             Expr::Loop(_) => unreachable!("Loops should be desugared before type inference"),
+            Expr::Return(_return) => todo!("Unify return type with function return type"),
+            Expr::Assignment(_assignment) => todo!("type check assignments"),
             Expr::Error => (),
         }
     }

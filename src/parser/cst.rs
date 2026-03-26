@@ -220,6 +220,8 @@ pub enum Expr {
     Constructor(Constructor),
     Loop(Loop),
     Quoted(Quoted),
+    Return(Return),
+    Assignment(Assignment),
 }
 
 impl ErrorDefault for Expr {
@@ -379,6 +381,19 @@ pub struct Reference {
 pub struct Constructor {
     pub typ: Type,
     pub fields: Vec<(NameId, ExprId)>,
+}
+
+/// `return expr`
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
+pub struct Return {
+    pub expression: ExprId,
+}
+
+/// `lhs := rhs`
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
+pub struct Assignment {
+    pub lhs: ExprId,
+    pub rhs: ExprId,
 }
 
 /// Sugar for an immediately invoked helper function: `loop x (i = 0) -> ...`

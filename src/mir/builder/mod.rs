@@ -251,6 +251,8 @@ where
             cst::Expr::Constructor(constructor) => self.constructor(constructor, expr),
             cst::Expr::Quoted(quoted) => self.quoted(quoted),
             cst::Expr::Loop(_) => unreachable!("Loops should be desugared before MIR generation"),
+            cst::Expr::Return(_return) => todo!("MIR generation for return"),
+            cst::Expr::Assignment(_assignment) => todo!("MIR generation for assignment"),
         }
     }
 

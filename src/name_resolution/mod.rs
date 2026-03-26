@@ -525,6 +525,12 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
             Expr::Constructor(constructor) => self.resolve_constructor(constructor, expr),
             Expr::Loop(_) => unreachable!("Loops should be desugared before name resolution"),
             Expr::Quoted(_) => (),
+            Expr::Return(return_) => self.resolve_expr(return_.expression),
+            Expr::Assignment(assignment) => {
+                // Mutability of the lhs is left to the type checker to check
+                self.resolve_expr(assignment.lhs);
+                self.resolve_expr(assignment.rhs);
+            },
             Expr::Error => (),
         }
     }

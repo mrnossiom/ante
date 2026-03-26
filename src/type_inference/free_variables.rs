@@ -20,7 +20,9 @@ impl TypeChecker<'_, '_> {
     /// within the lambda. This will unify the given `expected_environment_type` with the actual
     /// environment type found but will not actually perform closure conversion. Closure conversion
     /// is instead done while building the initial [crate::mir::Mir].
-    pub(super) fn check_for_closure(&mut self, id: ExprId, expected_environment_type: &Type, self_name: Option<NameId>) {
+    pub(super) fn check_for_closure(
+        &mut self, id: ExprId, expected_environment_type: &Type, self_name: Option<NameId>,
+    ) {
         let mut context = FreeVars::default();
         if let Some(name) = self_name {
             context.defined_in_fn.insert(name);
@@ -105,6 +107,11 @@ impl FreeVars {
             },
             cst::Expr::Loop(_) => unreachable!("Loops should be desugared before finding free variables"),
             cst::Expr::Quoted(_) => (),
+            cst::Expr::Return(return_) => self.find_free_variables(return_.expression, checker),
+            cst::Expr::Assignment(assignment) => {
+                self.find_free_variables(assignment.lhs, checker);
+                self.find_free_variables(assignment.rhs, checker);
+            },
         }
     }
 

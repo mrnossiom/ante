@@ -1581,8 +1581,7 @@ impl<'tokens> Parser<'tokens> {
         if self.accept(Token::Assignment) {
             let rhs = self.parse_expression()?;
             let location = self.expr_location(expression).to(&self.expr_location(rhs));
-            // TODO: CST node for assignments
-            Ok(self.push_expr(Expr::Error, location))
+            Ok(self.push_expr(Expr::Assignment(cst::Assignment { lhs: expression, rhs }), location))
         } else {
             Ok(expression)
         }
@@ -1607,11 +1606,10 @@ impl<'tokens> Parser<'tokens> {
     }
 
     fn parse_return(&mut self) -> Result<ExprId> {
-        // TODO: Cst node for return
         self.with_expr_id_and_location(|this| {
             this.expect(Token::Return, "`return` to begin a return statement")?;
-            let _expr = this.parse_block_or_expression()?;
-            Ok(Expr::Error)
+            let expression = this.parse_block_or_expression()?;
+            Ok(Expr::Return(cst::Return { expression }))
         })
     }
 

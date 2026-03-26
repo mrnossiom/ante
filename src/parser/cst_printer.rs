@@ -620,6 +620,15 @@ impl<'a> CstDisplay<'a> {
             Expr::Quoted(quoted) => self.fmt_quoted(quoted, f),
             Expr::Constructor(constructor) => self.fmt_constructor(constructor, context, f),
             Expr::Loop(loop_) => self.fmt_loop(loop_, context, f),
+            Expr::Return(return_) => {
+                write!(f, "return ")?;
+                self.fmt_expr(return_.expression, context, f)
+            },
+            Expr::Assignment(assignment) => {
+                self.fmt_expr(assignment.lhs, context, f)?;
+                write!(f, " := ")?;
+                self.fmt_expr(assignment.rhs, context, f)
+            },
         }
     }
 

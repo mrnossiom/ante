@@ -1,0 +1,14 @@
+main () =
+    x = 1
+    loop (i = 0) ->
+        if i < 5 then
+            println (x + i)
+            recur (i + 1)
+
+// args: --delete-binary
+// expected stdout:
+// 1
+// 2
+// 3
+// 4
+// 5

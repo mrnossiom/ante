@@ -397,18 +397,20 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         }
 
         match (actual, expected) {
-            (Type::Variable(actual_id), _) => {
+            (Type::Variable(actual_id), expected) => {
                 if let Some(actual) = self.bindings.get(actual_id).cloned() {
-                    self.try_unify(&actual, expected)
+                    self.try_unify(&actual, &expected)
                 } else {
-                    self.try_bind_type_variable(*actual_id, actual, expected.clone())
+                    let expected = expected.follow(&self.bindings).clone();
+                    self.try_bind_type_variable(*actual_id, expected)
                 }
             },
-            (_, Type::Variable(expected_id)) => {
+            (actual, Type::Variable(expected_id)) => {
                 if let Some(expected) = self.bindings.get(expected_id).cloned() {
                     self.try_unify(actual, &expected)
                 } else {
-                    self.try_bind_type_variable(*expected_id, expected, actual.clone())
+                    let actual = actual.follow(&self.bindings).clone();
+                    self.try_bind_type_variable(*expected_id, actual)
                 }
             },
             (Type::Primitive(types::PrimitiveType::Error), _) | (_, Type::Primitive(types::PrimitiveType::Error)) => {
@@ -458,14 +460,15 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
 
     /// Try to bind a type variable, possibly erroring instead if the binding would lead
     /// to a recursive type.
+    ///
+    /// Before calling this function its argument must be zonked! `binding == binding.follow(...)`
     fn try_bind_type_variable(
-        &mut self, id: TypeVariableId, type_variable_type_id: &Type, binding: Type,
+        &mut self, id: TypeVariableId, binding: Type,
     ) -> Result<(), ()> {
-        // This should be prevented by the `actual_id == expected_id` check in `unify`
-        // Otherwise we need to ensure this case would not issue an `occurs` error.
-        assert_ne!(type_variable_type_id, &binding);
-
-        if self.occurs(&binding, id) {
+        if binding == Type::Variable(id) {
+            // Already equal, don't recursively bind self to self
+            Ok(())
+        } else if self.occurs(&binding, id) {
             // Recursive type error
             Err(())
         } else {

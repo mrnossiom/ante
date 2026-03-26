@@ -4,21 +4,21 @@ main () =
         if start == 0 then sum
         else recur (start - 1) (sum + start)
 
-    print seq_sum
+    println seq_sum
 
     loop (collatz = 7) ->
         if collatz == 1 then 
             print ""
             return ()
-        printne collatz
-        printne " "
+        print collatz
+        print " "
         if collatz % 2 == 0 then recur (collatz / 2)
         else recur (collatz * 3 + 1)
 
     s = 0
-    loop (s: I32) (t: I32 = 0) ->
-        printne s
-        printne t
+    loop s (t = 0) ->
+        print s
+        print t
         if s == 3 then return ()
         else recur (s + 1) (t + 1)
 
@@ -27,17 +27,11 @@ main () =
 // examples/codegen/loop.an:5:32	error: Expected _ but found _
 //         else recur (start - 1) (sum + start)
 // 
-// examples/codegen/loop.an:13:8	error: `printne` not found in scope
-//         printne collatz
-// 
-// examples/codegen/loop.an:14:8	error: `printne` not found in scope
-//         printne " "
-// 
 // examples/codegen/loop.an:19:4	error: Expected an unindent but found `loop`
 //     loop (s: I32) (t: I32 = 0) ->
 // 
 // examples/codegen/loop.an:44:0	error: Expected a top-level item but found an unindent
 // 
 // 
-// Found 5 errors and 0 warnings
+// Found 3 errors and 0 warnings
 

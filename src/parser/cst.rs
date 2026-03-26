@@ -130,6 +130,20 @@ pub enum ReferenceKind {
     Uniq,
 }
 
+impl ReferenceKind {
+    /// Convert the given token into a reference kind, panics if
+    /// the token is not a reference keyword.
+    pub(crate) fn from_token(operator: &Token) -> ReferenceKind {
+        match operator {
+            Token::Ref => Self::Ref,
+            Token::Mut => Self::Mut,
+            Token::Imm => Self::Imm,
+            Token::Uniq => Self::Uniq,
+            other => panic!("Non-reference token given: {other}"),
+        }
+    }
+}
+
 impl ErrorDefault for Type {
     fn error_default(location: Location) -> Self {
         Type::new(TypeKind::Error, location)

@@ -9,11 +9,11 @@ use crate::{
     diagnostics::{Diagnostic, ErrorDefault, Location, Span},
     incremental,
     iterator_extensions::mapvec,
-    lexer::{Lexer, token::Token},
+    lexer::{token::Token, Lexer},
     name_resolution::namespace::SourceFileId,
     parser::{
         context::TopLevelContext,
-        cst::{Argument, HandlePattern, Loop, LoopParameter, ParameterType},
+        cst::{Argument, HandlePattern, Loop, LoopParameter, ParameterType, ReferenceKind},
     },
 };
 
@@ -1343,12 +1343,20 @@ impl<'tokens> Parser<'tokens> {
 
     fn parse_left_unary(&mut self) -> Result<ExprId> {
         match self.current_token() {
-            operator @ (Token::Subtract
-            | Token::Ref
-            | Token::Mut
-            | Token::Imm
-            | Token::Uniq
-            | Token::Not) => {
+            operator @ (Token::Ref | Token::Mut | Token::Imm | Token::Uniq) => {
+                let kind = ReferenceKind::from_token(operator);
+                let id = self.reserve_expr();
+
+                let operator_location = self.current_token_location();
+                self.advance();
+                let rhs = self.parse_left_unary()?;
+                let location = operator_location.to(&self.expr_location(rhs));
+
+                let reference = Expr::Reference(cst::Reference { kind, rhs });
+                self.insert_expr(id, reference, location);
+                Ok(id)
+            },
+            operator @ (Token::Subtract | Token::Not) => {
                 let call_id = self.reserve_expr();
                 let function_id = self.reserve_expr();
 
@@ -1404,7 +1412,7 @@ impl<'tokens> Parser<'tokens> {
                         let function = this.push_expr(Expr::Variable(path), location);
                         Ok(Expr::Call(Call { function, arguments: vec![argument] }))
                     })?;
-                }
+                },
                 Token::MemberAccess => {
                     result = self.with_expr_id_and_location(|this| {
                         this.advance();

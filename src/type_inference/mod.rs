@@ -5,22 +5,17 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    diagnostics::Diagnostic,
-    incremental::{self, DbHandle, GetItem, Resolve, TypeCheck, TypeCheckSCC},
-    iterator_extensions::mapvec,
-    name_resolution::{Origin, ResolutionResult},
-    parser::{
+    diagnostics::Diagnostic, incremental::{self, DbHandle, GetItem, Resolve, TypeCheck, TypeCheckSCC}, iterator_extensions::mapvec, name_resolution::{Origin, ResolutionResult}, parser::{
         context::TopLevelContext,
-        cst::{self, Name, TopLevelItem, TopLevelItemKind},
+        cst::{self, Name, ReferenceKind, TopLevelItem, TopLevelItemKind},
         ids::{ExprId, NameId, PathId, PatternId, TopLevelId, TopLevelName},
-    },
-    type_inference::{
+    }, type_inference::{
         dependency_graph::TypeCheckResult,
         errors::{Locateable, TypeErrorKind},
         fresh_expr::ExtendedTopLevelContext,
         generics::Generic,
-        types::{Type, TypeBindings, TypeVariableId},
-    },
+        types::{PrimitiveType, Type, TypeBindings, TypeVariableId},
+    }
 };
 
 mod cst_traversal;
@@ -417,7 +412,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                     self.try_bind_type_variable(*expected_id, actual)
                 }
             },
-            (Type::Primitive(types::PrimitiveType::Error), _) | (_, Type::Primitive(types::PrimitiveType::Error)) => {
+            (Type::Primitive(PrimitiveType::Error), _) | (_, Type::Primitive(PrimitiveType::Error)) => {
                 Ok(())
             },
             (Type::Function(actual), Type::Function(expected)) => {
@@ -457,6 +452,16 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 }
                 self.try_unify(actual, expected)
             },
+            (Type::Primitive(PrimitiveType::Reference(actual)), Type::Primitive(PrimitiveType::Reference(expected))) => {
+                // Allow coercions between reference kinds: any ref type coerces to `ref`,
+                // and `uniq` also coerces to `mut`.
+                match (actual, expected) {
+                    (_, ReferenceKind::Ref) => Ok(()),
+                    (ReferenceKind::Uniq, ReferenceKind::Mut) => Ok(()),
+                    (actual, expected) if actual == expected => Ok(()),
+                    _ => Err(()),
+                }
+            }
             (actual, other) if actual == other => Ok(()),
             _ => Err(()),
         }

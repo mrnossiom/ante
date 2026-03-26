@@ -18,11 +18,5 @@ double x = x * 2
 // examples/codegen/mutability.an:7:12	error: `mut` not found in scope
 //     mutate (mut num)
 //
-// examples/codegen/mutability.an:11:15	error: Expected ref I32 but found mut I32
-//     x = double n.*
-//
-// examples/codegen/mutability.an:12:4	error: Expected ref _ but found mut I32
-//     n.* := x
-//
-// Found 3 errors and 0 warnings
+// Found 1 error and 0 warnings
 

@@ -22,14 +22,8 @@ main () =
 // examples/codegen/vec_basic.an:6:4	error: `push` not found in scope
 //     push (mut v) 3i32
 // 
-// examples/codegen/vec_basic.an:6:10	error: `mut` not found in scope
-//     push (mut v) 3i32
-// 
 // examples/codegen/vec_basic.an:7:4	error: `push` not found in scope
 //     push (mut v) 4
 // 
-// examples/codegen/vec_basic.an:7:10	error: `mut` not found in scope
-//     push (mut v) 4
-// 
-// Found 7 errors and 0 warnings
+// Found 5 errors and 0 warnings
 

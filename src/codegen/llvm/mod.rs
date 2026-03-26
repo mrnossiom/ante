@@ -650,6 +650,17 @@ impl<'ctx> ModuleContext<'ctx> {
                 let result_type = self.convert_type(function.instruction_result_type(id));
                 self.builder.build_load(result_type, value, "").unwrap().as_basic_value_enum()
             },
+            mir::Instruction::Store { pointer, value } => {
+                let pointer = self.lookup_value(pointer).into_pointer_value();
+                let value = self.lookup_value(value);
+                self.builder.build_store(pointer, value).unwrap();
+                self.llvm.const_struct(&[], false).into()
+            },
+            mir::Instruction::GetFieldPtr { struct_ptr, struct_type, index } => {
+                let struct_ptr = self.lookup_value(struct_ptr).into_pointer_value();
+                let struct_llvm_type = self.convert_type(struct_type).into_struct_type();
+                self.builder.build_struct_gep(struct_llvm_type, struct_ptr, *index, "").unwrap().into()
+            },
             mir::Instruction::SizeOf(_) => todo!("SizeOf should be removed by monomorphization"),
         };
         self.values.insert(mir::Value::InstructionResult(id), result);

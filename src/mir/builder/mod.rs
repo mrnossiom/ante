@@ -93,6 +93,14 @@ where
     }
 }
 
+enum LhsKind {
+    LocalVar(NameId),
+    DerefCall(ExprId),
+    Annotation(ExprId),
+    FieldAccess(ExprId, ExprId),
+    Other,
+}
+
 /// The per-[TopLevelId] context. This pass is designed so that we can convert every top-level item
 /// to MIR in parallel.
 struct Context<'local, Db> {
@@ -109,6 +117,10 @@ struct Context<'local, Db> {
 
     global_variables: FxHashMap<Origin, Value>,
     local_variables: FxHashMap<NameId, Value>,
+
+    /// Names of locally-declared mutable variables (`var name = expr`).
+    /// These have a StackAlloc'd pointer as their MIR value.
+    mutable_locals: rustc_hash::FxHashSet<NameId>,
 
     finished_functions: FxHashMap<DefinitionId, Definition>,
     name_to_id: &'local SharedIdsMap,
@@ -129,6 +141,7 @@ impl<'local, Db> Context<'local, Db> {
             generics_in_scope: Default::default(),
             global_variables: FxHashMap::default(),
             local_variables: FxHashMap::default(),
+            mutable_locals: Default::default(),
             current_block: BlockId::ENTRY_BLOCK,
             current_function: None,
             finished_functions: Default::default(),
@@ -253,7 +266,11 @@ where
             cst::Expr::Quoted(quoted) => self.quoted(quoted),
             cst::Expr::Loop(_) => unreachable!("Loops should be desugared before MIR generation"),
             cst::Expr::Return(return_) => self.return_(return_.expression),
-            cst::Expr::Assignment(_assignment) => todo!("MIR generation for assignment"),
+            cst::Expr::Assignment(assignment) => {
+                let lhs = assignment.lhs;
+                let rhs = assignment.rhs;
+                self.assignment(lhs, rhs)
+            },
         }
     }
 
@@ -296,34 +313,42 @@ where
         // Deliberately allow us to reference variables not in the context.
         // This allows us to convert all definitions to MIR in parallel, trusting
         // that the links will work out later.
-        let mut value = match self.context().path_origin(path_id) {
-            Some(Origin::TopLevelDefinition(name)) => {
-                let id = self.get_definition_id(&name);
-                let name = self.get_definition_name(&name);
-                let typ = self.convert_type(&self.types.result.maps.path_types[&path_id], None);
-                self.make_definition_value(id, name, typ)
-            },
-            Some(origin @ Origin::Builtin(Builtin::PairConstructor)) => {
-                if let Some(existing) = self.global_variables.get(&origin) {
-                    *existing
-                } else {
-                    let function = self.define_pair_constructor();
-                    self.global_variables.insert(origin, function);
-                    function
-                }
-            },
-            Some(Origin::Local(name)) => *self
-                .local_variables
-                .get(&name)
-                .unwrap_or_else(|| panic!("No cached variable for {} with name {name}", self.context()[path_id])),
-            Some(origin @ Origin::Builtin(_)) => *self
-                .global_variables
-                .get(&origin)
-                .unwrap_or_else(|| panic!("No cached variable for {} with origin {origin}", self.context()[path_id])),
-            Some(Origin::TypeResolution) => unreachable!("Unresolved TypeResolution origin found"),
-            // This is possible if there were errors during name resolution
-            None => Value::Error,
-        };
+        let mut value =
+            match self.context().path_origin(path_id) {
+                Some(Origin::TopLevelDefinition(name)) => {
+                    let id = self.get_definition_id(&name);
+                    let name = self.get_definition_name(&name);
+                    let typ = self.convert_type(&self.types.result.maps.path_types[&path_id], None);
+                    self.make_definition_value(id, name, typ)
+                },
+                Some(origin @ Origin::Builtin(Builtin::PairConstructor)) => {
+                    if let Some(existing) = self.global_variables.get(&origin) {
+                        *existing
+                    } else {
+                        let function = self.define_pair_constructor();
+                        self.global_variables.insert(origin, function);
+                        function
+                    }
+                },
+                Some(Origin::Local(name)) => {
+                    let ptr = *self.local_variables.get(&name).unwrap_or_else(|| {
+                        panic!("No cached variable for {} with name {name}", self.context()[path_id])
+                    });
+                    if self.mutable_locals.contains(&name) {
+                        // Mutable locals are StackAlloc'd pointers; auto-deref to load the value.
+                        let val_type = self.convert_type(&self.types.result.maps.path_types[&path_id], None);
+                        self.push_instruction(Instruction::Deref(ptr), val_type)
+                    } else {
+                        ptr
+                    }
+                },
+                Some(origin @ Origin::Builtin(_)) => *self.global_variables.get(&origin).unwrap_or_else(|| {
+                    panic!("No cached variable for {} with origin {origin}", self.context()[path_id])
+                }),
+                Some(Origin::TypeResolution) => unreachable!("Unresolved TypeResolution origin found"),
+                // This is possible if there were errors during name resolution
+                None => Value::Error,
+            };
 
         // If this type was instantiated, then we need to recover the pre-instantiated
         // type and make an explicit [Instruction::Instantiate]. We cannot check this only in the
@@ -409,6 +434,9 @@ where
         // TODO: Globals should probably never be stack allocated
         if definition.mutable {
             value = self.push_instruction(Instruction::StackAlloc(value), Type::POINTER);
+            if let Some(id) = name_id {
+                self.mutable_locals.insert(id);
+            }
         }
         self.bind_pattern(definition.pattern, value);
 
@@ -425,13 +453,34 @@ where
     }
 
     fn member_access(&mut self, member_access: &cst::MemberAccess, expr: ExprId) -> Value {
-        let tuple = self.expression(member_access.object);
         let index = self.context().member_access_index(expr).unwrap_or(u32::MAX);
-        let element_type = match self.type_of_value(&tuple) {
-            Type::Tuple(elements) => elements.get(index as usize).cloned().unwrap_or(Type::ERROR),
-            _ => Type::ERROR,
+        // If the object has a reference type (e.g. `p: mut Point`), the MIR value is a pointer.
+        // Use GetFieldPtr to produce a pointer to the field (MIR rep of e.g. `mut I32`).
+        let object_expr = member_access.object;
+        let inner_struct_type: Option<Type> = {
+            let object_tc = self.types.result.maps.expr_types[&object_expr].follow(&self.types.bindings);
+            if let TCType::Application(constructor, args) = object_tc
+                && matches!(
+                    constructor.as_ref().follow(&self.types.bindings),
+                    TCType::Primitive(type_inference::types::PrimitiveType::Reference(_))
+                )
+            {
+                Some(self.convert_type(&args[0], None))
+            } else {
+                None
+            }
         };
-        self.push_instruction(Instruction::IndexTuple { tuple, index }, element_type)
+        if let Some(struct_type) = inner_struct_type {
+            let struct_ptr = self.expression(object_expr);
+            self.push_instruction(Instruction::GetFieldPtr { struct_ptr, struct_type, index }, Type::POINTER)
+        } else {
+            let tuple = self.expression(object_expr);
+            let element_type = match self.type_of_value(&tuple) {
+                Type::Tuple(elements) => elements.get(index as usize).cloned().unwrap_or(Type::ERROR),
+                _ => Type::ERROR,
+            };
+            self.push_instruction(Instruction::IndexTuple { tuple, index }, element_type)
+        }
     }
 
     fn call(&mut self, call: &cst::Call, id: ExprId) -> Value {
@@ -799,8 +848,79 @@ where
         todo!("mir handle")
     }
 
-    fn reference(&self, _reference: &cst::Reference) -> Value {
-        todo!("mir reference")
+    fn reference(&mut self, reference: &cst::Reference) -> Value {
+        let rhs = reference.rhs;
+        let context = self.context();
+
+        // If the RHS is a locally mutable variable, its value in local_variables is already the
+        // StackAlloc pointer — return it directly as the reference.
+        if let cst::Expr::Variable(path_id) = &context[rhs] {
+            let path_id = *path_id;
+            if let Some(Origin::Local(name)) = context.path_origin(path_id) {
+                if self.mutable_locals.contains(&name) {
+                    return *self
+                        .local_variables
+                        .get(&name)
+                        .expect("mutable local variable not found in local_variables");
+                }
+            }
+        }
+
+        // For all other cases (non-mutable local, reference of reference, temporary):
+        // evaluate the expression and allocate a new stack slot for it.
+        let value = self.expression(rhs);
+        self.push_instruction(Instruction::StackAlloc(value), Type::POINTER)
+    }
+
+    fn lhs_as_pointer(&mut self, lhs: ExprId) -> Value {
+        let context = self.context();
+        let lhs_kind = match &context[lhs] {
+            cst::Expr::Variable(path_id) => {
+                let path_id = *path_id;
+                match context.path_origin(path_id) {
+                    Some(Origin::Local(name)) => LhsKind::LocalVar(name),
+                    _ => LhsKind::Other,
+                }
+            },
+            cst::Expr::Call(call) => LhsKind::DerefCall(call.arguments[0].expr),
+            cst::Expr::TypeAnnotation(ta) => LhsKind::Annotation(ta.lhs),
+            cst::Expr::MemberAccess(ma) => LhsKind::FieldAccess(ma.object, lhs),
+            _ => LhsKind::Other,
+        };
+        match lhs_kind {
+            LhsKind::LocalVar(name) => {
+                *self.local_variables.get(&name).expect("lhs_as_pointer: mutable local variable not found")
+            },
+            LhsKind::DerefCall(ptr_expr) => self.expression(ptr_expr),
+            LhsKind::Annotation(inner) => self.lhs_as_pointer(inner),
+            LhsKind::FieldAccess(object_expr, field_expr) => {
+                let struct_ptr = self.lhs_as_pointer(object_expr);
+                let index = self.context().member_access_index(field_expr).unwrap_or(u32::MAX);
+                // If the object has a reference type, use the inner type for GEP.
+                let struct_type = {
+                    let object_tc = self.types.result.maps.expr_types[&object_expr].follow(&self.types.bindings);
+                    if let TCType::Application(constructor, args) = object_tc
+                        && matches!(
+                            constructor.as_ref().follow(&self.types.bindings),
+                            TCType::Primitive(type_inference::types::PrimitiveType::Reference(_))
+                        )
+                    {
+                        self.convert_type(&args[0], None)
+                    } else {
+                        self.convert_type(object_tc, None)
+                    }
+                };
+                self.push_instruction(Instruction::GetFieldPtr { struct_ptr, struct_type, index }, Type::POINTER)
+            },
+            LhsKind::Other => todo!("unhandled assignment LHS"),
+        }
+    }
+
+    fn assignment(&mut self, lhs: ExprId, rhs: ExprId) -> Value {
+        let pointer = self.lhs_as_pointer(lhs);
+        let value = self.expression(rhs);
+        self.push_instruction(Instruction::Store { pointer, value }, Type::UNIT);
+        Value::Unit
     }
 
     fn constructor(&mut self, constructor: &cst::Constructor, expr: ExprId) -> Value {

@@ -9,7 +9,7 @@ use crate::{
     diagnostics::{Diagnostic, ErrorDefault, Location, Span},
     incremental,
     iterator_extensions::mapvec,
-    lexer::{token::Token, Lexer},
+    lexer::{Lexer, token::Token},
     name_resolution::namespace::SourceFileId,
     parser::{
         context::TopLevelContext,

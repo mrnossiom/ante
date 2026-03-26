@@ -1,0 +1,59 @@
+type Point = x: I32, y: I32
+
+// Assignment to a mutable local variable
+test_local_assign () =
+    var x = 0
+    x := 42
+    println x
+
+// Assignment through a reference parameter
+set_val (n: mut I32) (val: I32) =
+    n.* := val
+
+// Reference expression + deref assignment through parameter
+test_ref_assign () =
+    var y = 0
+    set_val (mut y) 99
+    println y
+
+// Assignment to fields of a mutable local struct
+test_struct_field_assign () =
+    var p = Point 1 2
+    p.x := 10
+    p.y := 20
+    println p.x
+    println p.y
+
+// Assign only to the second field; first field should retain its original value
+test_partial_field_assign () =
+    var p = Point 5 7
+    p.y := 99
+    println p.x
+    println p.y
+
+// Assignment through a struct field via a mut reference parameter.
+// Reading back uses .* since p.x has type mut I32.
+set_point_x (p: mut Point) (val: I32) =
+    p.x := val
+
+test_struct_ref_assign () =
+    var p = Point 0 0
+    set_point_x (mut p) 55
+    println p.x
+
+main () =
+    test_local_assign ()
+    test_ref_assign ()
+    test_struct_field_assign ()
+    test_partial_field_assign ()
+    test_struct_ref_assign ()
+
+// args: --delete-binary
+// expected stdout:
+// 42
+// 99
+// 10
+// 20
+// 5
+// 99
+// 55

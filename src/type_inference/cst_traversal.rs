@@ -557,9 +557,23 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     }
 
     fn check_assignment(&mut self, assignment: &cst::Assignment, expected: &Type, id: ExprId) {
-        let expr_type = self.next_type_variable();
-        self.check_expr(assignment.lhs, &expr_type);
-        self.check_expr(assignment.rhs, &expr_type);
+        let lhs_type = self.next_type_variable();
+        self.check_expr(assignment.lhs, &lhs_type);
+        // If the LHS is a reference type (e.g. `p.x` where `p: mut Point` yields `mut I32`),
+        // the RHS should match the inner (pointee) type rather than the reference wrapper.
+        let rhs_type = match self.follow_type(&lhs_type) {
+            Type::Application(constructor, args) => {
+                let constructor = constructor.clone();
+                let args = args.clone();
+                if matches!(self.follow_type(&constructor), Type::Primitive(types::PrimitiveType::Reference(_))) {
+                    args[0].clone()
+                } else {
+                    lhs_type.clone()
+                }
+            },
+            _ => lhs_type.clone(),
+        };
+        self.check_expr(assignment.rhs, &rhs_type);
         self.unify(&Type::UNIT, expected, TypeErrorKind::General, id);
     }
 

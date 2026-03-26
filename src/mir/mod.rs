@@ -397,6 +397,21 @@ pub enum Instruction {
     MakeTuple(Vec<Value>),
     StackAlloc(Value),
 
+    /// Store a value into a pointer location. Returns unit.
+    Store {
+        pointer: Value,
+        value: Value,
+    },
+
+    /// Get a pointer to a field at `index` within the struct pointed to by `struct_ptr`.
+    /// `struct_type` is the type of the struct being pointed to (needed for GEP codegen).
+    /// Returns a `Pointer` to the field.
+    GetFieldPtr {
+        struct_ptr: Value,
+        struct_type: Type,
+        index: u32,
+    },
+
     /// Reinterpret one value as another type.
     /// The destination type is given by the type of the resulting value.
     /// Requires the destination type's size to be less than or equal to the original type's size.
@@ -468,6 +483,7 @@ impl Instruction {
             Instruction::MakeString(_) => (),
             Instruction::MakeTuple(elements) => elements.iter().for_each(f),
             Instruction::StackAlloc(value) => f(value),
+            Instruction::Store { pointer, value } => two(pointer, value),
             Instruction::Transmute(value) => f(value),
             Instruction::Instantiate(_, _) => (),
             Instruction::Id(value) => f(value),
@@ -503,6 +519,7 @@ impl Instruction {
             Instruction::Truncate(value) => f(value),
             Instruction::Deref(value) => f(value),
             Instruction::SizeOf(value) => f(value),
+            Instruction::GetFieldPtr { struct_ptr, .. } => f(struct_ptr),
         }
     }
 }

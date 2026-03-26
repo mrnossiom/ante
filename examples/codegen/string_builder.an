@@ -25,23 +25,14 @@ main () =
 // examples/codegen/string_builder.an:5:4	error: `reserve` not found in scope
 //     reserve (mut sb) 10
 // 
-// examples/codegen/string_builder.an:5:13	error: `mut` not found in scope
-//     reserve (mut sb) 10
-// 
 // examples/codegen/string_builder.an:6:4	error: `append` not found in scope
-//     append (mut sb) "你好，"
-// 
-// examples/codegen/string_builder.an:6:12	error: `mut` not found in scope
 //     append (mut sb) "你好，"
 // 
 // examples/codegen/string_builder.an:7:4	error: `append` not found in scope
 //     append (mut sb) " World!"
 // 
-// examples/codegen/string_builder.an:7:12	error: `mut` not found in scope
-//     append (mut sb) " World!"
-// 
 // examples/codegen/string_builder.an:9:11	error: `to_string` not found in scope
 //     print (to_string sb)
 // 
-// Found 11 errors and 0 warnings
+// Found 8 errors and 0 warnings
 

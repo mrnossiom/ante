@@ -5,17 +5,22 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    diagnostics::Diagnostic, incremental::{self, DbHandle, GetItem, Resolve, TypeCheck, TypeCheckSCC}, iterator_extensions::mapvec, name_resolution::{Origin, ResolutionResult}, parser::{
+    diagnostics::Diagnostic,
+    incremental::{self, DbHandle, GetItem, Resolve, TypeCheck, TypeCheckSCC},
+    iterator_extensions::mapvec,
+    name_resolution::{Origin, ResolutionResult},
+    parser::{
         context::TopLevelContext,
         cst::{self, Name, ReferenceKind, TopLevelItem, TopLevelItemKind},
         ids::{ExprId, NameId, PathId, PatternId, TopLevelId, TopLevelName},
-    }, type_inference::{
+    },
+    type_inference::{
         dependency_graph::TypeCheckResult,
         errors::{Locateable, TypeErrorKind},
         fresh_expr::ExtendedTopLevelContext,
         generics::Generic,
         types::{PrimitiveType, Type, TypeBindings, TypeVariableId},
-    }
+    },
 };
 
 mod cst_traversal;
@@ -412,9 +417,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                     self.try_bind_type_variable(*expected_id, actual)
                 }
             },
-            (Type::Primitive(PrimitiveType::Error), _) | (_, Type::Primitive(PrimitiveType::Error)) => {
-                Ok(())
-            },
+            (Type::Primitive(PrimitiveType::Error), _) | (_, Type::Primitive(PrimitiveType::Error)) => Ok(()),
             (Type::Function(actual), Type::Function(expected)) => {
                 if actual.parameters.len() != expected.parameters.len() {
                     return Err(());
@@ -452,7 +455,10 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 }
                 self.try_unify(actual, expected)
             },
-            (Type::Primitive(PrimitiveType::Reference(actual)), Type::Primitive(PrimitiveType::Reference(expected))) => {
+            (
+                Type::Primitive(PrimitiveType::Reference(actual)),
+                Type::Primitive(PrimitiveType::Reference(expected)),
+            ) => {
                 // Allow coercions between reference kinds: any ref type coerces to `ref`,
                 // and `uniq` also coerces to `mut`.
                 match (actual, expected) {
@@ -461,7 +467,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                     (actual, expected) if actual == expected => Ok(()),
                     _ => Err(()),
                 }
-            }
+            },
             (actual, other) if actual == other => Ok(()),
             _ => Err(()),
         }
@@ -530,6 +536,19 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 // TODO: Error if `generic_args` is non-empty
                 let constructor = constructor.clone();
                 let arguments = arguments.clone();
+                // If the constructor is a reference kind (mut, ref, imm, uniq), look up the
+                // fields of the inner type and wrap each field type in the same reference.
+                if matches!(self.follow_type(&constructor), Type::Primitive(PrimitiveType::Reference(_))) {
+                    let inner = arguments[0].clone();
+                    let inner_fields = self.get_field_types(&inner, None);
+                    return inner_fields
+                        .into_iter()
+                        .map(|(name, (field_type, index))| {
+                            let ref_field = Type::Application(constructor.clone(), Arc::new(vec![field_type]));
+                            (name, (ref_field, index))
+                        })
+                        .collect();
+                }
                 self.get_field_types(&constructor, Some(&arguments))
             },
             Type::UserDefined(origin) => {

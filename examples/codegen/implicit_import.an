@@ -12,14 +12,8 @@ main () =
 // examples/codegen/implicit_import.an:3:4	error: Namespace `Vec` not found in path
 //     Vec.push (mut v) 3i32
 // 
-// examples/codegen/implicit_import.an:3:14	error: `mut` not found in scope
-//     Vec.push (mut v) 3i32
-// 
 // examples/codegen/implicit_import.an:4:4	error: Namespace `Vec` not found in path
 //     Vec.push (mut v) 4
 // 
-// examples/codegen/implicit_import.an:4:14	error: `mut` not found in scope
-//     Vec.push (mut v) 4
-// 
-// Found 5 errors and 0 warnings
+// Found 3 errors and 0 warnings
 

@@ -305,6 +305,8 @@ fn fmt_instruction(
         mir::Instruction::MakeTuple(fields) => write!(f, "({})", comma_separated(fields, mir))?,
         mir::Instruction::MakeString(s) => write!(f, "\"{s}\"")?,
         mir::Instruction::StackAlloc(value) => write!(f, "alloca {}", v(value))?,
+        mir::Instruction::Store { pointer, value } => write!(f, "store {}, {}", v(pointer), v(value))?,
+        mir::Instruction::GetFieldPtr { struct_ptr, index, .. } => write!(f, "field_ptr {}.{index}", v(struct_ptr))?,
         mir::Instruction::Transmute(value) => write!(f, "transmute {}", v(value))?,
         mir::Instruction::Id(value) => write!(f, "id {}", v(value))?,
         mir::Instruction::Instantiate(definition_id, generics) => {

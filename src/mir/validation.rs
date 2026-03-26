@@ -320,7 +320,17 @@ impl Definition {
                     let value_type = mir.type_of_value(value, self);
                     instr_assert!(matches!(value_type, Type::POINTER), self, id, mir, "Argument type is not a pointer");
                 },
+                Instruction::Store { pointer, value: _ } => {
+                    let pointer_type = mir.type_of_value(pointer, self);
+                    instr_assert_eq!(pointer_type, Type::POINTER, self, id, mir, "Store pointer must be a pointer type, got `{pointer_type}`");
+                    instr_assert_eq!(*result_type, Type::UNIT, self, id, mir, "Store result must be unit");
+                },
                 Instruction::SizeOf(_) => (),
+                Instruction::GetFieldPtr { struct_ptr, .. } => {
+                    let ptr_type = mir.type_of_value(struct_ptr, self);
+                    instr_assert!(matches!(ptr_type, Type::POINTER), self, id, mir, "GetFieldPtr struct_ptr must be a pointer");
+                    instr_assert_eq!(*result_type, Type::POINTER, self, id, mir, "GetFieldPtr result must be a pointer");
+                },
             }
         }
     }

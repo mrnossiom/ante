@@ -226,6 +226,10 @@ impl<'local> FunctionContext<'local> {
             Instruction::IndexTuple { tuple, .. } => remap(tuple),
             Instruction::MakeTuple(elements) => elements.iter_mut().for_each(remap),
             Instruction::StackAlloc(v) | Instruction::Transmute(v) | Instruction::Id(v) => remap(v),
+            Instruction::Store { pointer, value } => {
+                remap(pointer);
+                remap(value);
+            },
             Instruction::AddInt(a, b)
             | Instruction::AddFloat(a, b)
             | Instruction::SubInt(a, b)
@@ -262,6 +266,12 @@ impl<'local> FunctionContext<'local> {
             | Instruction::Deref(v)
             | Instruction::SizeOf(v) => remap(v),
             Instruction::MakeString(_) | Instruction::Instantiate(..) => {},
+            Instruction::GetFieldPtr { struct_ptr, struct_type, .. } => {
+                remap(struct_ptr);
+                if !self.generic_mapping.is_empty() {
+                    self.specialize_type(struct_type);
+                }
+            },
         }
     }
 

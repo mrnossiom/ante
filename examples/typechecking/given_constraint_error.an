@@ -1,21 +1,18 @@
 
 impl print_impl {_: DoesNotExist a}: Print a with
-    printne _ = ()
+    print _ = ()
 
 // args: -e ast-t
 // expected stdout:
 // implicit (print_impl: fn {(error) a [env_0]} -> Print a ((error) a [env_0]) pure) {(_: (error) a [env_0])} : Print a (DoesNotExist a [env_0]) pure = Print a (DoesNotExist a [env_0]) with
-//     (printne: (error)) = fn (_: _) -> ()
+//     (print: fn a [(error) a [env_0]] -> Unit pure) = fn (_: a) -> ()
 
 // expected stderr:
-// examples/typechecking/given_constraint_error.an:2:0	error: Missing field: print
-// impl print_impl {_: DoesNotExist a}: Print a with
-// 
 // examples/typechecking/given_constraint_error.an:2:20	error: `DoesNotExist` not found in scope
 // impl print_impl {_: DoesNotExist a}: Print a with
 // 
-// examples/typechecking/given_constraint_error.an:3:0	error: Print a (DoesNotExist a [env_0]) has no field named `printne`
-//     printne _ = ()
+// examples/typechecking/given_constraint_error.an:3:4	error: Expected the closure environment (error) a [env_0], but the actual environment was empty
+//     print _ = ()
 // 
-// Found 3 errors and 0 warnings
+// Found 2 errors and 0 warnings
 

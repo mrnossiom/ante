@@ -402,7 +402,29 @@ deref_ptr (p: Ptr t): t =
 // 
 // ptr_to_ref: fn (Ptr a) -> mut a = transmute
 // 
-(.*) = deref
+trait Copy t with
+    (.*): fn (ref t) -> t
+
+(.*) = Copy.(.*)
+
+impl copy_i8: Copy I8 with (.*) = deref
+impl copy_i16: Copy I16 with (.*) = deref
+impl copy_i32: Copy I32 with (.*) = deref
+impl copy_i64: Copy I64 with (.*) = deref
+impl copy_isz: Copy Isz with (.*) = deref
+impl copy_u8: Copy U8 with (.*) = deref
+impl copy_u16: Copy U16 with (.*) = deref
+impl copy_u32: Copy U32 with (.*) = deref
+impl copy_u64: Copy U64 with (.*) = deref
+impl copy_usz: Copy Usz with (.*) = deref
+
+impl copy_unit: Copy Unit with (.*) = deref
+impl copy_bool: Copy Bool with (.*) = deref
+impl copy_char: Copy Char with (.*) = deref
+
+impl copy_ref: Copy (ref t) with (.*) = deref
+impl copy_mut: Copy (mut t) with (.*) = deref
+impl copy_imm: Copy (imm t) with (.*) = deref
 
 null (): Ptr a = transmute 0usz
 
@@ -485,7 +507,7 @@ impl print_maybe {Print a}: Print (Maybe a) with
         | Some a -> print a
         | None -> print "None"
 
-impl print_ref {Print a}: Print (ref a) with
+impl print_ref {Print a} {Copy a}: Print (ref a) with
     print r = print r.*
 
 // Naive replacement for printf which isn't supported by the cranelift backend

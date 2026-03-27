@@ -18,10 +18,10 @@ str = foo 0i32
 // (str: _) = (foo: (error)) 0_I32
 
 // expected stderr:
-// examples/typechecking/trait_fundep_result.an:3:14	error: `b` not found in scope
+// examples/typechecking/trait_fundep_result.an:3:17	error: `b` not found in scope
 //     foo: fn a -> b
 // 
-// examples/typechecking/trait_fundep_result.an:5:0	error: Function has 3 arguments but 1 was expected
+// examples/typechecking/trait_fundep_result.an:5:5	error: Function has 3 arguments but 1 was expected
 // impl foo_impl: Foo I32 String with
 // 
 // examples/typechecking/trait_fundep_result.an:8:6	error: `foo` not found in scope

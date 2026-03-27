@@ -19,10 +19,10 @@ main () = my_iter 10 print
 
 // args: --delete-binary
 // expected stderr:
-// examples/codegen/iter.an:3:27	error: `elem` not found in scope
+// examples/codegen/iter.an:3:28	error: `elem` not found in scope
 //     mynext: fn it -> Maybe (elem, it)
 // 
-// examples/codegen/iter.an:6:0	error: Function has 3 arguments but 1 was expected
+// examples/codegen/iter.an:6:5	error: Function has 3 arguments but 1 was expected
 // impl countdown: MyIterable I32 I32 with
 // 
 // examples/codegen/iter.an:8:13	error: Multiple matching implicits found for type Cmp I32 NoClosureEnv required by parameter 3 of function: cmp_i32, countdown

@@ -6,9 +6,9 @@ _ = boom ()
 // expected exit status: 101
 // expected stderr:
 // thread 'main' panicked at src/mir/validation.rs:198:21:
-// fn boom d463: fn Unit -> (U8, (Pointer,))
+// fn boom d482: fn Unit -> (U8, (Pointer,))
 //   b0(b0_0: Unit):
-//     v0: U8, ((U8, (error,)),) = id None_d513
+//     v0: U8, ((U8, (error,)),) = id None_d531
 //     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Value type `U8, (Pointer,)` != result type `U8, ((U8, (error,)),)`
 // 
 //     return v0

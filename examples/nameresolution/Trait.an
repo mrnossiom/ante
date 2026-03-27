@@ -29,10 +29,10 @@ main () =
 //     bar_?: Unit_bUnit
 
 // expected stderr:
-// examples/nameresolution/Trait.an:6:0	error: Missing field: bar
+// examples/nameresolution/Trait.an:6:5	error: Missing field: bar
 // impl foo_i32_string: Foo I32 String with
 // 
-// examples/nameresolution/Trait.an:8:0	error: Foo I32 String NoClosureEnv has no field named `baz`
+// examples/nameresolution/Trait.an:8:4	error: Foo I32 String NoClosureEnv has no field named `baz`
 //     baz = 2
 // 
 // examples/nameresolution/Trait.an:11:4	error: `foo` not found in scope

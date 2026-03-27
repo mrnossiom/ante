@@ -344,6 +344,9 @@ trait Append a with
 
 (++) = Append.(++)
 
+(|>) x f = f x
+(<|) f x = f x
+
 // trait Extract collection index -> elem with
 //     (.[): fn collection index -> elem
 // 

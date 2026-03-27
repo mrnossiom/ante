@@ -524,6 +524,7 @@ impl Type {
                     for parameter in &function.parameters {
                         free_vars_helper(&parameter.typ, bindings, free_vars);
                     }
+                    free_vars_helper(&function.environment, bindings, free_vars);
                     free_vars_helper(&function.return_type, bindings, free_vars);
                     free_vars_helper(&function.effects, bindings, free_vars);
                 },

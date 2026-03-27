@@ -633,7 +633,7 @@ impl TopLevelId {
             cst::TypeDefinitionBody::Struct(fields) => {
                 // This'd be easier with an explicit type data field
                 let constructor_type = result.get_generalized(type_definition.name);
-                let constructor = maybe_apply_type(constructor_type, arguments, &result);
+                let constructor = apply_type_constructor(constructor_type, arguments, &result);
                 let field_types = constructor.function_parameter_types();
 
                 assert_eq!(fields.len(), field_types.len());
@@ -647,7 +647,7 @@ impl TopLevelId {
             cst::TypeDefinitionBody::Enum(variants) => {
                 let variants = mapvec(variants, |(name, _)| {
                     let constructor_type = result.get_generalized(*name);
-                    let constructor = maybe_apply_type(constructor_type, arguments, &result);
+                    let constructor = apply_type_constructor(constructor_type, arguments, &result);
                     let fields = constructor.function_parameter_types().collect();
                     (item_context.names[*name].clone(), fields)
                 });
@@ -666,7 +666,10 @@ impl TopLevelId {
 
 /// Try to apply the given type to the given type arguments. Note that this assumes there are no
 /// bound type variables within `typ`!
-fn maybe_apply_type(typ: &Type, args: Option<&[Type]>, types: &TypeCheckResult) -> Type {
+///
+// This assumes constructor args are in the same order as the type args.
+// This should be guaranteed by [TypeChecker::build_constructor_type].
+fn apply_type_constructor(typ: &Type, args: Option<&[Type]>, types: &TypeCheckResult) -> Type {
     let expected_generic_count = match typ.follow(&types.bindings) {
         Type::Forall(generics, _) => generics.len(),
         _ => 0,

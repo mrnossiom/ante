@@ -43,9 +43,10 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         };
 
         let type_name = TopLevelName::new(id, definition.name);
+        let generics = mapvec(&definition.generics, |id| Generic::Named(Origin::Local(*id)));
 
         for (constructor_name, args) in constructors.iter() {
-            let actual = self.build_constructor_type(type_name, definition, args);
+            let actual = self.build_constructor_type(type_name, definition, &generics, args);
             self.check_name(*constructor_name, &actual);
         }
     }
@@ -87,33 +88,39 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     ///
     /// `type_name` should be the name of the struct/product type rather than
     /// the name for each individual variant, in the case of sum types.
+    ///
+    /// Note that the order of the generics of type constructors must match the ordering of the
+    /// generics of the type since this is what [TopLevelId::type_body] later expects.
     fn build_constructor_type<'a>(
-        &mut self, type_name: TopLevelName, item: &cst::TypeDefinition, variant_args: &[cst::Type],
+        &mut self, type_name: TopLevelName, item: &cst::TypeDefinition, generics: &[Generic],
+        variant_args: &[cst::Type],
     ) -> Type {
-        let (data_type, substitutions) = self.type_definition_type(type_name, item, true);
-
-        // If there are no variant args, the result is not a function.
-        // Returning early here also lets us avoid a dependency on `Resolve(id)` since
-        // we do not need to resolve any types in `item`'s context when the variant has no arguments.
-        if variant_args.len() == 0 {
-            return data_type;
-        }
+        let (mut result, substitutions) = self.type_definition_type(type_name, item, false);
+        assert!(substitutions.is_empty());
 
         let parameters = mapvec(variant_args, |arg| {
-            let mut param = self.from_cst_type(arg);
-
-            if !substitutions.is_empty() {
-                param = param.substitute(&substitutions, &self.bindings);
-            }
+            let param = self.from_cst_type(arg);
             types::ParameterType::explicit(param)
         });
 
-        Type::Function(Arc::new(types::FunctionType {
-            parameters,
-            environment: Type::NO_CLOSURE_ENV,
-            return_type: data_type,
-            effects: Type::UNIT,
-        }))
+        if !variant_args.is_empty() {
+            result = Type::Function(Arc::new(types::FunctionType {
+                parameters,
+                environment: Type::NO_CLOSURE_ENV,
+                return_type: result,
+                effects: Type::UNIT,
+            }));
+        }
+
+        if !generics.is_empty() {
+            result = Type::Forall(Arc::new(generics.to_vec()), Arc::new(result));
+        }
+
+        if !result.free_vars(&self.bindings).is_empty() {
+            // TODO: Error: type contains unbound variable, suggest adding a generic
+        }
+
+        result
     }
 
     /// Given a desugared trait definition like:

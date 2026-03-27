@@ -79,8 +79,11 @@ impl LanguageServer for Backend {
                     if let Ok(range) = lsp_range_to_rope_range(range, &rope) {
                         rope.remove(range.clone());
                         rope.insert(range.start, &change.text);
+                    } else {
+                        rope = Rope::from_str(&change.text);
                     }
                 } else {
+                    // Full document replace (range = None)
                     rope = Rope::from_str(&change.text);
                 }
             }

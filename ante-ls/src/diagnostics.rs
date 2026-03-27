@@ -31,16 +31,26 @@ pub fn set_file_content(db: &mut Db, path: &std::path::Path, rope: &Rope) {
 
 /// Walk all items in the local crate, run TypeCheck on each, and convert the
 /// accumulated compiler diagnostics to LSP diagnostics grouped by file URI.
-/// The current file starts with an empty list so stale diagnostics are cleared.
+/// All local crate files start with an empty list so stale diagnostics are
+/// cleared for any file that no longer has errors.
 pub fn collect_lsp_diagnostics(
     compiler: &Db, current_uri: &Url, current_rope: &Rope, document_map: &DashMap<Url, Rope>,
 ) -> HashMap<Url, Vec<Diagnostic>> {
-    let mut result: HashMap<Url, Vec<Diagnostic>> = HashMap::from([(current_uri.clone(), Vec::new())]);
-
     let crates = GetCrateGraph.get(compiler);
     let Some(local_crate) = crates.get(&CrateId::LOCAL) else {
-        return result;
+        return HashMap::from([(current_uri.clone(), Vec::new())]);
     };
+
+    // Pre-seed ALL local crate files with empty lists so stale diagnostics
+    // are cleared for any file that no longer has errors.
+    let mut result: HashMap<Url, Vec<Diagnostic>> = local_crate
+        .source_files
+        .keys()
+        .filter_map(|path| Url::from_file_path(path.as_ref()).ok())
+        .map(|uri| (uri, Vec::new()))
+        .collect();
+    // Ensure current_uri is present even if not yet in the crate's file list.
+    result.entry(current_uri.clone()).or_insert_with(Vec::new);
 
     // Using a BTreeSet here deduplicates the diagnostics returned by get_accumulated
     let mut all_diags = BTreeSet::new();

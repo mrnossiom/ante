@@ -28,6 +28,9 @@ main ()
 // examples/regressions/85_type_defaulting_rules.an:14:17	error: Expected an unindent but found `fn`
 //     count_down 3 fn x ->
 // 
+// examples/regressions/85_type_defaulting_rules.an:17:21	error: Multiple matching implicits found for type Print _ _ required by parameter 2: print_bool, print_char, print_i16, print_i32, print_i64, print_i8, print_isz, print_ptr_char, print_string, print_u16, print_u32, print_u64, print_u8, print_usz
+//     print_offset _ = print offset
+// 
 // examples/regressions/85_type_defaulting_rules.an:17:27	error: `offset` not found in scope
 //     print_offset _ = print offset
 // 
@@ -37,5 +40,5 @@ main ()
 // examples/regressions/85_type_defaulting_rules.an:21:5	error: Expected `=` to begin the function body but found `()`
 // main ()
 // 
-// Found 5 errors and 0 warnings
+// Found 6 errors and 0 warnings
 

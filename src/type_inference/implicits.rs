@@ -117,20 +117,27 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         let function = implicit.source;
         let destination = implicit.destination;
 
-        // TODO: We shouldn't commit unification bindings until we actually select a candidate
-
         // A Vec of (implicit name, implicit origin, implicit type, implicit arguments)
         // Non-function implicits will not have any arguments
         let mut candidates = Candidates::new();
+
+        // Parallel vec tracking the bindings committed by each candidate's check. We save and
+        // restore bindings around each check so that the first candidate's successful try_unify
+        // doesn't permanently commit type variables (e.g. binding a free variable to I16 just
+        // because add_i16 comes before add_i32 alphabetically in VisibleImplicits). After
+        // collecting all candidates we apply only the single winner's bindings.
+        let mut candidate_bindings = Vec::new();
 
         // TODO: Remove clone by making try_unify no longer require a mutable self
         let implicits_in_scope =
             self.implicits.iter().rev().flat_map(|scope| &scope.implicits_in_scope).copied().collect::<Vec<_>>();
 
         for name in implicits_in_scope {
+            let saved = self.bindings.clone();
             let name_type = self.name_types[&name].follow(&self.bindings).clone();
             let origin = Origin::Local(name);
             let name = self.current_extended_context()[name].clone();
+            let prev_len = candidates.len();
             self.check_implicit_candidate(
                 name_type,
                 None,
@@ -141,6 +148,10 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 parameter_index,
                 function,
             );
+            let committed = std::mem::replace(&mut self.bindings, saved);
+            if candidates.len() > prev_len {
+                candidate_bindings.push(committed);
+            }
         }
 
         // Need to check globally visible implicits separately
@@ -148,7 +159,12 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         if let Some(item) = self.current_item {
             for (name, name_id) in VisibleImplicits(item.source_file).get(self.compiler).iter() {
                 let (name_type, bindings) = self.type_and_bindings_of_top_level_name(name_id);
+                let saved = self.bindings.clone();
+                // Pre-filter: skip impls that clearly can't match. After the pre-filter succeeds
+                // we restore bindings so the committed state is captured per-candidate below.
                 if self.try_unify(&name_type, &target_type).is_ok() {
+                    self.bindings = saved.clone();
+                    let prev_len = candidates.len();
                     let origin = Origin::TopLevelDefinition(*name_id);
                     self.check_implicit_candidate(
                         name_type,
@@ -160,6 +176,12 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                         parameter_index,
                         function,
                     );
+                    let committed = std::mem::replace(&mut self.bindings, saved);
+                    if candidates.len() > prev_len {
+                        candidate_bindings.push(committed);
+                    }
+                } else {
+                    self.bindings = saved;
                 }
             }
         }
@@ -167,7 +189,8 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         if candidates.is_empty() {
             Err(self.no_implicit_found_error(&target_type, parameter_index, function))
         } else if candidates.len() == 1 {
-            let (name, origin, bindings, name_type, arguments) = candidates.first().unwrap().clone();
+            self.bindings = candidate_bindings.remove(0);
+            let (name, origin, bindings, name_type, arguments) = candidates.remove(0);
             let location = function.locate(self);
             self.create_implicit_argument_expr(name, origin, bindings, name_type, arguments, destination, location);
             Ok(())

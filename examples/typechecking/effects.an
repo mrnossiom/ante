@@ -39,9 +39,9 @@ does_use x =
 //     | (get: (error)) () -> (resume: (error)) 3_I32
 //     | (set: (error)) (_: (error)) -> (resume: (error)) ()
 // 
-// (does_use: fn I16 -> _ can _) (x: I16) =
-//     (y: I16) = (get: (error)) ()
-//     (set: (error)) ((fn (p5: I16) (p6: I16) -> (+: fn I16 I16 {Add I16 NoClosureEnv} -> I16 pure) (p5: I16) (p6: I16) {(add_i16: Add I16 NoClosureEnv)}) (y: I16) (x: I16))
+// (does_use: fn _ -> _ can _) (x: _) =
+//     (y: _) = (get: (error)) ()
+//     (set: (error)) ((fn (p5: _) (p6: _) -> (+: fn _ _ {Add _ _} [_] -> _ pure) (p5: _) (p6: _) {(error)}) (y: _) (x: _))
 
 // expected stderr:
 // examples/typechecking/effects.an:10:4	error: Effects and handle expressions are currently unimplemented
@@ -56,5 +56,8 @@ does_use x =
 // examples/typechecking/effects.an:22:4	error: `set` not found in scope
 //     set (y + x)
 // 
-// Found 4 errors and 0 warnings
+// examples/typechecking/effects.an:22:11	error: Multiple matching implicits found for type Add _ _ required by parameter 3: add_i16, add_i32, add_i64, add_i8, add_isz, add_u16, add_u32, add_u64, add_u8, add_usz
+//     set (y + x)
+// 
+// Found 5 errors and 0 warnings
 

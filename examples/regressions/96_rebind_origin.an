@@ -10,8 +10,11 @@ twice 1u8 2u16
 
 // args: --delete-binary
 // expected stderr:
+// examples/regressions/96_rebind_origin.an:3:4	error: Multiple matching implicits found for type Cast _ U64 _ required by parameter 2: cast_char_u64, cast_float_u64, cast_same, cast_u16_u64, cast_u32_u64, cast_u8_u64, cast_usz_u64
+//     cast foo : U64
+// 
 // examples/regressions/96_rebind_origin.an:9:6	error: Expected `=` to begin the function body but found `1_U8`
 // twice 1u8 2u16
 // 
-// Found 1 error and 0 warnings
+// Found 2 errors and 0 warnings
 

@@ -1,35 +1,19 @@
 
-foo a b c =
+foo (a: I32) b c =
     a + b + c
 
 main () =
     plus2 = foo _ 2 _
     plus4 = foo 2 2 _
 
-    print <| plus4 2
-    print <| plus2 38 2
+    println <| plus4 2
+    println <| plus2 38 2
 
-    4 |> (_ + 2) |> print
+    4 |> (_ + 2) |> println
 
 // args: --delete-binary
-// expected stderr:
-// examples/codegen/explicit_curry.an:6:18	error: Expected I16 but found I32
-//     plus2 = foo _ 2 _
-// 
-// examples/codegen/explicit_curry.an:7:16	error: Expected I16 but found I32
-//     plus4 = foo 2 2 _
-// 
-// examples/codegen/explicit_curry.an:7:18	error: Expected I16 but found I32
-//     plus4 = foo 2 2 _
-// 
-// examples/codegen/explicit_curry.an:9:19	error: Expected I16 but found I32
-//     print <| plus4 2
-// 
-// examples/codegen/explicit_curry.an:10:19	error: Expected I16 but found I32
-//     print <| plus2 38 2
-// 
-// examples/codegen/explicit_curry.an:10:22	error: Expected I16 but found I32
-//     print <| plus2 38 2
-// 
-// Found 6 errors and 0 warnings
+// expected stdout:
+// 6
+// 42
+// 6
 

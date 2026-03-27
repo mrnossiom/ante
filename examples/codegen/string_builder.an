@@ -31,8 +31,11 @@ main () =
 // examples/codegen/string_builder.an:7:4	error: `append` not found in scope
 //     append (mut sb) " World!"
 // 
+// examples/codegen/string_builder.an:9:4	error: Multiple matching implicits found for type Print _ _ required by parameter 2: print_bool, print_char, print_i16, print_i32, print_i64, print_i8, print_isz, print_ptr_char, print_string, print_u16, print_u32, print_u64, print_u8, print_usz
+//     print (to_string sb)
+// 
 // examples/codegen/string_builder.an:9:11	error: `to_string` not found in scope
 //     print (to_string sb)
 // 
-// Found 8 errors and 0 warnings
+// Found 9 errors and 0 warnings
 

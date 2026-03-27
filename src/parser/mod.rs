@@ -1829,7 +1829,7 @@ impl<'tokens> Parser<'tokens> {
         match self.current_token() {
             Token::Identifier(name) => {
                 let name = Arc::new(name.clone());
-                let location = self.previous_token_location();
+                let location = self.current_token_location();
                 self.advance();
                 Ok(self.push_name(name, location))
             },

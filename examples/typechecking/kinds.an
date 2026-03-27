@@ -52,10 +52,10 @@ bad_unapplied (x: Box) : Box = x
 // (bad_unapplied: fn Box -> Box pure) ((x: Box)) : Box = (x: Box)
 
 // expected stderr:
-// examples/typechecking/kinds.an:18:12	error: Function has 1 argument but 0 were expected
+// examples/typechecking/kinds.an:18:12	error: Expected 0 arguments but found 1
 // bad_app (x: Foo Bool) : Foo Bool = x
 // 
-// examples/typechecking/kinds.an:18:24	error: Function has 1 argument but 0 were expected
+// examples/typechecking/kinds.an:18:24	error: Expected 0 arguments but found 1
 // bad_app (x: Foo Bool) : Foo Bool = x
 // 
 // examples/typechecking/kinds.an:21:18	error: Expected a type here, this type constructor is missing 1 argument

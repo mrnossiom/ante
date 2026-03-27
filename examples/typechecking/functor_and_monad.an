@@ -44,7 +44,7 @@ impl monad_maybe: Monad Maybe with
 //         | (None: (error)) -> (None: (error))
 
 // expected stderr:
-// examples/typechecking/functor_and_monad.an:3:12	error: Function has 1 argument but 0 were expected
+// examples/typechecking/functor_and_monad.an:3:12	error: Expected 0 arguments but found 1
 //     map: fn (f a) (fn a -> b) -> f b
 // 
 // examples/typechecking/functor_and_monad.an:3:15	error: `a` not found in scope
@@ -56,7 +56,7 @@ impl monad_maybe: Monad Maybe with
 // examples/typechecking/functor_and_monad.an:3:27	error: `b` not found in scope
 //     map: fn (f a) (fn a -> b) -> f b
 // 
-// examples/typechecking/functor_and_monad.an:3:33	error: Function has 1 argument but 0 were expected
+// examples/typechecking/functor_and_monad.an:3:33	error: Expected 0 arguments but found 1
 //     map: fn (f a) (fn a -> b) -> f b
 // 
 // examples/typechecking/functor_and_monad.an:3:35	error: `b` not found in scope
@@ -65,13 +65,13 @@ impl monad_maybe: Monad Maybe with
 // examples/typechecking/functor_and_monad.an:6:13	error: `a` not found in scope
 //     wrap: fn a -> m a
 // 
-// examples/typechecking/functor_and_monad.an:6:18	error: Function has 1 argument but 0 were expected
+// examples/typechecking/functor_and_monad.an:6:18	error: Expected 0 arguments but found 1
 //     wrap: fn a -> m a
 // 
 // examples/typechecking/functor_and_monad.an:6:20	error: `a` not found in scope
 //     wrap: fn a -> m a
 // 
-// examples/typechecking/functor_and_monad.an:7:13	error: Function has 1 argument but 0 were expected
+// examples/typechecking/functor_and_monad.an:7:13	error: Expected 0 arguments but found 1
 //     bind: fn (m a) (fn a -> m b) -> m b
 // 
 // examples/typechecking/functor_and_monad.an:7:16	error: `a` not found in scope
@@ -80,13 +80,13 @@ impl monad_maybe: Monad Maybe with
 // examples/typechecking/functor_and_monad.an:7:23	error: `a` not found in scope
 //     bind: fn (m a) (fn a -> m b) -> m b
 // 
-// examples/typechecking/functor_and_monad.an:7:28	error: Function has 1 argument but 0 were expected
+// examples/typechecking/functor_and_monad.an:7:28	error: Expected 0 arguments but found 1
 //     bind: fn (m a) (fn a -> m b) -> m b
 // 
 // examples/typechecking/functor_and_monad.an:7:30	error: `b` not found in scope
 //     bind: fn (m a) (fn a -> m b) -> m b
 // 
-// examples/typechecking/functor_and_monad.an:7:36	error: Function has 1 argument but 0 were expected
+// examples/typechecking/functor_and_monad.an:7:36	error: Expected 0 arguments but found 1
 //     bind: fn (m a) (fn a -> m b) -> m b
 // 
 // examples/typechecking/functor_and_monad.an:7:38	error: `b` not found in scope

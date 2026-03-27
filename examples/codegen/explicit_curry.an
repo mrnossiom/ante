@@ -31,26 +31,20 @@ main () =
 // examples/codegen/explicit_curry.an:7:20	error: `_` not found in scope
 //     plus4 = foo 2 2 _
 // 
-// examples/codegen/explicit_curry.an:9:10	error: `<|` not found in scope
-//     print <| plus4 2
-// 
 // examples/codegen/explicit_curry.an:9:13	error: Expected fn _ [_] -> _ can _ but found I16
 //     print <| plus4 2
-// 
-// examples/codegen/explicit_curry.an:10:10	error: `<|` not found in scope
-//     print <| plus2 38 2
 // 
 // examples/codegen/explicit_curry.an:10:13	error: Expected fn _ _ [_] -> _ can _ but found I16
 //     print <| plus2 38 2
 // 
-// examples/codegen/explicit_curry.an:12:6	error: `|>` not found in scope
-//     4 |> (_ + 2) |> print
-// 
 // examples/codegen/explicit_curry.an:12:10	error: `_` not found in scope
 //     4 |> (_ + 2) |> print
 // 
-// examples/codegen/explicit_curry.an:12:17	error: `|>` not found in scope
+// examples/codegen/explicit_curry.an:12:12	error: No implicit found for type Add (fn I32 [_] -> _ can _) _ required by parameter 3
 //     4 |> (_ + 2) |> print
 // 
-// Found 13 errors and 0 warnings
+// examples/codegen/explicit_curry.an:12:14	error: Expected fn I32 [_] -> _ can _ but found I32
+//     4 |> (_ + 2) |> print
+// 
+// Found 11 errors and 0 warnings
 

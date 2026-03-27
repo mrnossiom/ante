@@ -24,22 +24,22 @@ main () =
 
 // args: --delete-binary
 // expected stderr:
-// examples/codegen/builtin_int.an:3:13	error: No implicit found for type Add Bool _ required by parameter 3 of function
+// examples/codegen/builtin_int.an:3:13	error: No implicit found for type Add Bool _ required by parameter 3
 //     print (x + x)
 // 
-// examples/codegen/builtin_int.an:4:13	error: No implicit found for type Sub Bool _ required by parameter 3 of function
+// examples/codegen/builtin_int.an:4:13	error: No implicit found for type Sub Bool _ required by parameter 3
 //     print (x - x - x)
 // 
-// examples/codegen/builtin_int.an:4:17	error: No implicit found for type Sub Bool _ required by parameter 3 of function
+// examples/codegen/builtin_int.an:4:17	error: No implicit found for type Sub Bool _ required by parameter 3
 //     print (x - x - x)
 // 
-// examples/codegen/builtin_int.an:5:13	error: No implicit found for type Mul Bool _ required by parameter 3 of function
+// examples/codegen/builtin_int.an:5:13	error: No implicit found for type Mul Bool _ required by parameter 3
 //     print (x * x)
 // 
-// examples/codegen/builtin_int.an:6:13	error: No implicit found for type Div Bool _ required by parameter 3 of function
+// examples/codegen/builtin_int.an:6:13	error: No implicit found for type Div Bool _ required by parameter 3
 //     print (x / x)
 // 
-// examples/codegen/builtin_int.an:7:13	error: No implicit found for type Mod Bool _ required by parameter 3 of function
+// examples/codegen/builtin_int.an:7:13	error: No implicit found for type Mod Bool _ required by parameter 3
 //     print (x % x)
 // 
 // examples/codegen/builtin_int.an:10:13	error: Expected Bool but found I8

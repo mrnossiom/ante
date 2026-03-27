@@ -49,16 +49,16 @@ bar "four" "five"
 // examples/typechecking/trait_impls.an:3:19	error: `b` not found in scope
 //     bar: fn a a -> b
 // 
-// examples/typechecking/trait_impls.an:6:5	error: Function has 3 arguments but 1 was expected
+// examples/typechecking/trait_impls.an:6:5	error: Expected 1 argument but found 3
 // impl bar1: Bar I32 String with
 // 
-// examples/typechecking/trait_impls.an:9:5	error: Function has 3 arguments but 1 was expected
+// examples/typechecking/trait_impls.an:9:5	error: Expected 1 argument but found 3
 // impl bar2: Bar I32 I32 with
 // 
-// examples/typechecking/trait_impls.an:12:5	error: Function has 6 arguments but 1 was expected
+// examples/typechecking/trait_impls.an:12:5	error: Expected 1 argument but found 6
 // impl bar3: Bar I32 Char String F64 Unit with
 // 
-// examples/typechecking/trait_impls.an:17:5	error: Function has 3 arguments but 1 was expected
+// examples/typechecking/trait_impls.an:17:5	error: Expected 1 argument but found 3
 // impl bar4: Bar I32 F64 with
 // 
 // examples/typechecking/trait_impls.an:20:10	error: `bar` not found in scope

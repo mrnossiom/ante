@@ -21,4 +21,7 @@ main () =
     foo x x
 
 // args: --delete-binary
-// expected stdout: x before: original x stringx after:  original x string
+// expected stdout:
+// x before: original x string
+// x after:  original x string
+

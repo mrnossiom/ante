@@ -42,7 +42,7 @@ impl SourceFileId {
     }
 
     pub fn prelude() -> SourceFileId {
-        Self::new(CrateId::STDLIB, &crate::paths::prelude_path())
+        Self::new(CrateId::STDLIB, std::path::Path::new("src/Prelude.an"))
     }
 }
 

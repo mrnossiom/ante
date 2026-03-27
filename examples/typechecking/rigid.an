@@ -14,7 +14,7 @@ ex2: a -> b =
 // examples/typechecking/rigid.an:2:16	error: Expected b but found a
 // ex1 (x: a): b = x + 1u32
 // 
-// examples/typechecking/rigid.an:2:18	error: No implicit found for type Add b _ required by parameter 3 of function
+// examples/typechecking/rigid.an:2:18	error: No implicit found for type Add b _ required by parameter 3
 // ex1 (x: a): b = x + 1u32
 // 
 // examples/typechecking/rigid.an:2:20	error: Expected b but found U32

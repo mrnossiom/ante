@@ -54,10 +54,12 @@ fn add_stdlib_crate(crates: &mut CrateGraph) {
 /// Create the local crate's Crate entry in the graph and populate it with the given starting files.
 fn populate_local_crate_with_starting_files(compiler: &mut Db, crates: &mut CrateGraph, starting_files: &[PathBuf]) {
     let mut source_files = BTreeMap::new();
+    let cwd = std::env::current_dir().unwrap_or_default();
 
     for path in starting_files {
         let path = path.to_path_buf();
-        let id = SourceFileId::new(CrateId::LOCAL, &path);
+        let relative_path = path.strip_prefix(&cwd).unwrap_or(&path);
+        let id = SourceFileId::new(CrateId::LOCAL, relative_path);
         let data = read_file_data(path.clone());
         id.set(compiler, Arc::new(data));
         source_files.insert(Arc::new(path), id);
@@ -79,7 +81,8 @@ fn set_crate_inputs(compiler: &mut Db, crates: CrateGraph) {
 /// Find all Ante source files in the given crate. Currently this is hard coded
 /// to only look in the `src` directory.
 fn add_source_files_of_crate(compiler: &mut Db, crates: &mut CrateGraph, crate_id: CrateId) {
-    let mut src_folder = crates[&crate_id].path.clone();
+    let crate_root = crates[&crate_id].path.clone();
+    let mut src_folder = crate_root.clone();
     src_folder.push("src");
 
     let mut remaining = vec![src_folder];
@@ -101,7 +104,8 @@ fn add_source_files_of_crate(compiler: &mut Db, crates: &mut CrateGraph, crate_i
             if path.is_dir() {
                 remaining.push(path);
             } else if path.extension() == Some(&OsStr::from("an")) {
-                let id = SourceFileId::new(crate_id, &path);
+                let relative_path = path.strip_prefix(&crate_root).unwrap_or(&path);
+                let id = SourceFileId::new(crate_id, relative_path);
                 let data = read_file_data(path.clone());
                 id.set(compiler, Arc::new(data));
                 let path = Arc::new(path);

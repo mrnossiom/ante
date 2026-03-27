@@ -21,7 +21,7 @@ str = foo 0i32
 // examples/typechecking/trait_fundep_result.an:3:17	error: `b` not found in scope
 //     foo: fn a -> b
 // 
-// examples/typechecking/trait_fundep_result.an:5:5	error: Function has 3 arguments but 1 was expected
+// examples/typechecking/trait_fundep_result.an:5:5	error: Expected 1 argument but found 3
 // impl foo_impl: Foo I32 String with
 // 
 // examples/typechecking/trait_fundep_result.an:8:6	error: `foo` not found in scope

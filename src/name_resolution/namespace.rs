@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::parser::ids::TopLevelId;
+use crate::{parser::ids::TopLevelId, paths::prelude_path_relative_to_stdlib};
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub(super) enum Namespace {
@@ -42,7 +42,7 @@ impl SourceFileId {
     }
 
     pub fn prelude() -> SourceFileId {
-        Self::new(CrateId::STDLIB, std::path::Path::new("src/Prelude.an"))
+        Self::new(CrateId::STDLIB, prelude_path_relative_to_stdlib())
     }
 }
 

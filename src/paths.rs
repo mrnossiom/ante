@@ -48,9 +48,7 @@ pub fn stdlib_path() -> PathBuf {
     }
 }
 
-pub fn prelude_path() -> PathBuf {
-    let mut path = stdlib_path();
-    path.push("src");
-    path.push("Prelude.an");
-    path
+/// Returns "src/Prelude.an"
+pub fn prelude_path_relative_to_stdlib() -> &'static std::path::Path {
+    std::path::Path::new("src/Prelude.an")
 }

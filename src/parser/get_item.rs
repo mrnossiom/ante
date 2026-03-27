@@ -14,20 +14,6 @@ use crate::{
     },
 };
 
-fn make_tuple_type(location: &Location, mut types: impl ExactSizeIterator<Item = Type>) -> Type {
-    let Some(first) = types.next() else {
-        return Type::new(TypeKind::NoClosureEnv, location.clone());
-    };
-
-    if types.len() == 0 {
-        first
-    } else {
-        let rest = make_tuple_type(location, types);
-        let pair = Type::new(TypeKind::Pair, location.clone());
-        Type::new(TypeKind::Application(Box::new(pair), vec![first, rest]), location.clone())
-    }
-}
-
 pub fn get_item_impl(context: &GetItem, db: &DbHandle) -> (Arc<TopLevelItem>, Arc<TopLevelContext>) {
     let (item, context) = GetItemRaw(context.0).get(db);
 
@@ -166,6 +152,20 @@ fn desugar_impl(impl_: &TraitImpl, context: &mut TopLevelContext) -> TopLevelIte
     TopLevelItemKind::Definition(Definition { implicit: true, mutable: false, pattern, rhs })
 }
 
+fn make_tuple_type(location: &Location, mut types: impl ExactSizeIterator<Item = Type>) -> Type {
+    let Some(first) = types.next() else {
+        return Type::new(TypeKind::NoClosureEnv, location.clone());
+    };
+
+    if types.len() == 0 {
+        first
+    } else {
+        let rest = make_tuple_type(location, types);
+        let pair = Type::new(TypeKind::Pair, location.clone());
+        Type::new(TypeKind::Application(Box::new(pair), vec![first, rest]), location.clone())
+    }
+}
+
 /// Desugars
 /// ```ante
 /// trait Foo args with
@@ -237,11 +237,13 @@ fn desugar_expression(expr: ExprId, context: &mut TopLevelContext) {
             }
         },
         Expr::Call(call) => {
-            let arguments = call.arguments.clone();
+            let call = call.clone();
             desugar_expression(call.function, context);
-            for arg in arguments {
+            for arg in call.arguments.iter() {
                 desugar_expression(arg.expr, context);
             }
+            desugar_call_wildcards(&call, expr, context);
+            desugar_pipeline(call, expr, context);
         },
         Expr::If(if_) => {
             let if_ = if_.clone();
@@ -336,4 +338,88 @@ fn desugar_loop(loop_: Loop, expr: ExprId, context: &mut TopLevelContext) {
 
     let replacement_expr = cst::Expr::Sequence(vec![definition, call]);
     context.exprs[expr] = replacement_expr;
+}
+
+fn is_wildcard(expr_id: ExprId, context: &TopLevelContext) -> bool {
+    if let Expr::Variable(path_id) = &context.exprs[expr_id] {
+        context.paths[*path_id].last_ident() == "_"
+    } else {
+        false
+    }
+}
+
+/// Desugars `foo _ x _` into `fn _1 _2 -> foo _1 x _2`
+fn desugar_call_wildcards(call: &cst::Call, expr: ExprId, context: &mut TopLevelContext) {
+    if !call.arguments.iter().any(|arg| is_wildcard(arg.expr, context)) {
+        return;
+    }
+
+    let location = context.expr_locations[expr].clone();
+    let mut parameters = Vec::new();
+    let mut counter = 1u32;
+
+    let new_arguments = mapvec(&call.arguments, |arg| {
+        if is_wildcard(arg.expr, context) {
+            let name = format!("_{}", counter);
+            counter += 1;
+
+            let name_id = context.names.push(cst::Name::new(name.clone()));
+            context.name_locations.push_existing(name_id, location.clone());
+
+            let pattern = context.push_pattern(Pattern::Variable(name_id), location.clone());
+            parameters.push(Parameter { is_implicit: arg.is_implicit, pattern });
+
+            let path = cst::Path::ident(name, location.clone());
+            let path_id = context.push_path(path, location.clone());
+            let var_expr = context.push_expr(Expr::Variable(path_id), location.clone());
+
+            Argument { is_implicit: arg.is_implicit, expr: var_expr }
+        } else {
+            *arg
+        }
+    });
+
+    let new_call = Expr::Call(cst::Call { function: call.function, arguments: new_arguments });
+    let new_call_id = context.push_expr(new_call, location.clone());
+
+    context.exprs[expr] = Expr::Lambda(Lambda { parameters, return_type: None, effects: None, body: new_call_id });
+}
+
+/// Desugars `x |> foo a b` into `foo x a b` and `foo a b <| x` into `foo x a b`
+///
+/// Although `|>` and `<|` always slot into the first argument, this can be combined with
+/// explicit currying via `_` to slot into the underscore's position:
+/// `x |> foo a _ b` => `x |> (fn _1 -> foo a _1 b)` => `(fn _1 -> foo a _1 b) x`
+fn desugar_pipeline(call: cst::Call, expr: ExprId, context: &mut TopLevelContext) {
+    // TODO: This check bypasses name resolution of these operators. If the user shadows
+    // the prelude's definitions of the pipeline operators they'll still get this behavior.
+    let (is_pipe_right, is_pipe_left) = if let Expr::Variable(path_id) = &context.exprs[call.function] {
+        let name = context.paths[*path_id].last_ident();
+        (name == "|>", name == "<|")
+    } else {
+        return;
+    };
+
+    if !is_pipe_right && !is_pipe_left {
+        return;
+    }
+
+    // Parse error
+    if call.arguments.len() != 2 {
+        return;
+    }
+
+    // `x |> f`, `f <| x`
+    let (x, f) = if is_pipe_right {
+        (call.arguments[0], call.arguments[1].expr)
+    } else {
+        (call.arguments[1], call.arguments[0].expr)
+    };
+
+    if let Expr::Call(inner_call) = &context.exprs[f] {
+        // Prepend value as the first argument: foo b c => foo(value, b, c)
+        let new_args = std::iter::once(x).chain(inner_call.arguments.iter().copied()).collect();
+        let new_call = cst::Call { function: inner_call.function, arguments: new_args };
+        context.exprs[expr] = Expr::Call(new_call);
+    }
 }

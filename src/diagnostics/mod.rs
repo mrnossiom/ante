@@ -257,9 +257,8 @@ impl Diagnostic {
             },
             Diagnostic::TypeError { actual, expected, kind, location: _ } => kind.message(actual, expected),
             Diagnostic::FunctionArgCountMismatch { actual, expected, location: _ } => {
-                let s = if *actual == 1 { "" } else { "s" };
-                let was = if *expected == 1 { "was" } else { "were" };
-                format!("Function has {actual} argument{s} but {expected} {was} expected")
+                let s = if *expected == 1 { "" } else { "s" };
+                format!("Expected {expected} argument{s} but found {actual}")
             },
             Diagnostic::NoSuchFieldForType { name, typ, location: _ } => {
                 format!("{} has no field named `{name}`", typ.blue())
@@ -349,10 +348,11 @@ impl Diagnostic {
                 }
             },
             Diagnostic::NoImplicitFound { type_string, function_name, parameter_index, location: _ } => {
-                let function = function_name.as_ref().map(|s| s.as_str()).unwrap_or("function");
+                let function = function_name.as_ref().map(|s| format!(" of {}", s.purple()));
+                let of_function = function.as_ref().map(String::as_str).unwrap_or("");
                 let parameter = parameter_index + 1;
                 format!(
-                    "No implicit found for type {} required by parameter {parameter} of {function}",
+                    "No implicit found for type {} required by parameter {parameter}{of_function}",
                     type_string.blue(),
                 )
             },
@@ -366,11 +366,12 @@ impl Diagnostic {
                 parameter_index,
                 location: _,
             } => {
-                let function = function_name.as_ref().map(|s| s.as_str()).unwrap_or("function");
+                let function = function_name.as_ref().map(|s| format!(" of {}", s.purple()));
+                let of_function = function.as_ref().map(String::as_str).unwrap_or("");
                 let parameter = parameter_index + 1;
                 let matches = crate::iterator_extensions::join_arc_str(matches, ", ");
                 format!(
-                    "Multiple matching implicits found for type {} required by parameter {parameter} of {function}: {matches}",
+                    "Multiple matching implicits found for type {} required by parameter {parameter}{of_function}: {matches}",
                     type_string.blue(),
                 )
             },

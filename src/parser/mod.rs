@@ -1465,9 +1465,7 @@ impl<'tokens> Parser<'tokens> {
                 Ok(self.push_expr(expr, location))
             },
             Token::Identifier(_) | Token::TypeName(_) => self.parse_variable(),
-            Token::ParenthesisLeft if self.peek_next_token().is_overloadable_operator() => {
-                self.parse_variable()
-            }
+            Token::ParenthesisLeft if self.peek_next_token().is_overloadable_operator() => self.parse_variable(),
             Token::ParenthesisLeft => {
                 self.advance();
                 // These `too_far` tokens aren't accurate, they may appear in an expression.

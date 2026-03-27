@@ -37,6 +37,8 @@ pub enum TypeErrorKind {
     ExpectedNonReference,
     /// A closure's actual captured variables does not match its expected type
     ClosureEnv,
+    /// A function call argument with the given 0-based index
+    CallArgument { index: usize },
 }
 
 impl TypeErrorKind {
@@ -55,7 +57,7 @@ impl TypeErrorKind {
                 "This match branch has type {actual} which does not match the first branch's type of {expected}"
             ),
             TypeErrorKind::IfStatement => {
-                format!("This `if` has no `else` so it always returns {expected}, but {actual} was expected instead")
+                format!("This `if` has no `else` so it always returns {actual}, but {expected} was expected instead")
             },
             TypeErrorKind::Lambda { expected_parameter_count } => {
                 let s = if expected_parameter_count == 1 { "" } else { "s" };
@@ -82,6 +84,9 @@ impl TypeErrorKind {
                         "Expected the closure environment {expected}, but the actual environment was of type {actual}"
                     )
                 }
+            },
+            TypeErrorKind::CallArgument { index } => {
+                format!("Argument {} has type {actual} but {expected} was expected", index + 1)
             },
         }
     }

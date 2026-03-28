@@ -471,6 +471,11 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
 
     fn check_match(&mut self, match_: &cst::Match, expected: &Type, expr: ExprId) {
         let expr_type = self.next_type_variable();
+
+        // Push an implicits scope here so we can default any integers used in the match
+        // to an `I32` before the decision tree checks occur. This lets us compile `match 1 | ...`
+        // without errors that the type of `1` is not yet known.
+        self.push_implicits_scope();
         self.check_expr(match_.expression, &expr_type);
 
         for (pattern, branch) in match_.cases.iter() {
@@ -480,6 +485,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             self.check_expr(*branch, expected);
             self.pop_implicits_scope();
         }
+        self.pop_implicits_scope();
 
         // Now compile the match into a decision tree. The `match expr | ...` expression will be
         // replaced with `<fresh> = expr; <decision tree>`

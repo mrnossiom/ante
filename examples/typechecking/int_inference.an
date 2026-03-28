@@ -2,14 +2,11 @@ main () =
     print 2
 
 // This example is actually more problematic than it initially appears.
-// Because integer literals with no suffix have the polymorphic type
-// `a given Int a` and print has the type `forall a. (a -> unit given Print a)`
-// Then even with defaulting rules for `Int a` to `i32` we can still get
+// Because integer literals with no suffix have a polymorphic type
+// and print has the type `forall a. fn a {Print a} -> Unit`
+// Then even with defaulting rules for `a` to `I32` we can still get
 // a "No impl found for Print a" error if the Print trait constraint is
-// resolved before the Int trait constraint is.
-//
-// The current solution of this is to sort out Int trait constraints to solve
-// them before other trait constraints.
+// resolved before the integer defaulting rules are.
 
 // args: -e ast-t
 // expected stdout:

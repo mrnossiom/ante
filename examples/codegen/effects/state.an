@@ -2,10 +2,10 @@ effect Use a with
     get: Unit -> a
     set: a -> Unit
 
-use_state (y: Int a) =
-    x = get () : Int a
+use_state (y: I32) =
+    x = get () : I32
     set (x + y)
-    state = get () : Int a
+    state = get () : I32
     print "Ending state = ${state}"
     state
 

@@ -464,10 +464,8 @@ impl Type {
         match origin {
             Some(Origin::Builtin(builtin)) => match builtin {
                 Builtin::Unit => (Type::UNIT, Kind::Type),
-                Builtin::Int => (Type::ERROR, Kind::TypeConstructorSimple(NonZeroUsize::new(1).unwrap())), // TODO: Polymorphic integers
                 Builtin::Char => (Type::CHAR, Kind::Type),
                 Builtin::Bool => (Type::BOOL, Kind::Type),
-                Builtin::Float => (Type::ERROR, Kind::TypeConstructorSimple(NonZeroUsize::new(1).unwrap())), // TODO: Polymorphic floats
                 Builtin::String => (Type::STRING, Kind::Type),
                 Builtin::Ptr => (Type::POINTER, Kind::TypeConstructorSimple(NonZeroUsize::new(1).unwrap())),
                 Builtin::PairType => (Type::PAIR, Kind::TypeConstructorSimple(NonZeroUsize::new(2).unwrap())),

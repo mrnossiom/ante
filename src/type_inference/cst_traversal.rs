@@ -294,10 +294,8 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     fn check_builtin(&mut self, builtin: Builtin, locator: impl Locateable) -> Type {
         match builtin {
             Builtin::Unit => Type::UNIT,
-            Builtin::Int
-            | Builtin::Char
+            Builtin::Char
             | Builtin::Bool
-            | Builtin::Float
             | Builtin::String
             | Builtin::Ptr
             | Builtin::PairType => {

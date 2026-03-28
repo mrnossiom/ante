@@ -1,4 +1,4 @@
-a: Int String = 3
+a: Num String = 3
 
 // args: --check
 // expected exit status: 101

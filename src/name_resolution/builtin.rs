@@ -8,14 +8,10 @@ use crate::type_inference::types::Type;
 pub enum Builtin {
     /// The Unit type (not value)
     Unit,
-    /// The polymorphic Int type
-    Int,
     /// The Char type
     Char,
     /// The Bool type
     Bool,
-    /// The polymorphic Float type
-    Float,
     /// The String type
     String,
     /// The Ptr type constructor of kind `* -> *`
@@ -39,10 +35,8 @@ impl Builtin {
         use Builtin::*;
         match name {
             "Unit" => Some(Unit),
-            "Int" => Some(Int),
             "Char" => Some(Char),
             "Bool" => Some(Bool),
-            "Float" => Some(Float),
             "String" => Some(String),
             "Ptr" => Some(Ptr),
             "," if is_type => Some(PairType),
@@ -58,10 +52,8 @@ impl Builtin {
     pub fn as_type(self) -> Option<Type> {
         match self {
             Builtin::Unit => Some(Type::UNIT),
-            Builtin::Int => None,
             Builtin::Char => Some(Type::CHAR),
             Builtin::Bool => Some(Type::BOOL),
-            Builtin::Float => None,
             Builtin::String => Some(Type::STRING),
             Builtin::Ptr => Some(Type::POINTER),
             Builtin::PairType => Some(Type::PAIR),
@@ -78,10 +70,8 @@ impl Builtin {
     pub fn constructor(self) -> Option<(Type, usize)> {
         match self {
             Builtin::Unit
-            | Builtin::Int
             | Builtin::Char
             | Builtin::Bool
-            | Builtin::Float
             | Builtin::String
             | Builtin::Ptr
             | Builtin::Intrinsic
@@ -103,10 +93,8 @@ impl std::fmt::Display for Builtin {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Builtin::Unit => write!(f, "Unit"),
-            Builtin::Int => write!(f, "Int"),
             Builtin::Char => write!(f, "Char"),
             Builtin::Bool => write!(f, "Bool"),
-            Builtin::Float => write!(f, "Float"),
             Builtin::String => write!(f, "String"),
             Builtin::Ptr => write!(f, "Ptr"),
             Builtin::PairType => write!(f, ","),

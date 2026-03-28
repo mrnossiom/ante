@@ -123,10 +123,8 @@ where
     fn convert_builtin_type(&self, builtin: Builtin, args: Option<&[TCType]>) -> Type {
         match builtin {
             Builtin::Unit => Type::UNIT,
-            Builtin::Int => todo!(),
             Builtin::Char => Type::CHAR,
             Builtin::Bool => Type::BOOL,
-            Builtin::Float => todo!(),
             Builtin::String => Type::string(),
             Builtin::Ptr => Type::POINTER,
             Builtin::PairType => self.convert_pair_type(args),

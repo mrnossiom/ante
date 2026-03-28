@@ -66,7 +66,8 @@ pub fn codegen_llvm(compiler: &Db) -> Option<CodegenLlvmResult> {
 }
 
 /// Link the given list of llvm bitcode modules into an executable.
-pub fn link(modules: Vec<Arc<Vec<u8>>>, binary_name: &str) {
+/// Returns `true` if linking succeeded, `false` otherwise.
+pub fn link(modules: Vec<Arc<Vec<u8>>>, binary_name: &str) -> bool {
     let llvm = inkwell::context::Context::create();
     let module = llvm.create_module(binary_name);
 
@@ -84,7 +85,7 @@ pub fn link(modules: Vec<Arc<Vec<u8>>>, binary_name: &str) {
     target_machine.write_to_file(&module, FileType::Object, &path).unwrap();
 
     // call gcc to compile the bitcode to a binary
-    super::link_with_gcc(path.to_string_lossy().as_ref(), binary_name);
+    super::link_with_gcc(path.to_string_lossy().as_ref(), binary_name)
 }
 
 fn native_target_machine() -> TargetMachine {

@@ -2,7 +2,7 @@ use std::process::Command;
 
 pub mod llvm;
 
-pub fn link_with_gcc(object_filename: &str, binary_filename: &str) {
+pub fn link_with_gcc(object_filename: &str, binary_filename: &str) -> bool {
     // call gcc to compile the bitcode to a binary
     let output = format!("-o{}", binary_filename);
     let mut child = Command::new("gcc")
@@ -16,6 +16,7 @@ pub fn link_with_gcc(object_filename: &str, binary_filename: &str) {
         .unwrap();
 
     // remove the temporary bitcode file
-    child.wait().unwrap();
+    let status = child.wait().unwrap();
     std::fs::remove_file(object_filename).unwrap();
+    status.success()
 }

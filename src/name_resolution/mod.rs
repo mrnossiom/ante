@@ -68,7 +68,7 @@ pub enum Origin {
     Local(NameId),
     /// This name did not resolve, try to perform type based resolution on it during type inference
     TypeResolution,
-    /// This name refers to a builtin item such as `String`, `Int`, `Unit`, `,` etc.
+    /// This name refers to a builtin item such as `String`, `Unit`, `,` etc.
     Builtin(Builtin),
 }
 
@@ -81,7 +81,7 @@ impl Origin {
             Origin::TypeResolution => false,
             Origin::Builtin(builtin) => matches!(
                 builtin,
-                Builtin::Unit | Builtin::Int | Builtin::Char | Builtin::Float | Builtin::String | Builtin::PairType
+                Builtin::Unit | Builtin::Char | Builtin::String | Builtin::PairType
             ),
         }
     }

@@ -80,26 +80,35 @@ fn compile(args: Cli) {
     // TODO: Pointer size should be configurable depending on the target machine
     TargetPointerSize.set(&mut compiler, 8);
 
-    let diagnostics = match args.emit {
-        Some(EmitTarget::Tokens) => {
-            display_tokens(&compiler);
-            BTreeSet::new()
-        },
-        Some(EmitTarget::Ast) => display_parse_tree(&compiler, args.emit_all),
-        Some(EmitTarget::AstR) => display_name_resolution(&compiler, args.emit_all),
-        Some(EmitTarget::AstT) => display_type_checking(&compiler, true, args.emit_all),
-        Some(EmitTarget::Mir) => display_mir(&compiler, args.emit_all),
-        Some(EmitTarget::MirMono) => display_mir_mono(&compiler),
-        Some(EmitTarget::Ir) => llvm_codegen_separate(&compiler, true).2,
-        None => llvm_codegen_all(&compiler, &args.files, args.delete_binary),
+    let diagnostics = if args.check {
+        collect_all_diagnostics(&compiler)
+    } else {
+        match args.emit {
+            Some(EmitTarget::Tokens) => {
+                display_tokens(&compiler);
+                BTreeSet::new()
+            },
+            Some(EmitTarget::Ast) => display_parse_tree(&compiler, args.emit_all),
+            Some(EmitTarget::AstR) => display_name_resolution(&compiler, args.emit_all),
+            Some(EmitTarget::AstT) => display_type_checking(&compiler, true, args.emit_all),
+            Some(EmitTarget::Mir) => display_mir(&compiler, args.emit_all),
+            Some(EmitTarget::MirMono) => display_mir_mono(&compiler),
+            Some(EmitTarget::Ir) => llvm_codegen_separate(&compiler, true).2,
+            None => llvm_codegen_all(&compiler, &args.files, args.delete_binary),
+        }
     };
 
+    let (error_count, _) = classify_diagnostics(&diagnostics);
     display_diagnostics(diagnostics, &compiler);
 
     if let Some(metadata_file) = metadata_file {
         if let Err(error) = write_metadata(&compiler, &metadata_file) {
             eprintln!("\n{error}");
         }
+    }
+
+    if error_count != 0 {
+        std::process::exit(1);
     }
 }
 
@@ -322,7 +331,10 @@ fn llvm_codegen_all(compiler: &Db, files: &[PathBuf], delete_binary: bool) -> BT
     let module_name = files.first().map_or_else(|| "a.out".into(), |file| file.with_extension(""));
     let module_name = module_name.to_string_lossy();
 
-    codegen::llvm::link(modules, &module_name);
+    let link_succeeded = codegen::llvm::link(modules, &module_name);
+    if !link_succeeded {
+        return diagnostics;
+    }
 
     // Run the program
     // Use an absolute path so the binary can be found regardless of PATH.

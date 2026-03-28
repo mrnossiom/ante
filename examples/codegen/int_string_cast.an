@@ -28,17 +28,5 @@ main () =
 // examples/codegen/int_string_cast.an:9:13	error: No implicit found for type Cast U8 String _ required by parameter 2
 //     debug <| cast (255: U8)
 // 
-// examples/codegen/int_string_cast.an:9:19	error: Expected U8 but found I32
-//     debug <| cast (255: U8)
-// 
-// examples/codegen/int_string_cast.an:10:13	error: No implicit found for type Cast I32 String _ required by parameter 2
-//     debug <| cast -1024
-// 
-// examples/codegen/int_string_cast.an:11:13	error: No implicit found for type Cast I32 String _ required by parameter 2
-//     debug <| cast 0
-// 
-// examples/codegen/int_string_cast.an:12:13	error: No implicit found for type Cast I32 String _ required by parameter 2
-//     debug <| cast 10
-// 
-// Found 9 errors and 0 warnings
+// Found 5 errors and 0 warnings
 

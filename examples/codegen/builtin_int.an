@@ -29,39 +29,17 @@ main () =
     test_int 3
 
 // args: --delete-binary
-// expected stderr:
-// examples/codegen/builtin_int.an:3:4	error: Multiple matching implicits found for type Print _ _ required by parameter 2: print_bool, print_char, print_i16, print_i32, print_i64, print_i8, print_isz, print_ptr_char, print_string, print_u16, print_u32, print_u64, print_u8, print_usz
-//     print (x + x)
-// 
-// examples/codegen/builtin_int.an:3:13	error: Multiple matching implicits found for type Add _ _ required by parameter 3: add_i16, add_i32, add_i64, add_i8, add_isz, add_u16, add_u32, add_u64, add_u8, add_usz
-//     print (x + x)
-// 
-// examples/codegen/builtin_int.an:4:4	error: Multiple matching implicits found for type Print _ _ required by parameter 2: print_bool, print_char, print_i16, print_i32, print_i64, print_i8, print_isz, print_ptr_char, print_string, print_u16, print_u32, print_u64, print_u8, print_usz
-//     print (x - x - x)
-// 
-// examples/codegen/builtin_int.an:4:13	error: Multiple matching implicits found for type Sub _ _ required by parameter 3: sub_i16, sub_i32, sub_i64, sub_i8, sub_isz, sub_u16, sub_u32, sub_u64, sub_u8, sub_usz
-//     print (x - x - x)
-// 
-// examples/codegen/builtin_int.an:4:17	error: Multiple matching implicits found for type Sub _ _ required by parameter 3: sub_i16, sub_i32, sub_i64, sub_i8, sub_isz, sub_u16, sub_u32, sub_u64, sub_u8, sub_usz
-//     print (x - x - x)
-// 
-// examples/codegen/builtin_int.an:5:4	error: Multiple matching implicits found for type Print _ _ required by parameter 2: print_bool, print_char, print_i16, print_i32, print_i64, print_i8, print_isz, print_ptr_char, print_string, print_u16, print_u32, print_u64, print_u8, print_usz
-//     print (x * x)
-// 
-// examples/codegen/builtin_int.an:5:13	error: Multiple matching implicits found for type Mul _ _ required by parameter 3: mul_i16, mul_i32, mul_i64, mul_i8, mul_isz, mul_u16, mul_u32, mul_u64, mul_u8, mul_usz
-//     print (x * x)
-// 
-// examples/codegen/builtin_int.an:6:4	error: Multiple matching implicits found for type Print _ _ required by parameter 2: print_bool, print_char, print_i16, print_i32, print_i64, print_i8, print_isz, print_ptr_char, print_string, print_u16, print_u32, print_u64, print_u8, print_usz
-//     print (x / x)
-// 
-// examples/codegen/builtin_int.an:6:13	error: Multiple matching implicits found for type Div _ _ required by parameter 3: div_float, div_i16, div_i32, div_i64, div_i8, div_isz, div_u16, div_u32, div_u64, div_u8, div_usz
-//     print (x / x)
-// 
-// examples/codegen/builtin_int.an:7:4	error: Multiple matching implicits found for type Print _ _ required by parameter 2: print_bool, print_char, print_i16, print_i32, print_i64, print_i8, print_isz, print_ptr_char, print_string, print_u16, print_u32, print_u64, print_u8, print_usz
-//     print (x % x)
-// 
-// examples/codegen/builtin_int.an:7:13	error: Multiple matching implicits found for type Mod _ _ required by parameter 3: mod_i16, mod_i32, mod_i64, mod_i8, mod_isz, mod_u16, mod_u32, mod_u64, mod_u8, mod_usz
-//     print (x % x)
-// 
-// Found 11 errors and 0 warnings
+// expected stdout:
+// 6 -3 9 1 0
+// 6 253 9 1 0
+// 6 -3 9 1 0
+// 6 65533 9 1 0
+// 6 -3 9 1 0
+// 6 4294967293 9 1 0
+// 6 -3 9 1 0
+// 6 18446744073709551613 9 1 0
+// 6 -3 9 1 0
+// 6 18446744073709551613 9 1 0
+// default int:
+// 6 -3 9 1 0
 

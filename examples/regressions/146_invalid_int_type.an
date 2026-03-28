@@ -1,9 +1,15 @@
 a: Int String = 3
 
 // args: --check
+// expected exit status: 101
 // expected stderr:
-// examples/regressions/146_invalid_int_type.an:1:17	error: Expected Int String _ but found I32
-// a: Int String = 3
+// Undefined symbols for architecture arm64:
+//   "_main", referenced from:
+//       <initial-undefines>
+// ld: symbol(s) not found for architecture arm64
+// clang: error: linker command failed with exit code 1 (use -v to see invocation)
 // 
-// Found 1 error and 0 warnings
+// thread 'main' panicked at src/main.rs:331:40:
+// called `Result::unwrap()` on an `Err` value: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+// note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 

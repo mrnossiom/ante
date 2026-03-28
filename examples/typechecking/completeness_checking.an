@@ -74,12 +74,11 @@ main () =
 //         | true -> switch (match_var40: Bool)
 //             | false -> 0
 //             | true -> #missing_case
-//     (match_var42: (error)) = 1 (,: fn I32 (I32, (I32, I32)) -> I32, (I32, (I32, I32)) pure) (2 (,: fn I32 (I32, I32) -> I32, (I32, I32) pure) (3 (,: fn I32 I32 -> I32, I32 pure) 4))
-//     switch (match_var42: I32, (I32, (I32, I32)))
-//     | 0, (match_var43: I32), (match_var44: I32, (I32, I32)) -> switch (match_var43: I32)
-//         | 1 -> switch (match_var44: I32, (I32, I32))
-//             | 0, (match_var45: I32), (match_var46: I32, I32) -> 1
-//         | _ -> #missing_case
+//     (match_var42: (error)) = 1 (,: fn ((_, _), _) (I32, (I32, I32)) -> ((_, _), _), (I32, (I32, I32)) pure) (2 (,: fn I32 (I32, I32) -> I32, (I32, I32) pure) (3 (,: fn I32 I32 -> I32, I32 pure) 4))
+//     switch (match_var42: ((_, _), _), (I32, (I32, I32)))
+//     | 0, (match_var43: (_, _), _), (match_var44: I32, (I32, I32)) -> switch (match_var43: (_, _), _)
+//         | 0, (match_var45: _, _), (match_var46: _) -> switch (match_var44: I32, (I32, I32))
+//             | 0, (match_var47: I32), (match_var48: I32, I32) -> 1
 
 // expected stderr:
 // examples/typechecking/completeness_checking.an:2:10	error: Missing case: Some _
@@ -100,17 +99,8 @@ main () =
 // examples/typechecking/completeness_checking.an:21:11	error: Missing cases: false, false, true, true
 //     match (true, true)
 // 
-// examples/typechecking/completeness_checking.an:25:11	error: Missing cases: 0, _, 2..=18446744073709551615, _
-//     match (1, 2, 3, 4)
-// 
-// examples/typechecking/completeness_checking.an:26:10	error: Expected I32, (I32, I32) but found I32
-//     | (1, 2) -> 1
-// 
 // examples/typechecking/completeness_checking.an:27:6	warning: This case is already matched by prior patterns
 //     | (_, _, _, _) -> 3
 // 
-// examples/typechecking/completeness_checking.an:27:11	error: Expected fn _ _ -> I32 pure but found fn _ _ -> _, _ pure
-//     | (_, _, _, _) -> 3
-// 
-// Found 7 errors and 3 warnings
+// Found 4 errors and 3 warnings
 

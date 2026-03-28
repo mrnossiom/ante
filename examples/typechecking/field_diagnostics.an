@@ -41,34 +41,34 @@ main () =
 //     (_: mut _) = mut (mut ref (tuple: I32, I32)).first
 
 // expected stderr:
-// examples/typechecking/field_diagnostics.an:4:23	error: ref (ref (I32, I32)) has no field named `first`
+// examples/typechecking/field_diagnostics.an:4:23	error: ref (ref (_, _)) has no field named `first`
 //     _ = (ref ref tuple).first
 // 
-// examples/typechecking/field_diagnostics.an:6:17	error: I32, I32 has no field named `first`
+// examples/typechecking/field_diagnostics.an:6:17	error: _, _ has no field named `first`
 //     _ = mut tuple.first
 // 
-// examples/typechecking/field_diagnostics.an:7:17	error: I32, I32 has no field named `missing`
+// examples/typechecking/field_diagnostics.an:7:17	error: _, _ has no field named `missing`
 //     _ = mut tuple.missing
 // 
-// examples/typechecking/field_diagnostics.an:10:19	error: ref (I32, I32) has no field named `first`
+// examples/typechecking/field_diagnostics.an:10:19	error: ref (_, _) has no field named `first`
 //     _ = mut imm_ref.first
 // 
-// examples/typechecking/field_diagnostics.an:11:19	error: ref (I32, I32) has no field named `missing`
+// examples/typechecking/field_diagnostics.an:11:19	error: ref (_, _) has no field named `missing`
 //     _ = mut imm_ref.missing
 // 
-// examples/typechecking/field_diagnostics.an:15:21	error: I32, I32 has no field named `missing`
+// examples/typechecking/field_diagnostics.an:15:21	error: _, _ has no field named `missing`
 //     _ = ref mut_tuple.missing
 // 
-// examples/typechecking/field_diagnostics.an:16:21	error: I32, I32 has no field named `missing`
+// examples/typechecking/field_diagnostics.an:16:21	error: _, _ has no field named `missing`
 //     _ = mut mut_tuple.missing
 // 
-// examples/typechecking/field_diagnostics.an:20:19	error: mut (I32, I32) has no field named `missing`
+// examples/typechecking/field_diagnostics.an:20:19	error: mut (_, _) has no field named `missing`
 //     _ = ref mut_ref.missing
 // 
-// examples/typechecking/field_diagnostics.an:21:19	error: mut (I32, I32) has no field named `missing`
+// examples/typechecking/field_diagnostics.an:21:19	error: mut (_, _) has no field named `missing`
 //     _ = mut mut_ref.missing
 // 
-// examples/typechecking/field_diagnostics.an:23:27	error: mut (ref (I32, I32)) has no field named `first`
+// examples/typechecking/field_diagnostics.an:23:27	error: mut (ref (_, _)) has no field named `first`
 //     _ = mut (mut ref tuple).first
 // 
 // Found 10 errors and 0 warnings

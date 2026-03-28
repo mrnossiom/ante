@@ -178,18 +178,35 @@ impl<'ctx> ModuleContext<'ctx> {
                 *self.values.get(&value).expect("constant value not cached")
             },
             mir::Value::Definition(id) => {
-                if let Some(gv) = self.global_values.get(&mir::Value::Definition(id)) {
-                    return gv.as_pointer_value().into();
-                }
                 let def = self.mir.definitions.get(&id).expect("constant_value: definition not found");
-                let fn_type = self
-                    .convert_function_type(&def.typ)
-                    .expect("constant_value: definition in global initializer is not a function");
-                let name = self.get_name(id);
-                let fn_val = self.module.add_function(name, fn_type, None);
-                let gv = fn_val.as_global_value();
-                self.global_values.insert(mir::Value::Definition(id), gv);
-                gv.as_pointer_value().into()
+                let is_global = def.is_global();
+                if let Some(gv) = self.global_values.get(&mir::Value::Definition(id)) {
+                    // For non-function globals (structs/constants), embed the initializer value
+                    // inline rather than a pointer since build_load is unavailable in constant context.
+                    // For actual function definitions, return the function pointer as usual.
+                    if is_global {
+                        return gv.get_initializer().expect("constant_value: global missing initializer");
+                    } else {
+                        return gv.as_pointer_value().into();
+                    }
+                }
+                if is_global {
+                    // Non-function global not yet compiled: compile it on demand then embed inline.
+                    let def = def.clone();
+                    self.codegen_global(&def, id);
+                    let gv = self.global_values.get(&mir::Value::Definition(id)).unwrap();
+                    gv.get_initializer().expect("global has no initializer after codegen_global")
+                } else {
+                    let def = self.mir.definitions.get(&id).expect("constant_value: definition not found");
+                    let fn_type = self
+                        .convert_function_type(&def.typ)
+                        .expect("constant_value: definition in global initializer is not a function");
+                    let name = self.get_name(id);
+                    let fn_val = self.module.add_function(name, fn_type, None);
+                    let gv = fn_val.as_global_value();
+                    self.global_values.insert(mir::Value::Definition(id), gv);
+                    gv.as_pointer_value().into()
+                }
             },
             mir::Value::Error => unreachable!("Error value in global initializer"),
         }

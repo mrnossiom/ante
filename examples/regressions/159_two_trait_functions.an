@@ -10,9 +10,15 @@ impl MultiTrait Unit with
 one ()
 
 // args: --delete-binary
-// expected exit status: 101
 // expected stderr:
-// thread 'main' panicked at src/type_inference/type_definitions.rs:158:22:
-// internal error: entered unreachable code: add_implicit_arg_to_function_type expected function type, found Primitive(Unit)
-// note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+// examples/regressions/159_two_trait_functions.an:3:14	error: Expected an unindent but found `->`
+//     one: Unit -> Unit
+// 
+// examples/regressions/159_two_trait_functions.an:6:5	error: Expected an identifier but found `MultiTrait`
+// impl MultiTrait Unit with 
+// 
+// examples/regressions/159_two_trait_functions.an:10:4	error: Expected `=` to begin the function body but found `()`
+// one ()
+// 
+// Found 3 errors and 0 warnings
 

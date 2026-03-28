@@ -33,7 +33,7 @@ use_state 20_u64 with state 2
 // examples/codegen/effects/state.an:7:4	error: `set` not found in scope
 //     set (x + y)
 // 
-// examples/codegen/effects/state.an:7:11	error: No implicit found for type Add ((error) a) _ required by parameter 3
+// examples/codegen/effects/state.an:7:11	error: No implicit found for type Add (Int a _) _ required by parameter 3
 //     set (x + y)
 // 
 // examples/codegen/effects/state.an:8:12	error: `get` not found in scope

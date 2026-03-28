@@ -327,6 +327,108 @@ impl cmp_u32: Cmp U32 with (<) x y = intrinsic "LessUnsigned" x y
 impl cmp_u64: Cmp U64 with (<) x y = intrinsic "LessUnsigned" x y
 impl cmp_usz: Cmp Usz with (<) x y = intrinsic "LessUnsigned" x y
 
+
+
+trait Int a with
+    add: Add a
+    sub: Sub a
+    mul: Mul a
+    div: Div a
+    mod: Mod a
+    eq: Eq a
+    cmp: Cmp a
+
+impl int_i8: Int I8 with
+    add = add_i8
+    sub = sub_i8
+    mul = mul_i8
+    div = div_i8
+    mod = mod_i8
+    eq = eq_i8
+    cmp = cmp_i8
+
+impl int_i16: Int I16 with
+    add = add_i16
+    sub = sub_i16
+    mul = mul_i16
+    div = div_i16
+    mod = mod_i16
+    eq = eq_i16
+    cmp = cmp_i16
+
+impl int_i32: Int I32 with
+    add = add_i32
+    sub = sub_i32
+    mul = mul_i32
+    div = div_i32
+    mod = mod_i32
+    eq = eq_i32
+    cmp = cmp_i32
+
+impl int_i64: Int I64 with
+    add = add_i64
+    sub = sub_i64
+    mul = mul_i64
+    div = div_i64
+    mod = mod_i64
+    eq = eq_i64
+    cmp = cmp_i64
+
+impl int_isz: Int Isz with
+    add = add_isz
+    sub = sub_isz
+    mul = mul_isz
+    div = div_isz
+    mod = mod_isz
+    eq = eq_isz
+    cmp = cmp_isz
+
+impl int_u8: Int U8 with
+    add = add_u8
+    sub = sub_u8
+    mul = mul_u8
+    div = div_u8
+    mod = mod_u8
+    eq = eq_u8
+    cmp = cmp_u8
+
+impl int_u16: Int U16 with
+    add = add_u16
+    sub = sub_u16
+    mul = mul_u16
+    div = div_u16
+    mod = mod_u16
+    eq = eq_u16
+    cmp = cmp_u16
+
+impl int_u32: Int U32 with
+    add = add_u32
+    sub = sub_u32
+    mul = mul_u32
+    div = div_u32
+    mod = mod_u32
+    eq = eq_u32
+    cmp = cmp_u32
+
+impl int_u64: Int U64 with
+    add = add_u64
+    sub = sub_u64
+    mul = mul_u64
+    div = div_u64
+    mod = mod_u64
+    eq = eq_u64
+    cmp = cmp_u64
+
+impl int_usz: Int Usz with
+    add = add_usz
+    sub = sub_usz
+    mul = mul_usz
+    div = div_usz
+    mod = mod_usz
+    eq = eq_usz
+    cmp = cmp_usz
+
+
 // impl cmp_float: Cmp (Float a) with (<) x y = intrinsic "LessFloat" x y
 // 
 impl try_cast_i64_u64: TryCast I64 U64 with

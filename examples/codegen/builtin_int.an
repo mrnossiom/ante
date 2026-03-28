@@ -1,10 +1,13 @@
-
-test_int x =
+test_int (x: t) {Add t} {Sub t} {Mul t} {Div t} {Mod t} {Print t} =
     print (x + x)
+    print " "
     print (x - x - x)
+    print " "
     print (x * x)
+    print " "
     print (x / x)
-    print (x % x)
+    print " "
+    println (x % x)
 
 main () =
     test_int 3_i8
@@ -21,6 +24,9 @@ main () =
 
     test_int 3_isz
     test_int 3_usz
+
+    println "default int:"
+    test_int 3
 
 // args: --delete-binary
 // expected stderr:

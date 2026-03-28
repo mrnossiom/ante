@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     incremental::Db,
     iterator_extensions::mapvec,
-    lexer::token::Token,
+    lexer::token::{IntegerKind, Token},
     parser::cst::Name,
     type_inference::{errors::TypeErrorKind, kinds::Kind},
 };
@@ -170,6 +170,11 @@ pub enum Diagnostic {
         location: Location,
     },
     ReturnNotInFunction {
+        location: Location,
+    },
+    IntegerTooLarge {
+        value: u64,
+        kind: IntegerKind,
         location: Location,
     },
 }
@@ -390,6 +395,9 @@ impl Diagnostic {
                 }
             },
             Diagnostic::ReturnNotInFunction { location: _ } => "`return` can only be used in a function".to_string(),
+            Diagnostic::IntegerTooLarge { value, kind, location: _ } => {
+                format!("{} is too large for type {}", value.to_string().purple(), kind.to_string().blue())
+            },
         }
     }
 
@@ -430,6 +438,7 @@ impl Diagnostic {
             | Diagnostic::ExpectedTypeKind { location, .. }
             | Diagnostic::ExpectedKind { location, .. }
             | Diagnostic::ReturnNotInFunction { location }
+            | Diagnostic::IntegerTooLarge { location, .. }
             | Diagnostic::Unimplemented { location, .. } => location,
         }
     }

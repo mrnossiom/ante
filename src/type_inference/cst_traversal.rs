@@ -106,13 +106,20 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         }
     }
 
-    fn check_literal(&mut self, literal: &Literal, locator: impl Locateable, expected: &Type) {
+    fn check_literal(&mut self, literal: &Literal, locator: impl Locateable + Copy, expected: &Type) {
         let actual = match literal {
             Literal::Unit => Type::UNIT,
-            Literal::Integer(_, Some(kind)) => Type::integer(*kind),
+            Literal::Integer(value, Some(kind)) => {
+                self.check_int_fits(*value, *kind, locator);
+                Type::integer(*kind)
+            }
             Literal::Float(_, Some(kind)) => Type::float(*kind),
             Literal::Bool(_) => Type::BOOL,
-            Literal::Integer(_, None) => Type::I32, // TODO: Polymorphic integers
+            Literal::Integer(value, None) => {
+                let type_variable = self.next_type_variable_id();
+                self.push_inferred_int(*value, type_variable, locator.locate(self));
+                Type::Variable(type_variable)
+            }
             Literal::Float(_, None) => Type::F64,   // TODO: Polymorphic floats
             Literal::String(_) => Type::STRING,
             Literal::Char(_) => Type::CHAR,

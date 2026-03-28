@@ -5,22 +5,17 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    diagnostics::Diagnostic,
-    incremental::{self, DbHandle, GetItem, Resolve, TypeCheck, TypeCheckSCC},
-    iterator_extensions::mapvec,
-    name_resolution::{Origin, ResolutionResult},
-    parser::{
+    diagnostics::{Diagnostic, Location}, incremental::{self, DbHandle, GetItem, Resolve, TargetPointerSize, TypeCheck, TypeCheckSCC}, iterator_extensions::mapvec, lexer::token::IntegerKind, name_resolution::{Origin, ResolutionResult}, parser::{
         context::TopLevelContext,
         cst::{self, Name, ReferenceKind, TopLevelItem, TopLevelItemKind},
         ids::{ExprId, NameId, PathId, PatternId, TopLevelId, TopLevelName},
-    },
-    type_inference::{
+    }, type_inference::{
         dependency_graph::TypeCheckResult,
         errors::{Locateable, TypeErrorKind},
         fresh_expr::ExtendedTopLevelContext,
         generics::Generic,
         types::{PrimitiveType, Type, TypeBindings, TypeVariableId},
-    },
+    }
 };
 
 mod cst_traversal;
@@ -175,6 +170,11 @@ struct ImplicitsContext {
     /// Closure checks deferred for coercion wrapper lambdas. These are run after `delayed_implicits`
     /// are resolved so that free-variable analysis sees the fully-resolved implicit arguments.
     deferred_closure_checks: Vec<(ExprId, Type)>,
+
+    /// Any type variables created for integer literals for polymorphic integer types.
+    /// If not bound by the end of a scope they will be defaulted to I32.
+    /// This is a tuple of (the integer's value, the integer type variable, location to use for errors)
+    integer_type_variables: Vec<(u64, TypeVariableId, Location)>,
 }
 
 #[derive(Clone)]
@@ -299,6 +299,22 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         TypeCheckSCCResult { items, bindings: self.bindings }
     }
 
+    /// Check if the integer fits in the given kind, error if not
+    fn check_int_fits(&self, value: u64, kind: IntegerKind, locator: impl Locateable) {
+        let ptr_size = TargetPointerSize.get(self.compiler);
+        let bit_size = 8 * kind.size_in_bytes(ptr_size);
+        if bit_size == 64 {
+            return;
+        }
+
+        // TODO: Change `value` repr from u64 to a type that fits negatives
+        // so we can give more accurate ranges. As-is, u64::MAX fits into i64.
+        if value > 2u64.pow(bit_size) - 1 {
+            let location = locator.locate(self);
+            self.compiler.accumulate(Diagnostic::IntegerTooLarge { value, kind, location });
+        }
+    }
+
     /// Prepare the TypeChecker to type check another item.
     fn start_item(&mut self, item_id: TopLevelId) {
         self.current_item = Some(item_id);
@@ -326,10 +342,14 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         }
     }
 
-    fn next_type_variable(&mut self) -> Type {
+    fn next_type_variable_id(&mut self) -> TypeVariableId {
         let id = TypeVariableId(self.next_type_variable_id);
         self.next_type_variable_id += 1;
-        Type::Variable(id)
+        id
+    }
+
+    fn next_type_variable(&mut self) -> Type {
+        Type::Variable(self.next_type_variable_id())
     }
 
     /// Generalize all types in the current SCC.

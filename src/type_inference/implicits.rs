@@ -1,18 +1,12 @@
 use std::sync::Arc;
 
 use crate::{
-    diagnostics::{Diagnostic, Location},
-    incremental::VisibleImplicits,
-    iterator_extensions::mapvec,
-    name_resolution::Origin,
-    parser::{
+    diagnostics::{Diagnostic, Location}, incremental::VisibleImplicits, iterator_extensions::mapvec, lexer::token::IntegerKind, name_resolution::Origin, parser::{
         cst::{self, Name, Pattern},
         ids::{ExprId, PatternId},
-    },
-    type_inference::{
-        DelayedImplicit, Locateable, TypeChecker,
-        types::{FunctionType, ParameterType, Type},
-    },
+    }, type_inference::{
+        types::{FunctionType, ParameterType, PrimitiveType, Type, TypeVariableId}, DelayedImplicit, Locateable, TypeChecker
+    }
 };
 
 impl<'local, 'inner> TypeChecker<'local, 'inner> {
@@ -78,21 +72,34 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     pub(super) fn pop_implicits_scope(&mut self) {
         // We must perform any queued requests before popping any implicits which should be visible
         if let Some(scope) = self.implicits.last_mut() {
-            let delayed = std::mem::take(&mut scope.delayed_implicits);
-            let deferred = std::mem::take(&mut scope.deferred_closure_checks);
-            for implicit in delayed {
+            let implicits = std::mem::take(&mut scope.delayed_implicits);
+            let closures = std::mem::take(&mut scope.deferred_closure_checks);
+            let integers = std::mem::take(&mut scope.integer_type_variables);
+
+            for implicit in implicits {
                 if let Err(error) = self.find_implicit_value(implicit) {
                     self.compiler.accumulate(error);
                 }
             }
+
             // Run deferred closure checks after delayed implicits are resolved so that
             // free-variable analysis sees the fully-resolved implicit arguments.
-            for (expr, env_type) in deferred {
+            for (expr, env_type) in closures {
                 self.check_for_closure(expr, &env_type, None);
+            }
+
+            // Default any still unbound integers to I32 and ensure their value fits
+            // in whatever type they are now
+            for (value, type_variable, expr) in integers {
+                self.try_default_integer_to_i32(value, type_variable, expr);
             }
         }
 
         self.implicits.pop().expect("More pops than pushes to `TypeChecker::implicits`");
+    }
+
+    pub(super) fn push_inferred_int(&mut self, value: u64, type_variable: TypeVariableId, location: Location) {
+        self.implicits.last_mut().unwrap().integer_type_variables.push((value, type_variable, location));
     }
 
     /// Delay finding an implicit value until later when more types are known.
@@ -105,6 +112,22 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         let delayed = DelayedImplicit { source: function, destination: fresh_id, parameter_index };
         self.implicits.last_mut().unwrap().delayed_implicits.push(delayed);
         fresh_id
+    }
+
+    fn try_default_integer_to_i32(&mut self, value: u64, type_variable: TypeVariableId, location: Location) {
+        let kind = match Type::Variable(type_variable).follow(&self.bindings) {
+            Type::Variable(id) => {
+                self.bindings.insert(*id, Type::Primitive(PrimitiveType::Int(IntegerKind::I32)));
+                IntegerKind::I32
+            }
+            Type::Primitive(PrimitiveType::Int(kind)) => *kind,
+            // Bound to a non-integer type. Invalid, but we rely on unification to produce more
+            // localized errors for this case.
+            _ => return,
+        };
+
+        // Now ensure the literal fits in the chosen kind
+        self.check_int_fits(value, kind, location);
     }
 
     /// Search for an implicit value in scope with the given type, returning an error if no implicit

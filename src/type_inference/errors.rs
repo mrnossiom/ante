@@ -96,6 +96,12 @@ pub(super) trait Locateable {
     fn locate(&self, context: &TypeChecker) -> Location;
 }
 
+impl Locateable for Location {
+    fn locate(&self, _: &TypeChecker) -> Location {
+        self.clone()
+    }
+}
+
 impl Locateable for ExprId {
     fn locate(&self, context: &TypeChecker) -> Location {
         context.current_context().expr_locations[*self].clone()

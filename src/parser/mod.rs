@@ -1374,7 +1374,7 @@ impl<'tokens> Parser<'tokens> {
                 self.insert_expr(call_id, call, location);
                 Ok(call_id)
             },
-            _ => self.parse_atom(),
+            _ => self.parse_function_call_or_atom(),
         }
     }
 

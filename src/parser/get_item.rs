@@ -172,6 +172,7 @@ fn make_tuple_type(location: &Location, mut types: impl ExactSizeIterator<Item =
 ///     declaration1: fn Arg1_1 ... ArgN_1 -> Ret_1
 ///     ...
 ///     declarationN: fn Arg1_N ... ArgN_N -> Ret_N
+///     field1: SomeTrait args
 /// ```
 /// Into
 /// ```ante
@@ -179,6 +180,7 @@ fn make_tuple_type(location: &Location, mut types: impl ExactSizeIterator<Item =
 ///     declaration1: fn Arg1_1 ... ArgN_1 [env] -> Ret_1
 ///     ...
 ///     declarationN: fn Arg1_N ... ArgN_N [env] -> Ret_N
+///     field1: SomeTrait args [env]
 /// ```
 fn desugar_trait(trait_: &TraitDefinition, context: &mut TopLevelContext) -> TopLevelItemKind {
     let name_location = context.name_locations[trait_.name].clone();
@@ -191,7 +193,9 @@ fn desugar_trait(trait_: &TraitDefinition, context: &mut TopLevelContext) -> Top
     let mut generics = trait_.generics.clone();
     generics.push(env);
 
-    // Add `[env]` to each function type to make them implicitly closures
+    // Add `[env]` to each field type: for function types this is set as the closure environment,
+    // for non-function types (e.g. sub-trait fields like `Add a`) it is appended as a type argument
+    // so that the env is properly substituted when the trait is instantiated.
     let fields = mapvec(&trait_.body, |decl| {
         let typ = match &decl.typ.kind {
             cst::TypeKind::Function(f) => {
@@ -199,7 +203,7 @@ fn desugar_trait(trait_: &TraitDefinition, context: &mut TopLevelContext) -> Top
                 f.environment = Some(Box::new(Type::new(TypeKind::Variable(env), name_location.clone())));
                 Type::new(cst::TypeKind::Function(f), decl.typ.location.clone())
             },
-            _ => decl.typ.clone(),
+            _ => add_env_to_trait_type(&decl.typ, env, &name_location),
         };
         (decl.name, typ)
     });

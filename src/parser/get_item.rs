@@ -7,7 +7,7 @@ use crate::{
     parser::{
         context::TopLevelContext,
         cst::{
-            self, Argument, Constructor, Definition, Expr, Lambda, Loop, Parameter, Pattern, SequenceItem,
+            self, Argument, Constructor, Definition, Expr, If, Lambda, Literal, Loop, Parameter, Pattern, SequenceItem,
             TopLevelItem, TopLevelItemKind, TraitDefinition, TraitImpl, Type, TypeDefinitionBody, TypeKind,
         },
         ids::ExprId,
@@ -243,7 +243,8 @@ fn desugar_expression(expr: ExprId, context: &mut TopLevelContext) {
                 desugar_expression(arg.expr, context);
             }
             desugar_call_wildcards(&call, expr, context);
-            desugar_pipeline(call, expr, context);
+            desugar_pipeline(&call, expr, context);
+            desugar_logical_operators(&call, expr, context);
         },
         Expr::If(if_) => {
             let if_ = if_.clone();
@@ -390,7 +391,7 @@ fn desugar_call_wildcards(call: &cst::Call, expr: ExprId, context: &mut TopLevel
 /// Although `|>` and `<|` always slot into the first argument, this can be combined with
 /// explicit currying via `_` to slot into the underscore's position:
 /// `x |> foo a _ b` => `x |> (fn _1 -> foo a _1 b)` => `(fn _1 -> foo a _1 b) x`
-fn desugar_pipeline(call: cst::Call, expr: ExprId, context: &mut TopLevelContext) {
+fn desugar_pipeline(call: &cst::Call, expr: ExprId, context: &mut TopLevelContext) {
     // TODO: This check bypasses name resolution of these operators. If the user shadows
     // the prelude's definitions of the pipeline operators they'll still get this behavior.
     let (is_pipe_right, is_pipe_left) = if let Expr::Variable(path_id) = &context.exprs[call.function] {
@@ -422,4 +423,38 @@ fn desugar_pipeline(call: cst::Call, expr: ExprId, context: &mut TopLevelContext
         let new_call = cst::Call { function: inner_call.function, arguments: new_args };
         context.exprs[expr] = Expr::Call(new_call);
     }
+}
+
+/// Desugars:
+/// - `a and b` into `if a then b else false`
+/// - `a or b` into `if a then true else b`
+fn desugar_logical_operators(call: &cst::Call, expr: ExprId, context: &mut TopLevelContext) {
+    let (is_and, is_or) = if let Expr::Variable(path_id) = &context.exprs[call.function] {
+        let name = context.paths[*path_id].last_ident();
+        (name == "and", name == "or")
+    } else {
+        return;
+    };
+
+    // This could be combined with `desugar_pipeline`
+    if !is_and && !is_or {
+        return;
+    }
+
+    // Parse error
+    if call.arguments.len() != 2 {
+        return;
+    }
+
+    let a = call.arguments[0].expr;
+    let b = call.arguments[1].expr;
+    let location = context.expr_locations[expr].clone();
+    let boolean = Expr::Literal(Literal::Bool(is_or));
+    let boolean = context.push_expr(boolean, location);
+
+    context.exprs[expr] = if is_and {
+        Expr::If(If { condition: a, then: b, else_: Some(boolean) })
+    } else {
+        Expr::If(If { condition: a, then: boolean, else_: Some(b) })
+    };
 }

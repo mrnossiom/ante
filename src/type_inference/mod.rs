@@ -5,17 +5,23 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    diagnostics::{Diagnostic, Location}, incremental::{self, DbHandle, GetItem, Resolve, TargetPointerSize, TypeCheck, TypeCheckSCC}, iterator_extensions::mapvec, lexer::token::IntegerKind, name_resolution::{Origin, ResolutionResult}, parser::{
+    diagnostics::{Diagnostic, Location},
+    incremental::{self, DbHandle, GetItem, Resolve, TargetPointerSize, TypeCheck, TypeCheckSCC},
+    iterator_extensions::mapvec,
+    lexer::token::IntegerKind,
+    name_resolution::{Origin, ResolutionResult},
+    parser::{
         context::TopLevelContext,
         cst::{self, Name, ReferenceKind, TopLevelItem, TopLevelItemKind},
         ids::{ExprId, NameId, PathId, PatternId, TopLevelId, TopLevelName},
-    }, type_inference::{
+    },
+    type_inference::{
         dependency_graph::TypeCheckResult,
         errors::{Locateable, TypeErrorKind},
         fresh_expr::ExtendedTopLevelContext,
         generics::Generic,
         types::{PrimitiveType, Type, TypeBindings, TypeVariableId},
-    }
+    },
 };
 
 mod cst_traversal;

@@ -276,11 +276,7 @@ impl Token {
         use Token::*;
         matches!(
             self,
-            And | As
-                | At
-                | In
-                | Not
-                | Or
+            In | Not
                 | EqualEqual
                 | NotEqual
                 | ApplyLeft

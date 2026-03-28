@@ -1,12 +1,19 @@
 use std::sync::Arc;
 
 use crate::{
-    diagnostics::{Diagnostic, Location}, incremental::VisibleImplicits, iterator_extensions::mapvec, lexer::token::IntegerKind, name_resolution::Origin, parser::{
+    diagnostics::{Diagnostic, Location},
+    incremental::VisibleImplicits,
+    iterator_extensions::mapvec,
+    lexer::token::IntegerKind,
+    name_resolution::Origin,
+    parser::{
         cst::{self, Name, Pattern},
         ids::{ExprId, PatternId},
-    }, type_inference::{
-        types::{FunctionType, ParameterType, PrimitiveType, Type, TypeVariableId}, DelayedImplicit, Locateable, TypeChecker
-    }
+    },
+    type_inference::{
+        DelayedImplicit, Locateable, TypeChecker,
+        types::{FunctionType, ParameterType, PrimitiveType, Type, TypeVariableId},
+    },
 };
 
 impl<'local, 'inner> TypeChecker<'local, 'inner> {
@@ -134,7 +141,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             Type::Variable(id) => {
                 self.bindings.insert(*id, Type::Primitive(PrimitiveType::Int(IntegerKind::I32)));
                 IntegerKind::I32
-            }
+            },
             Type::Primitive(PrimitiveType::Int(kind)) => *kind,
             // Bound to a non-integer type. Invalid, but we rely on unification to produce more
             // localized errors for this case.

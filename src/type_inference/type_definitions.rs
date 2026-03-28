@@ -7,7 +7,7 @@ use crate::{
     iterator_extensions::mapvec,
     name_resolution::Origin,
     parser::{
-        cst::{self, TypeKind},
+        cst,
         ids::{NameId, TopLevelId, TopLevelName},
     },
     type_inference::{

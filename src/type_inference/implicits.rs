@@ -76,22 +76,37 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             let closures = std::mem::take(&mut scope.deferred_closure_checks);
             let integers = std::mem::take(&mut scope.integer_type_variables);
 
+            // Phase 1: Try to resolve all implicits. When the target type contains an unbound
+            // integer type variable, unification may still succeed (e.g. searching for `Foo _`
+            // where only `Foo U8` exists binds `_ := U8`). Failures are collected for retry.
+            let mut failed_implicits = Vec::new();
             for implicit in implicits {
                 if let Err(error) = self.find_implicit_value(implicit) {
-                    self.compiler.accumulate(error);
+                    failed_implicits.push((implicit, error));
                 }
             }
 
-            // Run deferred closure checks after delayed implicits are resolved so that
-            // free-variable analysis sees the fully-resolved implicit arguments.
-            for (expr, env_type) in closures {
-                self.check_for_closure(expr, &env_type, None);
+            // Default any still-unbound integers to I32 and ensure their value fits
+            // in whatever type they are now.
+            for (value, type_variable, location) in integers {
+                self.try_default_integer_to_i32(value, type_variable, location);
             }
 
-            // Default any still unbound integers to I32 and ensure their value fits
-            // in whatever type they are now
-            for (value, type_variable, expr) in integers {
-                self.try_default_integer_to_i32(value, type_variable, expr);
+            // Phase 2: Retry implicits that failed in phase 1, now that integer type variables
+            // have been defaulted to I32. This handles cases like `Add _` where phase 1 finds
+            // multiple `Add X` candidates (ambiguous on an unbound integer), but after defaulting
+            // `_ := I32` exactly one candidate remains. If the retry still fails, accumulate the
+            // original error so the diagnostic reflects the unbound type the user wrote.
+            for (implicit, original_error) in failed_implicits {
+                if let Err(_) = self.find_implicit_value(implicit) {
+                    self.compiler.accumulate(original_error);
+                }
+            }
+
+            // Run deferred closure checks after all implicits (including retries) are resolved
+            // so that free-variable analysis sees the fully-resolved implicit arguments.
+            for (expr, env_type) in closures {
+                self.check_for_closure(expr, &env_type, None);
             }
         }
 

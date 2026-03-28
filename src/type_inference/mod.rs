@@ -177,7 +177,7 @@ struct ImplicitsContext {
     integer_type_variables: Vec<(u64, TypeVariableId, Location)>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 struct DelayedImplicit {
     /// The [ExprId] which originally requested an implicit value.
     /// This is often a trait function like `cast` or `+`

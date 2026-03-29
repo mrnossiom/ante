@@ -16,6 +16,10 @@ use crate::{
     },
 };
 
+/// Any more than this arbitrary value and we stop looking for impls to populate the error
+/// message with and instead display `..`.
+const MULTIPLE_MATCHING_IMPLS_CUTOFF: usize = 5;
+
 impl<'local, 'inner> TypeChecker<'local, 'inner> {
     /// Perform an implicit parameter coercion.
     ///
@@ -178,6 +182,12 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             self.implicits.iter().rev().flat_map(|scope| &scope.implicits_in_scope).copied().collect::<Vec<_>>();
 
         for name in implicits_in_scope {
+            if candidates.len() > MULTIPLE_MATCHING_IMPLS_CUTOFF {
+                // Multiple matching impls, don't waste time looking for more.
+                // There are many Eq impls we could waste time on for example.
+                break;
+            }
+
             let saved = self.bindings.clone();
             let name_type = self.name_types[&name].follow(&self.bindings).clone();
             let origin = Origin::Local(name);
@@ -201,8 +211,16 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
 
         // Need to check globally visible implicits separately
         // TODO: Make this more efficient so we don't need to go through every single implicit
-        if let Some(item) = self.current_item {
+        if candidates.len() <= MULTIPLE_MATCHING_IMPLS_CUTOFF
+            && let Some(item) = self.current_item
+        {
             for (name, name_id) in VisibleImplicits(item.source_file).get(self.compiler).iter() {
+                if candidates.len() > MULTIPLE_MATCHING_IMPLS_CUTOFF {
+                    // Multiple matching impls, don't waste time looking for more.
+                    // There are many Eq impls we could waste time on for example.
+                    break;
+                }
+
                 let (name_type, bindings) = self.type_and_bindings_of_top_level_name(name_id);
                 let saved = self.bindings.clone();
                 // Pre-filter: skip impls that clearly can't match. After the pre-filter succeeds
@@ -311,7 +329,13 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         let type_string = self.type_to_string(&implicit_type);
         let function_name = self.try_get_name(function);
         let location = function.locate(self);
-        let matches = mapvec(matching, |(name, _, _, _, _)| name);
+
+        let mut matches = mapvec(matching, |(name, _, _, _, _)| name);
+        if matches.len() > MULTIPLE_MATCHING_IMPLS_CUTOFF {
+            matches.truncate(MULTIPLE_MATCHING_IMPLS_CUTOFF);
+            matches.push(Arc::new("..".to_string()));
+        }
+
         Diagnostic::MultipleImplicitsFound { matches, type_string, function_name, parameter_index, location }
     }
 

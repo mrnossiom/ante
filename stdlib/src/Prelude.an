@@ -170,27 +170,27 @@ impl cast_u32_f32: Cast U32 F64 with cast x = intrinsic "UnsignedToFloat" x
 impl cast_u64_f32: Cast U64 F64 with cast x = intrinsic "UnsignedToFloat" x
 impl cast_usz_f32: Cast Usz F64 with cast x = intrinsic "UnsignedToFloat" x
 
-impl cast_flof32:  Cast F32 I8  with cast x = intrinsic "FloatToSigned" x
-impl cast_float64: Cast F32 I16 with cast x = intrinsic "FloatToSigned" x
-impl cast_float64: Cast F32 I32 with cast x = intrinsic "FloatToSigned" x
-impl cast_float64: Cast F32 I64 with cast x = intrinsic "FloatToSigned" x
-impl cast_float64: Cast F32 Isz with cast x = intrinsic "FloatToSigned" x
-impl cast_flof64:  Cast F64 I8  with cast x = intrinsic "FloatToSigned" x
-impl cast_float32: Cast F64 I16 with cast x = intrinsic "FloatToSigned" x
-impl cast_float32: Cast F64 I32 with cast x = intrinsic "FloatToSigned" x
-impl cast_float32: Cast F64 I64 with cast x = intrinsic "FloatToSigned" x
-impl cast_float32: Cast F64 Isz with cast x = intrinsic "FloatToSigned" x
+impl cast_f32_i8:  Cast F32 I8  with cast x = intrinsic "FloatToSigned" x
+impl cast_f32_i16: Cast F32 I16 with cast x = intrinsic "FloatToSigned" x
+impl cast_f32_i32: Cast F32 I32 with cast x = intrinsic "FloatToSigned" x
+impl cast_f32_i64: Cast F32 I64 with cast x = intrinsic "FloatToSigned" x
+impl cast_f32_isz: Cast F32 Isz with cast x = intrinsic "FloatToSigned" x
+impl cast_f64_i8:  Cast F64 I8  with cast x = intrinsic "FloatToSigned" x
+impl cast_f64_i16: Cast F64 I16 with cast x = intrinsic "FloatToSigned" x
+impl cast_f64_i32: Cast F64 I32 with cast x = intrinsic "FloatToSigned" x
+impl cast_f64_i64: Cast F64 I64 with cast x = intrinsic "FloatToSigned" x
+impl cast_f64_isz: Cast F64 Isz with cast x = intrinsic "FloatToSigned" x
 
-impl cast_flof32:  Cast F32 U8  with cast x = intrinsic "FloatToUnsigned" x
-impl cast_float64: Cast F32 U16 with cast x = intrinsic "FloatToUnsigned" x
-impl cast_float64: Cast F32 U32 with cast x = intrinsic "FloatToUnsigned" x
-impl cast_float64: Cast F32 U64 with cast x = intrinsic "FloatToUnsigned" x
-impl cast_float64: Cast F32 Usz with cast x = intrinsic "FloatToUnsigned" x
-impl cast_flof64:  Cast F64 U8  with cast x = intrinsic "FloatToUnsigned" x
-impl cast_float32: Cast F64 U16 with cast x = intrinsic "FloatToUnsigned" x
-impl cast_float32: Cast F64 U32 with cast x = intrinsic "FloatToUnsigned" x
-impl cast_float32: Cast F64 U64 with cast x = intrinsic "FloatToUnsigned" x
-impl cast_float32: Cast F64 Usz with cast x = intrinsic "FloatToUnsigned" x
+impl cast_f32_u8:  Cast F32 U8  with cast x = intrinsic "FloatToUnsigned" x
+impl cast_f32_u16: Cast F32 U16 with cast x = intrinsic "FloatToUnsigned" x
+impl cast_f32_u32: Cast F32 U32 with cast x = intrinsic "FloatToUnsigned" x
+impl cast_f32_u64: Cast F32 U64 with cast x = intrinsic "FloatToUnsigned" x
+impl cast_f32_usz: Cast F32 Usz with cast x = intrinsic "FloatToUnsigned" x
+impl cast_f64_u8:  Cast F64 U8  with cast x = intrinsic "FloatToUnsigned" x
+impl cast_f64_u16: Cast F64 U16 with cast x = intrinsic "FloatToUnsigned" x
+impl cast_f64_u32: Cast F64 U32 with cast x = intrinsic "FloatToUnsigned" x
+impl cast_f64_u64: Cast F64 U64 with cast x = intrinsic "FloatToUnsigned" x
+impl cast_f64_usz: Cast F64 Usz with cast x = intrinsic "FloatToUnsigned" x
 
 impl cast_f64_f32: Cast F64 F32 with cast x = intrinsic "FloatDemote" x
 impl cast_f32_f64: Cast F32 F64 with cast x = intrinsic "FloatPromote" x
@@ -272,8 +272,8 @@ impl mul_u16: Mul U16 with (*) x y = intrinsic "MulInt" x y
 impl mul_u32: Mul U32 with (*) x y = intrinsic "MulInt" x y
 impl mul_u64: Mul U64 with (*) x y = intrinsic "MulInt" x y
 impl mul_usz: Mul Usz with (*) x y = intrinsic "MulInt" x y
-impl mul_f32: Mul F32 with (*) x y = intrinsic "MulF32" x y
-impl mul_f64: Mul F64 with (*) x y = intrinsic "MulF64" x y
+impl mul_f32: Mul F32 with (*) x y = intrinsic "MulFloat" x y
+impl mul_f64: Mul F64 with (*) x y = intrinsic "MulFloat" x y
 
 trait Div n with (/): fn n n -> n
 impl div_i8: Div I8  with (/) x y = intrinsic "DivSigned" x y
@@ -286,8 +286,8 @@ impl div_u16: Div U16 with (/) x y = intrinsic "DivUnsigned" x y
 impl div_u32: Div U32 with (/) x y = intrinsic "DivUnsigned" x y
 impl div_u64: Div U64 with (/) x y = intrinsic "DivUnsigned" x y
 impl div_usz: Div Usz with (/) x y = intrinsic "DivUnsigned" x y
-impl div_f32: Div F32 with (/) x y = intrinsic "DivF32" x y
-impl div_f64: Div F64 with (/) x y = intrinsic "DivF64" x y
+impl div_f32: Div F32 with (/) x y = intrinsic "DivFloat" x y
+impl div_f64: Div F64 with (/) x y = intrinsic "DivFloat" x y
 
 trait Mod n with (%): fn n n -> n
 impl mod_i8: Mod I8  with (%) x y = intrinsic "ModSigned" x y

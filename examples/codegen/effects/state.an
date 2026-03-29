@@ -23,21 +23,19 @@ use_state 10_i32 with state 1
 use_state 20_u64 with state 2
 
 // args: --delete-binary
+// expected exit status: 1
 // expected stderr:
 // examples/codegen/effects/state.an:2:14	error: Expected an unindent but found `->`
 //     get: Unit -> a
 // 
 // examples/codegen/effects/state.an:6:8	error: `get` not found in scope
-//     x = get () : Int a
+//     x = get () : I32
 // 
 // examples/codegen/effects/state.an:7:4	error: `set` not found in scope
 //     set (x + y)
 // 
-// examples/codegen/effects/state.an:7:11	error: No implicit found for type Add (Int a _) _ required by parameter 3
-//     set (x + y)
-// 
 // examples/codegen/effects/state.an:8:12	error: `get` not found in scope
-//     state = get () : Int a
+//     state = get () : I32
 // 
 // examples/codegen/effects/state.an:9:26	error: Expected an unindent but found `${`
 //     print "Ending state = ${state}"
@@ -51,5 +49,5 @@ use_state 20_u64 with state 2
 // examples/codegen/effects/state.an:23:10	error: Expected `=` to begin the function body but found `20_U64`
 // use_state 20_u64 with state 2
 // 
-// Found 9 errors and 0 warnings
+// Found 8 errors and 0 warnings
 

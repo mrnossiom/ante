@@ -33,19 +33,8 @@ main () =
 // so we can no longer support this operation at all.
 
 // args: --delete-binary
+// expected exit status: 1
 // expected stderr:
-// examples/codegen/builtin_float.an:4:18	error: No implicit found for type Add F64 _ required by parameter 3
-//     add_f64 = 3.0 + 4.0
-// 
-// examples/codegen/builtin_float.an:5:18	error: No implicit found for type Sub F64 _ required by parameter 3
-//     sub_f64 = 7.0 - 8.0
-// 
-// examples/codegen/builtin_float.an:6:19	error: No implicit found for type Mul F64 _ required by parameter 3
-//     mul_f64 = 11.0 * 12.0
-// 
-// examples/codegen/builtin_float.an:7:19	error: No implicit found for type Div F64 _ required by parameter 3
-//     div_f64 = 15.0 / 16.0
-// 
 // examples/codegen/builtin_float.an:10:4	error: No implicit found for type Print F64 _ required by parameter 2
 //     print add_f64
 // 
@@ -91,8 +80,8 @@ main () =
 // examples/codegen/builtin_float.an:29:4	error: No implicit found for type Print F32 _ required by parameter 2
 //     print (cast (cast x : F64) : F32)
 // 
-// examples/codegen/builtin_float.an:29:17	error: Multiple matching implicits found for type Cast _ F64 _ required by parameter 2: cast_f32_f64, cast_same
+// examples/codegen/builtin_float.an:29:17	error: Multiple matching implicits found for type Cast _ F64 _ required by parameter 2: cast_f32_f64, cast_i16_f64, cast_i32_f64, cast_i64_f64, cast_i8_f64, cast_isz_f64, cast_same, cast_u16_f32, cast_u32_f32, cast_u64_f32, cast_u8_f64, cast_usz_f32
 //     print (cast (cast x : F64) : F32)
 // 
-// Found 20 errors and 0 warnings
+// Found 16 errors and 0 warnings
 

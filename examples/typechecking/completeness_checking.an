@@ -27,6 +27,7 @@ main () =
     | (_, _, _, _) -> 3
 
 // args: -e ast-t
+// expected exit status: 1
 // expected stdout:
 // (main: fn Unit -> I32 can _) () =
 //     (match_var27: (error)) = (Maybe.None: Maybe _)
@@ -99,8 +100,17 @@ main () =
 // examples/typechecking/completeness_checking.an:21:11	error: Missing cases: false, false, true, true
 //     match (true, true)
 // 
+// examples/typechecking/completeness_checking.an:25:11	error: Expected an integer type but found (_, _), _
+//     match (1, 2, 3, 4)
+// 
+// examples/typechecking/completeness_checking.an:26:7	error: Expected an integer type but found (_, _), _
+//     | (1, 2) -> 1
+// 
+// examples/typechecking/completeness_checking.an:26:10	error: Expected an integer type but found I32, (I32, I32)
+//     | (1, 2) -> 1
+// 
 // examples/typechecking/completeness_checking.an:27:6	warning: This case is already matched by prior patterns
 //     | (_, _, _, _) -> 3
 // 
-// Found 4 errors and 3 warnings
+// Found 7 errors and 3 warnings
 

@@ -17,8 +17,9 @@ main () =
     | None -> println "s = None"
 
 // args: --delete-binary
+// expected exit status: 1
 // expected stderr:
-// examples/codegen/data.an:16:8	error: Multiple matching implicits found for type Print _ _ required by parameter 2: print_bool, print_char, print_i16, print_i32, print_i64, print_i8, print_isz, print_ptr_char, print_string, print_u16, print_u32, print_u64, print_u8, print_usz
+// examples/codegen/data.an:16:8	error: Multiple matching implicits found for type Print _ _ required by parameter 2: print_bool, print_char, print_i16, print_i32, print_i64, ..
 //         println x
 // 
 // Found 1 error and 0 warnings

@@ -4,9 +4,13 @@ if true then
     g ()
 
 // args: --delete-binary
+// expected exit status: 1
 // expected stderr:
+// examples/regressions/119_top_level_subscopes.an:1:1	error: This program has no `main` function
+// if true then
+// 
 // examples/regressions/119_top_level_subscopes.an:1:1	error: Expected a top-level item but found `if`
 // if true then
 // 
-// Found 1 error and 0 warnings
+// Found 2 errors and 0 warnings
 

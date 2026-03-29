@@ -48,7 +48,11 @@ iota 10
     with for my_print
 
 // args: --delete-binary
+// expected exit status: 1
 // expected stderr:
+// examples/codegen/effects/generators_complex.an:1:1	error: This program has no `main` function
+// effect Emit a with
+// 
 // examples/codegen/effects/generators_complex.an:2:12	error: Expected an unindent but found `->`
 //     emit: a -> Unit
 // 
@@ -82,5 +86,5 @@ iota 10
 // examples/codegen/effects/generators_complex.an:44:5	error: Expected `=` to begin the function body but found `10`
 // iota 10
 // 
-// Found 11 errors and 0 warnings
+// Found 12 errors and 0 warnings
 

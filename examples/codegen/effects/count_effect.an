@@ -14,7 +14,11 @@ handle_count f =
 handle_count foo |> print
 
 // args: --delete-binary
+// expected exit status: 1
 // expected stderr:
+// examples/codegen/effects/count_effect.an:1:1	error: This program has no `main` function
+// effect Count with
+// 
 // examples/codegen/effects/count_effect.an:2:16	error: Expected an unindent but found `->`
 //     count: Unit -> Unit
 // 
@@ -33,5 +37,5 @@ handle_count foo |> print
 // examples/codegen/effects/count_effect.an:14:13	error: Expected `=` to begin the function body but found `foo`
 // handle_count foo |> print
 // 
-// Found 6 errors and 0 warnings
+// Found 7 errors and 0 warnings
 

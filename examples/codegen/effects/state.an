@@ -25,6 +25,9 @@ use_state 20_u64 with state 2
 // args: --delete-binary
 // expected exit status: 1
 // expected stderr:
+// examples/codegen/effects/state.an:1:1	error: This program has no `main` function
+// effect Use a with
+// 
 // examples/codegen/effects/state.an:2:14	error: Expected an unindent but found `->`
 //     get: Unit -> a
 // 
@@ -49,5 +52,5 @@ use_state 20_u64 with state 2
 // examples/codegen/effects/state.an:23:10	error: Expected `=` to begin the function body but found `20_U64`
 // use_state 20_u64 with state 2
 // 
-// Found 8 errors and 0 warnings
+// Found 9 errors and 0 warnings
 

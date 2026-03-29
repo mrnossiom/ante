@@ -50,6 +50,7 @@ pub fn type_check_impl(context: &TypeCheckSCC, compiler: &DbHandle) -> TypeCheck
     let items = mapvec(context.0.iter(), |item_id| {
         incremental::println(format!("Type checking {item_id:?}"));
         checker.start_item(*item_id);
+        checker.push_implicits_scope();
 
         let item = &checker.item_contexts[item_id].0;
         match &item.kind {
@@ -62,6 +63,7 @@ pub fn type_check_impl(context: &TypeCheckSCC, compiler: &DbHandle) -> TypeCheck
             TopLevelItemKind::Comptime(comptime) => checker.check_comptime(comptime),
         };
 
+        checker.pop_implicits_scope();
         (*item_id, checker.finish_item())
     });
 

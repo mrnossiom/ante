@@ -3,14 +3,10 @@ boom () : Maybe (Ptr Char) = None
 _ = boom ()
 
 // args: --delete-binary
-// expected exit status: 101
+// expected exit status: 1
 // expected stderr:
-// thread 'main' panicked at src/mir/validation.rs:198:21:
-// fn boom d557: fn Unit -> (U8, (Pointer,))
-//   b0(b0_0: Unit):
-//     v0: U8, ((U8, (error,)),) = id None_d605
-//     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Value type `U8, (Pointer,)` != result type `U8, ((U8, (error,)),)`
+// examples/regressions/103_size_of_ptr.an:1:1	error: This program has no `main` function
 // 
-//     return v0
-// note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+// 
+// Found 1 error and 0 warnings
 

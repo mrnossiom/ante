@@ -26,8 +26,8 @@
 use clap::{CommandFactory, Parser};
 use cli::{Cli, Completions};
 use colored::Colorize;
-use diagnostics::Diagnostic;
-use incremental::{Db, GetCrateGraph, Parse, Resolve};
+use diagnostics::{Diagnostic, Position, Span};
+use incremental::{Db, ExportedDefinitions, GetCrateGraph, Parse, Resolve};
 use name_resolution::namespace::{CrateId, LocalModuleId, SourceFileId};
 use std::{
     collections::BTreeSet,
@@ -163,6 +163,20 @@ fn collect_all_diagnostics(compiler: &Db) -> BTreeSet<Diagnostic> {
             }
         }
     }
+
+    let local_crate = &crates[&CrateId::LOCAL];
+    let has_main = local_crate.source_files.values().any(|file| {
+        ExportedDefinitions(*file).get(compiler).definitions.keys().any(|k| k.as_str() == "main")
+    });
+
+    if !has_main {
+        if let Some(first_file) = local_crate.source_files.values().next() {
+            let position = Position::start();
+            let location = Span { start: position, end: position }.in_file(*first_file);
+            diagnostics.insert(Diagnostic::NoMainFunction { location });
+        }
+    }
+
     diagnostics
 }
 

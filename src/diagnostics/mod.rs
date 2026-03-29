@@ -177,6 +177,9 @@ pub enum Diagnostic {
         kind: IntegerKind,
         location: Location,
     },
+    NoMainFunction {
+        location: Location,
+    },
 }
 
 impl Ord for Diagnostic {
@@ -398,6 +401,9 @@ impl Diagnostic {
             Diagnostic::IntegerTooLarge { value, kind, location: _ } => {
                 format!("{} is too large for type {}", value.to_string().purple(), kind.to_string().blue())
             },
+            Diagnostic::NoMainFunction { location: _ } => {
+                "This program has no `main` function".to_string()
+            },
         }
     }
 
@@ -439,7 +445,8 @@ impl Diagnostic {
             | Diagnostic::ExpectedKind { location, .. }
             | Diagnostic::ReturnNotInFunction { location }
             | Diagnostic::IntegerTooLarge { location, .. }
-            | Diagnostic::Unimplemented { location, .. } => location,
+            | Diagnostic::Unimplemented { location, .. }
+            | Diagnostic::NoMainFunction { location } => location,
         }
     }
 

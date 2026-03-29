@@ -10,7 +10,11 @@ impl MultiTrait Unit with
 one ()
 
 // args: --delete-binary
+// expected exit status: 1
 // expected stderr:
+// examples/regressions/159_two_trait_functions.an:1:1	error: This program has no `main` function
+// 
+// 
 // examples/regressions/159_two_trait_functions.an:3:9	error: Expected 0 arguments but found 1
 //     one: Unit -> Unit
 // 
@@ -23,5 +27,5 @@ one ()
 // examples/regressions/159_two_trait_functions.an:10:4	error: Expected `=` to begin the function body but found `()`
 // one ()
 // 
-// Found 4 errors and 0 warnings
+// Found 5 errors and 0 warnings
 

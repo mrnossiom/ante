@@ -15,7 +15,11 @@ read_or_none (f: Unit -> Unit can Read a, Fail): Maybe a =
 // note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 // exit 101
 
+// expected exit status: 1
 // expected stderr:
+// examples/codegen/effects/panic.an:1:1	error: This program has no `main` function
+// effect Fail with
+// 
 // examples/codegen/effects/panic.an:2:15	error: Expected an unindent but found `->`
 //     fail: Unit -> a
 // 
@@ -25,5 +29,5 @@ read_or_none (f: Unit -> Unit can Read a, Fail): Maybe a =
 // examples/codegen/effects/panic.an:7:13	error: Expected `=` to begin the function body but found `(`
 // read_or_none (f: Unit -> Unit can Read a, Fail): Maybe a =
 // 
-// Found 3 errors and 0 warnings
+// Found 4 errors and 0 warnings
 

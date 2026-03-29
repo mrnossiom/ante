@@ -12,6 +12,7 @@ main () =
     debug <| cast 10
 
 // args: --delete-binary
+// expected exit status: 1
 // expected stderr:
 // examples/codegen/int_string_cast.an:3:15	error: No implicit found for type Append String _ required by parameter 3
 //     "string: " ++
@@ -28,5 +29,14 @@ main () =
 // examples/codegen/int_string_cast.an:9:13	error: No implicit found for type Cast U8 String _ required by parameter 2
 //     debug <| cast (255: U8)
 // 
-// Found 5 errors and 0 warnings
+// examples/codegen/int_string_cast.an:10:18	error: Expected an integer type but found String
+//     debug <| cast -1024
+// 
+// examples/codegen/int_string_cast.an:11:18	error: Expected an integer type but found String
+//     debug <| cast 0
+// 
+// examples/codegen/int_string_cast.an:12:18	error: Expected an integer type but found String
+//     debug <| cast 10
+// 
+// Found 8 errors and 0 warnings
 

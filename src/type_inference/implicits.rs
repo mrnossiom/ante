@@ -12,6 +12,7 @@ use crate::{
     },
     type_inference::{
         DelayedImplicit, Locateable, TypeChecker,
+        errors::TypeErrorKind,
         types::{FunctionType, ParameterType, PrimitiveType, Type, TypeVariableId},
     },
 };
@@ -147,9 +148,20 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 IntegerKind::I32
             },
             Type::Primitive(PrimitiveType::Int(kind)) => *kind,
-            // Bound to a non-integer type. Invalid, but we rely on unification to produce more
-            // localized errors for this case.
-            _ => return,
+            Type::Primitive(PrimitiveType::Error) => return,
+            _ => {
+                // The integer literal's type variable was bound to a non-integer type through
+                // earlier unification. Since unification succeeded silently (both sides were type
+                // variables at the time), we catch the mismatch here and emit a type error.
+                let actual = self.type_to_string(&Type::Variable(type_variable));
+                self.compiler.accumulate(Diagnostic::TypeError {
+                    actual,
+                    expected: "an integer type".to_string(),
+                    kind: TypeErrorKind::General,
+                    location,
+                });
+                return;
+            },
         };
 
         // Now ensure the literal fits in the chosen kind

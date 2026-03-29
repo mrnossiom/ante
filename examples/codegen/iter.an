@@ -35,7 +35,7 @@ main () = my_iter 10 print
 // examples/codegen/iter.an:9:13	error: `Some` not found in scope
 //         else Some (x, x - 1)
 // 
-// examples/codegen/iter.an:9:24	error: Multiple matching implicits found for type Sub _ _ required by parameter 3: countdown, sub_f32, sub_f64, sub_i16, sub_i32, sub_i64, sub_i8, sub_isz, sub_u16, sub_u32, sub_u64, sub_u8, sub_usz
+// examples/codegen/iter.an:9:24	error: Multiple matching implicits found for type Sub _ _ required by parameter 3: countdown, sub_f32, sub_f64, sub_i16, sub_i32, ..
 //         else Some (x, x - 1)
 // 
 // examples/codegen/iter.an:12:10	error: `mynext` not found in scope
@@ -47,7 +47,7 @@ main () = my_iter 10 print
 // examples/codegen/iter.an:14:6	error: `Some` not found in scope
 //     | Some (elem, rest) ->
 // 
-// examples/codegen/iter.an:18:21	error: Multiple matching implicits found for type Print _ _ required by parameter 2: countdown, print_bool, print_char, print_i16, print_i32, print_i64, print_i8, print_isz, print_ptr_char, print_string, print_u16, print_u32, print_u64, print_u8, print_usz
+// examples/codegen/iter.an:18:21	error: Multiple matching implicits found for type Print _ _ required by parameter 2: countdown, print_bool, print_char, print_i16, print_i32, ..
 // main () = my_iter 10 print
 // 
 // Found 10 errors and 0 warnings

@@ -15,7 +15,11 @@ for stream f =
 for (fn () -> iota 10) print
 
 // args: --delete-binary
+// expected exit status: 1
 // expected stderr:
+// examples/codegen/effects/generators_basic.an:1:1	error: This program has no `main` function
+// effect Emit a with
+// 
 // examples/codegen/effects/generators_basic.an:2:12	error: Expected an unindent but found `->`
 //     emit: a -> Unit
 // 
@@ -28,5 +32,5 @@ for (fn () -> iota 10) print
 // examples/codegen/effects/generators_basic.an:15:0	error: Expected a top-level item but found `for`
 // for (fn () -> iota 10) print
 // 
-// Found 4 errors and 0 warnings
+// Found 5 errors and 0 warnings
 

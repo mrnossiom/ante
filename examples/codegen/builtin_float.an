@@ -59,28 +59,28 @@ main () =
 // examples/codegen/builtin_float.an:20:14	error: Expected an expression but found `InvalidFloatSuffx`
 //     div_f32 = 15.0f / 16.0f
 // 
-// examples/codegen/builtin_float.an:21:4	error: Multiple matching implicits found for type Print _ _ required by parameter 2: print_bool, print_char, print_i16, print_i32, print_i64, print_i8, print_isz, print_ptr_char, print_string, print_u16, print_u32, print_u64, print_u8, print_usz
+// examples/codegen/builtin_float.an:21:4	error: Multiple matching implicits found for type Print _ _ required by parameter 2: print_bool, print_char, print_i16, print_i32, print_i64, ..
 //     print add_f32
 // 
-// examples/codegen/builtin_float.an:22:4	error: Multiple matching implicits found for type Print _ _ required by parameter 2: print_bool, print_char, print_i16, print_i32, print_i64, print_i8, print_isz, print_ptr_char, print_string, print_u16, print_u32, print_u64, print_u8, print_usz
+// examples/codegen/builtin_float.an:22:4	error: Multiple matching implicits found for type Print _ _ required by parameter 2: print_bool, print_char, print_i16, print_i32, print_i64, ..
 //     print sub_f32
 // 
-// examples/codegen/builtin_float.an:23:4	error: Multiple matching implicits found for type Print _ _ required by parameter 2: print_bool, print_char, print_i16, print_i32, print_i64, print_i8, print_isz, print_ptr_char, print_string, print_u16, print_u32, print_u64, print_u8, print_usz
+// examples/codegen/builtin_float.an:23:4	error: Multiple matching implicits found for type Print _ _ required by parameter 2: print_bool, print_char, print_i16, print_i32, print_i64, ..
 //     print mul_f32
 // 
-// examples/codegen/builtin_float.an:24:4	error: Multiple matching implicits found for type Print _ _ required by parameter 2: print_bool, print_char, print_i16, print_i32, print_i64, print_i8, print_isz, print_ptr_char, print_string, print_u16, print_u32, print_u64, print_u8, print_usz
+// examples/codegen/builtin_float.an:24:4	error: Multiple matching implicits found for type Print _ _ required by parameter 2: print_bool, print_char, print_i16, print_i32, print_i64, ..
 //     print div_f32
 // 
 // examples/codegen/builtin_float.an:27:8	error: Expected an expression but found `InvalidFloatSuffx`
 //     x = 1.0f / 7.0f
 // 
-// examples/codegen/builtin_float.an:28:4	error: Multiple matching implicits found for type Print _ _ required by parameter 2: print_bool, print_char, print_i16, print_i32, print_i64, print_i8, print_isz, print_ptr_char, print_string, print_u16, print_u32, print_u64, print_u8, print_usz
+// examples/codegen/builtin_float.an:28:4	error: Multiple matching implicits found for type Print _ _ required by parameter 2: print_bool, print_char, print_i16, print_i32, print_i64, ..
 //     print x
 // 
 // examples/codegen/builtin_float.an:29:4	error: No implicit found for type Print F32 _ required by parameter 2
 //     print (cast (cast x : F64) : F32)
 // 
-// examples/codegen/builtin_float.an:29:17	error: Multiple matching implicits found for type Cast _ F64 _ required by parameter 2: cast_f32_f64, cast_i16_f64, cast_i32_f64, cast_i64_f64, cast_i8_f64, cast_isz_f64, cast_same, cast_u16_f32, cast_u32_f32, cast_u64_f32, cast_u8_f64, cast_usz_f32
+// examples/codegen/builtin_float.an:29:17	error: Multiple matching implicits found for type Cast _ F64 _ required by parameter 2: cast_f32_f64, cast_i16_f64, cast_i32_f64, cast_i64_f64, cast_i8_f64, ..
 //     print (cast (cast x : F64) : F32)
 // 
 // Found 16 errors and 0 warnings

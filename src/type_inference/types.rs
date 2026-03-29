@@ -629,8 +629,13 @@ where
                     write!(f, ", ")?;
                     self.fmt_type(&args[1], true, f)
                 } else {
+                    let display_args = if self.is_trait_constructor(constructor) {
+                        &args[..args.len().saturating_sub(1)]
+                    } else {
+                        args.as_slice()
+                    };
                     self.fmt_type(constructor, true, f)?;
-                    for arg in args.iter() {
+                    for arg in display_args.iter() {
                         write!(f, " ")?;
                         self.fmt_type(arg, true, f)?;
                     }
@@ -646,6 +651,16 @@ where
                 self.fmt_type(typ, parenthesize, f)
             }),
         }
+    }
+
+    fn is_trait_constructor(&self, constructor: &Type) -> bool {
+        if let Type::UserDefined(Origin::TopLevelDefinition(id)) = constructor.follow(self.bindings) {
+            let (item, _ctx) = GetItem(id.top_level_item).get(self.db);
+            if let cst::TopLevelItemKind::TypeDefinition(definition) = &item.kind {
+                return definition.is_trait;
+            }
+        }
+        false
     }
 
     fn fmt_type_origin(&self, origin: Origin, f: &mut std::fmt::Formatter) -> std::fmt::Result {

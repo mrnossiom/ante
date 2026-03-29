@@ -26,15 +26,16 @@ main () =
         with for_ print
 
 // args: -e ast-t
+// expected exit status: 1
 // expected stdout:
 // effect Emit a with
 //     (emit: (error)): fn a -> Unit
 // 
 // (iota: fn U32 -> Unit can _) ((n: U32)) =
 //     (recur: fn U32 [U32] -> Unit can _) (i: U32) [(n: U32)] =
-//         if (fn (p9: U32) (p10: U32) -> (<: fn U32 U32 {Cmp U32 NoClosureEnv} -> Bool pure) (p9: U32) (p10: U32) {(cmp_u32: Cmp U32 NoClosureEnv)}) (i: U32) (n: U32) then 
+//         if (fn (p9: U32) (p10: U32) -> (<: fn U32 U32 {Cmp U32} -> Bool pure) (p9: U32) (p10: U32) {(cmp_u32: Cmp U32)}) (i: U32) (n: U32) then 
 //             (emit: (error)) (i: U32)
-//             (recur: fn U32 [U32] -> Unit can _) ((fn (p11: U32) (p12: U32) -> (+: fn U32 U32 {Add U32 NoClosureEnv} -> U32 pure) (p11: U32) (p12: U32) {(add_u32: Add U32 NoClosureEnv)}) (i: U32) 1)
+//             (recur: fn U32 [U32] -> Unit can _) ((fn (p11: U32) (p12: U32) -> (+: fn U32 U32 {Add U32} -> U32 pure) (p11: U32) (p12: U32) {(add_u32: Add U32)}) (i: U32) 1)
 //     (recur: fn U32 [U32] -> Unit can _) 0
 // 
 // (filter: fn _ _ -> _ can _) (stream: _) (predicate: _) =

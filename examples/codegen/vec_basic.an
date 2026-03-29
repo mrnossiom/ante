@@ -26,7 +26,7 @@ main () =
 // examples/codegen/vec_basic.an:7:4	error: `push` not found in scope
 //     push (mut v) 4
 // 
-// examples/codegen/vec_basic.an:9:4	error: Multiple matching implicits found for type Print _ _ required by parameter 2: print_bool, print_char, print_i16, print_i32, print_i64, ..
+// examples/codegen/vec_basic.an:9:4	error: Multiple matching implicits found for type Print _ required by parameter 2: print_bool, print_char, print_i16, print_i32, print_i64, ..
 //     print v
 // 
 // Found 6 errors and 0 warnings

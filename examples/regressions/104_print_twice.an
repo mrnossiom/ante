@@ -24,7 +24,7 @@ print map
 // examples/regressions/104_print_twice.an:3:14	error: `Hash` not found in scope
 // impl hash_u8: Hash U8 with
 // 
-// examples/regressions/104_print_twice.an:4:13	error: Multiple matching implicits found for type Cast _ _ _ required by parameter 2: cast_char_i32, cast_char_u64, cast_f32_f64, cast_f32_i16, cast_f32_i32, ..
+// examples/regressions/104_print_twice.an:4:13	error: Multiple matching implicits found for type Cast _ _ required by parameter 2: cast_char_i32, cast_char_u64, cast_f32_f64, cast_f32_i16, cast_f32_i32, ..
 //     hash x = cast x
 // 
 // examples/regressions/104_print_twice.an:6:0	error: Expected a top-level item but found `var`

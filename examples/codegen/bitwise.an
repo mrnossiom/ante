@@ -10,25 +10,25 @@ main () =
 // args: --delete-binary
 // expected exit status: 1
 // expected stderr:
-// examples/codegen/bitwise.an:5:4	error: Multiple matching implicits found for type Print _ _ required by parameter 2: print_bool, print_char, print_i16, print_i32, print_i64, ..
+// examples/codegen/bitwise.an:5:4	error: Multiple matching implicits found for type Print _ required by parameter 2: print_bool, print_char, print_i16, print_i32, print_i64, ..
 //     print (band x y)
 // 
 // examples/codegen/bitwise.an:5:11	error: `band` not found in scope
 //     print (band x y)
 // 
-// examples/codegen/bitwise.an:6:4	error: Multiple matching implicits found for type Print _ _ required by parameter 2: print_bool, print_char, print_i16, print_i32, print_i64, ..
+// examples/codegen/bitwise.an:6:4	error: Multiple matching implicits found for type Print _ required by parameter 2: print_bool, print_char, print_i16, print_i32, print_i64, ..
 //     print (bor x y)
 // 
 // examples/codegen/bitwise.an:6:11	error: `bor` not found in scope
 //     print (bor x y)
 // 
-// examples/codegen/bitwise.an:7:4	error: Multiple matching implicits found for type Print _ _ required by parameter 2: print_bool, print_char, print_i16, print_i32, print_i64, ..
+// examples/codegen/bitwise.an:7:4	error: Multiple matching implicits found for type Print _ required by parameter 2: print_bool, print_char, print_i16, print_i32, print_i64, ..
 //     print (bxor x y)
 // 
 // examples/codegen/bitwise.an:7:11	error: `bxor` not found in scope
 //     print (bxor x y)
 // 
-// examples/codegen/bitwise.an:8:4	error: Multiple matching implicits found for type Print _ _ required by parameter 2: print_bool, print_char, print_i16, print_i32, print_i64, ..
+// examples/codegen/bitwise.an:8:4	error: Multiple matching implicits found for type Print _ required by parameter 2: print_bool, print_char, print_i16, print_i32, print_i64, ..
 //     print (bnot x)
 // 
 // examples/codegen/bitwise.an:8:11	error: `bnot` not found in scope

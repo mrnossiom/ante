@@ -29,7 +29,7 @@ main ()
 // examples/regressions/85_type_defaulting_rules.an:14:17	error: Expected an unindent but found `fn`
 //     count_down 3 fn x ->
 // 
-// examples/regressions/85_type_defaulting_rules.an:17:21	error: Multiple matching implicits found for type Print _ _ required by parameter 2: print_bool, print_char, print_i16, print_i32, print_i64, ..
+// examples/regressions/85_type_defaulting_rules.an:17:21	error: Multiple matching implicits found for type Print _ required by parameter 2: print_bool, print_char, print_i16, print_i32, print_i64, ..
 //     print_offset _ = print offset
 // 
 // examples/regressions/85_type_defaulting_rules.an:17:27	error: `offset` not found in scope

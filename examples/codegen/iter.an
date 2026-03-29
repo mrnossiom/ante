@@ -26,7 +26,7 @@ main () = my_iter 10 print
 // examples/codegen/iter.an:6:5	error: Expected 1 argument but found 3
 // impl countdown: MyIterable I32 I32 with
 // 
-// examples/codegen/iter.an:8:13	error: Multiple matching implicits found for type Cmp I32 _ required by parameter 3: cmp_i32, countdown
+// examples/codegen/iter.an:8:13	error: Multiple matching implicits found for type Cmp I32 required by parameter 3: cmp_i32, countdown
 //         if x <= 0 then None
 // 
 // examples/codegen/iter.an:8:23	error: `None` not found in scope
@@ -35,7 +35,7 @@ main () = my_iter 10 print
 // examples/codegen/iter.an:9:13	error: `Some` not found in scope
 //         else Some (x, x - 1)
 // 
-// examples/codegen/iter.an:9:24	error: Multiple matching implicits found for type Sub _ _ required by parameter 3: countdown, sub_f32, sub_f64, sub_i16, sub_i32, ..
+// examples/codegen/iter.an:9:24	error: Multiple matching implicits found for type Sub _ required by parameter 3: countdown, sub_f32, sub_f64, sub_i16, sub_i32, ..
 //         else Some (x, x - 1)
 // 
 // examples/codegen/iter.an:12:10	error: `mynext` not found in scope
@@ -47,7 +47,7 @@ main () = my_iter 10 print
 // examples/codegen/iter.an:14:6	error: `Some` not found in scope
 //     | Some (elem, rest) ->
 // 
-// examples/codegen/iter.an:18:21	error: Multiple matching implicits found for type Print _ _ required by parameter 2: countdown, print_bool, print_char, print_i16, print_i32, ..
+// examples/codegen/iter.an:18:21	error: Multiple matching implicits found for type Print _ required by parameter 2: countdown, print_bool, print_char, print_i16, print_i32, ..
 // main () = my_iter 10 print
 // 
 // Found 10 errors and 0 warnings

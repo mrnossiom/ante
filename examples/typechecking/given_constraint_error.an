@@ -3,8 +3,9 @@ impl print_impl {_: DoesNotExist a}: Print a with
     print _ = ()
 
 // args: -e ast-t
+// expected exit status: 1
 // expected stdout:
-// implicit (print_impl: fn {(error) a [env_0]} -> Print a ((error) a [env_0]) pure) {(_: (error) a [env_0])} : Print a (DoesNotExist a [env_0]) pure = Print a (DoesNotExist a [env_0]) with
+// implicit (print_impl: fn {(error) a [env_0]} -> Print a pure) {(_: (error) a [env_0])} : Print a (DoesNotExist a [env_0]) pure = Print a (DoesNotExist a [env_0]) with
 //     (print: fn a [(error) a [env_0]] -> Unit pure) = fn (_: a) -> ()
 
 // expected stderr:

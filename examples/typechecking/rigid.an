@@ -7,14 +7,15 @@ ex2: a -> b =
     fn x -> x
 
 // args: -e ast-t
+// expected exit status: 1
 // expected stdout:
-// (ex1: fn a -> b pure) ((x: a)) : b = (fn (p2: b) (p3: b) -> (+: fn b b {Add b _} [_] -> b pure) (p2: b) (p3: b) {(error)}) (x: a) 1_U32
+// (ex1: fn a -> b pure) ((x: a)) : b = (fn (p2: b) (p3: b) -> (+: fn b b {Add b} [_] -> b pure) (p2: b) (p3: b) {(error)}) (x: a) 1_U32
 
 // expected stderr:
 // examples/typechecking/rigid.an:2:16	error: Expected b but found a
 // ex1 (x: a): b = x + 1u32
 // 
-// examples/typechecking/rigid.an:2:18	error: No implicit found for type Add b _ required by parameter 3
+// examples/typechecking/rigid.an:2:18	error: No implicit found for type Add b required by parameter 3
 // ex1 (x: a): b = x + 1u32
 // 
 // examples/typechecking/rigid.an:2:20	error: Expected b but found U32

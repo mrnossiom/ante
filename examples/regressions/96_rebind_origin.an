@@ -14,7 +14,7 @@ twice 1u8 2u16
 // examples/regressions/96_rebind_origin.an:1:1	error: This program has no `main` function
 // 
 // 
-// examples/regressions/96_rebind_origin.an:3:4	error: Multiple matching implicits found for type Cast _ U64 _ required by parameter 2: cast_char_u64, cast_f32_u64, cast_f64_u64, cast_same, cast_u16_u64, ..
+// examples/regressions/96_rebind_origin.an:3:4	error: Multiple matching implicits found for type Cast _ U64 required by parameter 2: cast_char_u64, cast_f32_u64, cast_f64_u64, cast_same, cast_u16_u64, ..
 //     cast foo : U64
 // 
 // examples/regressions/96_rebind_origin.an:9:6	error: Expected `=` to begin the function body but found `1_U8`

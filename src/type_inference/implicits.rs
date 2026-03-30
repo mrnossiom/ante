@@ -8,18 +8,60 @@ use crate::{
     name_resolution::Origin,
     parser::{
         cst::{self, Name, Pattern},
-        ids::{ExprId, PatternId},
+        ids::{ExprId, NameId, PatternId},
     },
     type_inference::{
-        DelayedImplicit, Locateable, TypeChecker,
-        errors::TypeErrorKind,
-        types::{FunctionType, ParameterType, PrimitiveType, Type, TypeVariableId},
+        errors::TypeErrorKind, types::{FunctionType, ParameterType, PrimitiveType, Type, TypeVariableId}, Locateable, TypeChecker
     },
 };
 
 /// Any more than this arbitrary value and we stop looking for impls to populate the error
 /// message with and instead display `..`.
 const MULTIPLE_MATCHING_IMPLS_CUTOFF: usize = 5;
+
+#[derive(Default, Clone)]
+pub(super) struct ImplicitsContext {
+    /// Any implicits introduced in the current scope. To find all implicits in scope, it is
+    /// necessary to traverse all levels of `TypeChecker::implicits`, in addition to querying
+    /// implicits in global scope separately.
+    implicits_in_scope: Vec<NameId>,
+
+    /// Contains implicits for which we need to delay checking for a value for until the end of the
+    /// current item when more types are inferred. Without this, for example, we'd see `0i32 < 3`
+    /// and would fail searching for an implicit for `Cmp _` since we'd check `<` before its
+    /// arguments while its type is still unknown.
+    delayed_implicits: Vec<DelayedImplicit>,
+
+    /// Closure checks deferred for coercion wrapper lambdas. These are run after `delayed_implicits`
+    /// are resolved so that free-variable analysis sees the fully-resolved implicit arguments.
+    deferred_closure_checks: Vec<(ExprId, Type)>,
+
+    /// Any type variables created for integer literals for polymorphic integer types.
+    /// If not bound by the end of a scope they will be defaulted to I32.
+    /// This is a tuple of (the integer's value, the integer type variable, location to use for errors)
+    integer_type_variables: Vec<(u64, TypeVariableId, Location)>,
+}
+
+#[derive(Clone, Copy)]
+struct DelayedImplicit {
+    /// The [ExprId] which originally requested an implicit value.
+    /// This is often a trait function like `cast` or `+`
+    source: ExprId,
+
+    /// The destination to emplace the implicit value into
+    destination: ExprId,
+
+    /// The parameter index the implicit should slot into on the `self.source` expr.
+    /// Used in error messages.
+    parameter_index: usize,
+}
+
+impl ImplicitsContext {
+    pub(super) fn push_deferred_closure_check(&mut self, lambda: ExprId, environment: Type) {
+        self.deferred_closure_checks.push((lambda, environment))
+    }
+}
+
 
 impl<'local, 'inner> TypeChecker<'local, 'inner> {
     /// Perform an implicit parameter coercion.

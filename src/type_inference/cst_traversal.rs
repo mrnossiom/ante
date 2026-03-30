@@ -402,7 +402,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             // *enclosing* lambda's pop_implicits_scope. Defer the closure check to that scope
             // so free-variable analysis sees the resolved arguments rather than Expr::Error.
             if let Some(scope) = self.implicits.last_mut() {
-                scope.deferred_closure_checks.push((expr, function_type.environment.clone()));
+                scope.push_deferred_closure_check(expr, function_type.environment.clone());
             }
         } else {
             self.check_for_closure(expr, &function_type.environment, self_name);

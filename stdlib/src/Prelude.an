@@ -63,12 +63,12 @@ type Result t e =
    | Ok t
    | Error e
 
-impl eq_maybe {Eq e}: Eq (Maybe e) with
-    (==) l r =
-        match l, r
-        | Some lv, Some rv -> lv == rv
-        | None, None -> true
-        | _ -> false
+// impl eq_maybe {Eq e}: Eq (Maybe e) with
+//     (==) l r =
+//         match l, r
+//         | Some lv, Some rv -> lv == rv
+//         | None, None -> true
+//         | _ -> false
 
 first (a, _) = a
 second (_, b) = b
@@ -91,11 +91,11 @@ impl cast_ptr_usz: Cast (Ptr a) Usz with
 impl cast_usz_ptr: Cast Usz (Ptr a) with
     cast address = transmute address
 
-impl cast_maybe_string {Cast m String}: Cast (Maybe m) String with
-    cast maybe =
-        match maybe
-        | Some val -> "Some (" ++ cast val ++ ")"
-        | None -> "None"
+// impl cast_maybe_string {Cast m String}: Cast (Maybe m) String with
+//     cast maybe =
+//         match maybe
+//         | Some val -> "Some (" ++ cast val ++ ")"
+//         | None -> "None"
 
 // Begin wall of casts
 // TODO: Perhaps we should only expose infallible casts, forcing users to explicitly truncate otherwise
@@ -328,6 +328,8 @@ impl eq_f64: Eq F64 with (==) x y = intrinsic "EqFloat" x y
 impl eq_char: Eq Char with (==) (x: Char) (y: Char): Bool = intrinsic "EqInt" x y
 impl eq_bool: Eq Bool with (==) (x: Bool) (y: Bool): Bool = intrinsic "EqInt" x y
 
+impl eq_ptr: Eq (Ptr t) with (==) x y = (cast x: Usz) == (cast y : Usz)
+
 (==) = Eq.(==)
 (!=) (l: t) (r: t) {Eq t} = not (l == r)
 
@@ -531,16 +533,16 @@ deref (x: ref t): t =
 // 
 deref_ptr (p: Ptr t): t =
     deref (transmute p)
-// 
-// ptr_store (p: Ptr a) (value: a): Unit =
-//     addr: mut a = transmute p
-//     addr := value
-// 
-// array_insert (p: Ptr a) (index: Usz) (value: a): Unit =
-//     offset p index |> ptr_store value
-// 
-// ptr_to_ref: fn (Ptr a) -> mut a = transmute
-// 
+
+ptr_store (p: Ptr a) (value: a): Unit =
+    addr: mut a = transmute p
+    addr := value
+
+array_insert (p: Ptr a) (index: Usz) (value: a): Unit =
+    offset p index |> ptr_store value
+
+ptr_to_ref: fn (Ptr a) -> mut a = transmute
+
 trait Copy t with
     (.*): fn (ref t) -> t
 
@@ -561,6 +563,7 @@ impl copy_unit: Copy Unit with (.*) = deref
 impl copy_bool: Copy Bool with (.*) = deref
 impl copy_char: Copy Char with (.*) = deref
 
+impl copy_ptr: Copy (Ptr t) with (.*) = deref
 impl copy_ref: Copy (ref t) with (.*) = deref
 impl copy_mut: Copy (mut t) with (.*) = deref
 impl copy_imm: Copy (imm t) with (.*) = deref
@@ -762,37 +765,37 @@ impl print_bool: Print Bool with
 //         else Some (infile, next_line infile)
 // 
 
-String.len (s: ref String): U32 =
-    intrinsic "StringLen" s
+// string_len (s: ref String): U32 =
+//     intrinsic "StringLen" s
+// 
+// string_data (s: ref String): Ptr Char =
+//     intrinsic "StringData" s
+// 
+// string_from_parts (buffer: Ptr Char) (len: U32): String =
+//     intrinsic "StringFromParts" buffer len
 
-String.data (s: ref String): Ptr Char =
-    intrinsic "StringData" s
+// impl eq_string: Eq String with
+//     (==) l r =
+//         if string_len l != string_len r then
+//             false
+//         else
+//             memcmp (string_data l) (string_data r) (string_len l) == 0
 
-String.from_parts (buffer: Ptr Char) (len: U32): String =
-    intrinsic "StringFromParts" buffer len
-
-impl eq_string: Eq String with
-    (==) l r =
-        if l.len() != r.len() then
-            false
-        else
-            memcmp (l.data ()) (r.data ()) (l.len ()) == 0
-
-impl append_string: Append String with
-    (++) s1 s2 =
-        if s1.length == 0u32 then return s2
-        if s2.length == 0u32 then return s1
-
-        len = s1.length + s2.length
-        buf = malloc (cast len + 1usz)
-
-        memcpy buf (s1.c_string) (cast s1.length)
-
-        buf_offset = cast (cast buf + s1.length)
-
-        //copy terminating null too
-        memcpy buf_offset (s2.c_string) (cast s2.length + 1usz)
-        String.from_parts buf len
+// impl append_string: Append String with
+//     (++) s1 s2 =
+//         if s1.length == 0u32 then return s2
+//         if s2.length == 0u32 then return s1
+// 
+//         len = s1.length + s2.length
+//         buf = malloc (cast len + 1usz)
+// 
+//         memcpy buf (s1.c_string) (cast s1.length)
+// 
+//         buf_offset = cast (cast buf : Usz + s1.length)
+// 
+//         //copy terminating null too
+//         memcpy buf_offset (s2.c_string) (cast s2.length + 1usz)
+//         String.from_parts buf len
 
 panic (msg: t) {Print t} =
     print msg

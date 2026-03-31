@@ -54,9 +54,9 @@ pub fn visible_definitions_impl(context: &VisibleDefinitions, db: &DbHandle) -> 
         }
     }
 
-    // If this file is not in the Std, implicitly import the Prelude.
+    // If this file is not the Prelude, implicitly import the Prelude.
     // Skip any names that are imported elsewhere instead of erroring.
-    if context.0.crate_id != CrateId::STDLIB {
+    if context.0 != SourceFileId::prelude() {
         let prelude = ExportedDefinitions(SourceFileId::prelude()).get(db);
         for (exported_name, exported_id) in &prelude.definitions {
             visible.definitions.entry(exported_name.clone()).or_insert(*exported_id);

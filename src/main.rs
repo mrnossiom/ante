@@ -26,8 +26,8 @@
 use clap::{CommandFactory, Parser};
 use cli::{Cli, Completions};
 use colored::Colorize;
-use diagnostics::{Diagnostic, Position, Span};
-use incremental::{Db, ExportedDefinitions, GetCrateGraph, Parse, Resolve};
+use diagnostics::Diagnostic;
+use incremental::{Db, GetCrateGraph, Parse, Resolve};
 use name_resolution::namespace::{CrateId, LocalModuleId, SourceFileId};
 use std::{
     collections::BTreeSet,
@@ -38,10 +38,10 @@ use std::{
 
 use crate::{
     cli::EmitTarget,
-    codegen::llvm::{CodegenLlvmResult, codegen_llvm},
+    codegen::llvm::{codegen_llvm, CodegenLlvmResult},
     diagnostics::DiagnosticKind,
     files::{make_compiler, write_metadata},
-    incremental::{TargetPointerSize, TypeCheck},
+    incremental::{AllDiagnostics, TargetPointerSize, TypeCheck},
 };
 
 // All the compiler passes:
@@ -81,22 +81,22 @@ fn compile(args: Cli) {
     TargetPointerSize.set(&mut compiler, 8);
 
     let diagnostics = match args.emit {
-        _ if args.check => collect_all_diagnostics(&compiler),
+        _ if args.check => compiler.get(AllDiagnostics),
         Some(EmitTarget::Tokens) => {
             display_tokens(&compiler);
-            BTreeSet::new()
+            Arc::new(BTreeSet::new())
         },
-        Some(EmitTarget::Ast) => display_parse_tree(&compiler, args.emit_all),
-        Some(EmitTarget::AstR) => display_name_resolution(&compiler, args.emit_all),
-        Some(EmitTarget::AstT) => display_type_checking(&compiler, true, args.emit_all),
-        Some(EmitTarget::Mir) => display_mir(&compiler, args.emit_all),
-        Some(EmitTarget::MirMono) => display_mir_mono(&compiler),
+        Some(EmitTarget::Ast) => Arc::new(display_parse_tree(&compiler, args.emit_all)),
+        Some(EmitTarget::AstR) => Arc::new(display_name_resolution(&compiler, args.emit_all)),
+        Some(EmitTarget::AstT) => Arc::new(display_type_checking(&compiler, true, args.emit_all)),
+        Some(EmitTarget::Mir) => Arc::new(display_mir(&compiler, args.emit_all)),
+        Some(EmitTarget::MirMono) => Arc::new(display_mir_mono(&compiler)),
         Some(EmitTarget::Ir) => llvm_codegen_separate(&compiler, true).2,
         None => llvm_codegen_all(&compiler, &args.files, args.delete_binary),
     };
 
     let (error_count, _) = classify_diagnostics(&diagnostics);
-    display_diagnostics(diagnostics, &compiler);
+    display_diagnostics(&diagnostics, &compiler);
 
     if let Some(metadata_file) = metadata_file {
         if let Err(error) = write_metadata(&compiler, &metadata_file) {
@@ -123,7 +123,7 @@ fn classify_diagnostics(diagnostics: &BTreeSet<Diagnostic>) -> (usize, usize) {
     (error_count, warning_count)
 }
 
-fn display_diagnostics(diagnostics: BTreeSet<Diagnostic>, compiler: &Db) {
+fn display_diagnostics(diagnostics: &BTreeSet<Diagnostic>, compiler: &Db) {
     let (error_count, warning_count) = classify_diagnostics(&diagnostics);
     for diganostic in diagnostics {
         eprintln!("{}", diganostic.display(true, &compiler));
@@ -146,38 +146,6 @@ fn display_diagnostics(diagnostics: BTreeSet<Diagnostic>, compiler: &Db) {
         let warnings = format!("{warning_count} warning{warning_s}");
         eprintln!("Compiled with {}", warnings.yellow());
     }
-}
-
-/// Check the entire program, collecting all diagnostics
-fn collect_all_diagnostics(compiler: &Db) -> BTreeSet<Diagnostic> {
-    let crates = GetCrateGraph.get(compiler);
-    let mut diagnostics = BTreeSet::new();
-
-    for crate_ in crates.values() {
-        for file in crate_.source_files.values() {
-            let parse = Parse(*file).get(compiler);
-
-            for item in &parse.cst.top_level_items {
-                let more_diagnostics = compiler.get_accumulated(TypeCheck(item.id));
-                diagnostics.extend(more_diagnostics);
-            }
-        }
-    }
-
-    let local_crate = &crates[&CrateId::LOCAL];
-    let has_main = local_crate.source_files.values().any(|file| {
-        ExportedDefinitions(*file).get(compiler).definitions.keys().any(|k| k.as_str() == "main")
-    });
-
-    if !has_main {
-        if let Some(first_file) = local_crate.source_files.values().next() {
-            let position = Position::start();
-            let location = Span { start: position, end: position }.in_file(*first_file);
-            diagnostics.insert(Diagnostic::NoMainFunction { location });
-        }
-    }
-
-    diagnostics
 }
 
 fn display_tokens(compiler: &Db) {
@@ -299,8 +267,8 @@ fn display_mir_mono(compiler: &Db) -> BTreeSet<Diagnostic> {
 
 /// Codegen each item as a separate llvm module
 /// Returns (module strings, true if there are any errors, diagnostics)
-fn llvm_codegen_separate(compiler: &Db, display_ir: bool) -> (Vec<Arc<Vec<u8>>>, bool, BTreeSet<Diagnostic>) {
-    let diagnostics = collect_all_diagnostics(compiler);
+fn llvm_codegen_separate(compiler: &Db, display_ir: bool) -> (Vec<Arc<Vec<u8>>>, bool, Arc<BTreeSet<Diagnostic>>) {
+    let diagnostics = AllDiagnostics.get(compiler);
     let (errors, _) = classify_diagnostics(&diagnostics);
     if errors != 0 {
         return (Vec::new(), true, diagnostics);
@@ -328,7 +296,7 @@ fn display_llvm_bitcode(result: &CodegenLlvmResult, module_name: &str) {
 }
 
 /// Codegen everything, linking together each separate llvm module
-fn llvm_codegen_all(compiler: &Db, files: &[PathBuf], delete_binary: bool) -> BTreeSet<Diagnostic> {
+fn llvm_codegen_all(compiler: &Db, files: &[PathBuf], delete_binary: bool) -> Arc<BTreeSet<Diagnostic>> {
     let (mut modules, has_errors, diagnostics) = llvm_codegen_separate(compiler, false);
     if has_errors {
         return diagnostics;

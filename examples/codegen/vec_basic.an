@@ -1,4 +1,4 @@
-import Vec.empty push
+import Std.Vec.empty, push
 
 main () =
     var v = empty ()

@@ -4,11 +4,7 @@ use colored::{ColoredString, Colorize};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    incremental::Db,
-    iterator_extensions::mapvec,
-    lexer::token::{IntegerKind, Token},
-    parser::cst::Name,
-    type_inference::{errors::TypeErrorKind, kinds::Kind},
+    incremental::{AllDiagnostics, Db, DbHandle, ExportedDefinitions, GetCrateGraph, Parse, TypeCheck}, iterator_extensions::mapvec, lexer::token::{IntegerKind, Token}, name_resolution::namespace::CrateId, parser::cst::Name, type_inference::{errors::TypeErrorKind, kinds::Kind}
 };
 
 mod location;
@@ -468,7 +464,7 @@ impl Diagnostic {
         }
     }
 
-    pub fn display(self, show_color: bool, compiler: &Db) -> DiagnosticDisplay {
+    pub fn display<'a>(&'a self, show_color: bool, compiler: &'a Db) -> DiagnosticDisplay {
         DiagnosticDisplay { diagnostic: self, compiler, show_color }
     }
 
@@ -549,7 +545,7 @@ fn os_agnostic_display_path(path: &std::path::Path, show_color: bool) -> Colored
 }
 
 pub struct DiagnosticDisplay<'a> {
-    diagnostic: Diagnostic,
+    diagnostic: &'a Diagnostic,
     compiler: &'a Db,
     show_color: bool,
 }
@@ -558,4 +554,36 @@ impl std::fmt::Display for DiagnosticDisplay<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         self.diagnostic.format(f, self.show_color, self.compiler)
     }
+}
+
+/// Check the entire program, collecting all diagnostics
+pub(crate) fn collect_all_diagnostics(_: &AllDiagnostics, compiler: &DbHandle) -> Arc<BTreeSet<Diagnostic>> {
+    let crates = GetCrateGraph.get(compiler);
+    let mut diagnostics = BTreeSet::new();
+
+    for crate_ in crates.values() {
+        for file in crate_.source_files.values() {
+            let parse = Parse(*file).get(compiler);
+
+            for item in &parse.cst.top_level_items {
+                let more_diagnostics = compiler.get_accumulated(TypeCheck(item.id));
+                diagnostics.extend(more_diagnostics);
+            }
+        }
+    }
+
+    let local_crate = &crates[&CrateId::LOCAL];
+    let has_main = local_crate.source_files.values().any(|file| {
+        ExportedDefinitions(*file).get(compiler).definitions.keys().any(|k| k.as_str() == "main")
+    });
+
+    if !has_main {
+        if let Some(first_file) = local_crate.source_files.values().next() {
+            let position = Position::start();
+            let location = Span { start: position, end: position }.in_file(*first_file);
+            diagnostics.insert(Diagnostic::NoMainFunction { location });
+        }
+    }
+
+    Arc::new(diagnostics)
 }

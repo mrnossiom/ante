@@ -1,4 +1,4 @@
-use std::{cell::Cell, collections::BTreeMap, path::PathBuf, sync::Arc};
+use std::{cell::Cell, collections::{BTreeMap, BTreeSet}, path::PathBuf, sync::Arc};
 
 use inc_complete::{
     DebugWithDb, Storage,
@@ -10,23 +10,16 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     definition_collection,
-    diagnostics::{Diagnostic, Location},
+    diagnostics::{collect_all_diagnostics, Diagnostic, Location},
     find_files::CrateGraph,
     name_resolution::{
-        self, ResolutionResult,
-        namespace::{CrateId, SourceFileId},
+        self, namespace::{CrateId, SourceFileId}, ResolutionResult
     },
     parser::{
-        self, ParseResult,
-        context::TopLevelContext,
-        cst::TopLevelItem,
-        get_item,
-        ids::{TopLevelId, TopLevelName},
+        self, context::TopLevelContext, cst::TopLevelItem, get_item, ids::{TopLevelId, TopLevelName}, ParseResult
     },
     type_inference::{
-        self, TypeCheckSCCResult,
-        dependency_graph::{SCC, TypeCheckDependencyGraphResult, TypeCheckResult},
-        kinds::Kind,
+        self, dependency_graph::{TypeCheckDependencyGraphResult, TypeCheckResult, SCC}, kinds::Kind, TypeCheckSCCResult
     },
 };
 
@@ -71,6 +64,7 @@ pub struct DbStorage {
     type_checks: HashMapStorage<TypeCheck>,
     type_dependency_graph: SingletonStorage<TypeCheckDependencyGraph>,
     get_type_check_sccs: HashMapStorage<GetTypeCheckSCC>,
+    all_diagnostics: SingletonStorage<AllDiagnostics>,
 
     #[inc_complete(accumulate)]
     diagnostics: Accumulator<Diagnostic>,
@@ -375,3 +369,9 @@ define_intermediate!(1700, assume_changed TypeCheckDependencyGraph -> Arc<TypeCh
 #[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GetTypeCheckSCC(pub TopLevelId);
 define_intermediate!(1800, GetTypeCheckSCC -> SCC, DbStorage, type_inference::dependency_graph::get_type_check_scc_impl);
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// Checks the entire program and returns any diagnostics found from all crates
+#[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AllDiagnostics;
+define_intermediate!(1900, AllDiagnostics -> Arc<BTreeSet<Diagnostic>>, DbStorage, collect_all_diagnostics);

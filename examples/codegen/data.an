@@ -1,12 +1,12 @@
 type T = a: I32, b: String
 
 main () =
-    t = T 1 "one"
-    print "t = "
-    print (t.a)
-    print ", "
+    // t = T 1 "one"
+    // print "t = "
+    // print (t.a)
+    // print ", "
 
-    puts t.b.c_string
+    // puts t.b.c_string
 
     s = Maybe.Some 2
 

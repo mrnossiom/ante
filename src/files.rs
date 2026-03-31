@@ -1,5 +1,5 @@
 use std::{
-    fs::File,
+    fs::{File, OpenOptions},
     io::{Read, Write},
     path::{Path, PathBuf},
 };
@@ -47,8 +47,12 @@ pub fn write_metadata(compiler: &Db, metadata_file: &Path) -> Result<(), String>
 }
 
 pub(crate) fn read_file(file_name: &std::path::Path) -> Result<String, String> {
-    let mut file =
-        File::open(file_name).map_err(|error| format!("Failed to open `{}`:\n{error}", file_name.display()))?;
+    let mut file = OpenOptions::new()
+        .create(true)
+        .read(true)
+        .write(true)
+        .open(file_name)
+        .map_err(|error| format!("Failed to open `{}`:\n{error}", file_name.display()))?;
 
     let mut text = String::new();
     file.read_to_string(&mut text)

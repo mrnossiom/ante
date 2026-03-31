@@ -1,9 +1,8 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 
 use ante::incremental::Db;
 
 use dashmap::DashMap;
-use futures::future::join_all;
 use ropey::Rope;
 use tokio::sync::RwLock;
 use tower_lsp::{
@@ -18,7 +17,7 @@ mod hover;
 mod util;
 
 use definition::definition_at;
-use diagnostics::{collect_lsp_diagnostics, init_db, rope_for_file, set_file_content};
+use diagnostics::rope_for_file;
 use hover::hover_at;
 use util::{byte_range_to_lsp_range, lsp_range_to_rope_range, position_to_byte_offset};
 
@@ -176,39 +175,6 @@ impl LanguageServer for Backend {
         };
 
         Ok(Some(GotoDefinitionResponse::Scalar(lsp_location)))
-    }
-}
-
-// ── Compiler interaction ──────────────────────────────────────────────────────
-
-impl Backend {
-    /// Update the compiler database with the latest in-memory file content, then
-    /// collect and publish diagnostics for the local crate.
-    async fn update_diagnostics(&self, uri: Url, rope: &Rope) {
-        let path = match uri.to_file_path() {
-            Ok(p) => p,
-            Err(_) => {
-                self.client.log_message(MessageType::ERROR, format!("Failed to convert URI to path: {uri}")).await;
-                return;
-            },
-        };
-
-        // Write phase: initialize once, then update the changed file's content.
-        {
-            let mut compiler = self.compiler.write().await;
-            if !self.db_initialized.swap(true, Ordering::SeqCst) {
-                init_db(&mut compiler, &path);
-            }
-            set_file_content(&mut compiler, &path, rope);
-        }
-
-        // Read phase: collect diagnostics without blocking writers unnecessarily.
-        let lsp_diagnostics = {
-            let compiler = self.compiler.read().await;
-            collect_lsp_diagnostics(&compiler, &uri, rope, &self.document_map)
-        };
-
-        join_all(lsp_diagnostics.into_iter().map(|(u, d)| self.client.publish_diagnostics(u, d, None))).await;
     }
 }
 

@@ -251,8 +251,15 @@ impl<'contents> Lexer<'contents> {
                 Err(lexer_error) => Some((lexer_error, location)),
             }
         } else {
-            let integer = integer_string.parse().unwrap();
             let location = self.locate();
+            let integer = match integer_string.parse() {
+                Ok(int) => int,
+                Err(_) => {
+                    let error = Token::Error(LexerError::FailedToParseNumber { integer_string });
+                    return Some((error, location))
+                },
+            };
+
             match self.lex_integer_suffix() {
                 Ok(suffix) => Some((Token::IntegerLiteral(integer, suffix), location)),
                 Err(lexer_error) => Some((lexer_error, location)),

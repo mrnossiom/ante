@@ -13,6 +13,7 @@ use std::{
     sync::Arc,
 };
 
+use colored::Colorize;
 use serde::{Deserialize, Serialize};
 
 /// This constant is meant to match the "name" of the index operator when used as an identifier in
@@ -25,7 +26,7 @@ pub(crate) const INDEX_OPERATOR_FUNCTION_NAME: &str = ".[";
 /// when it finds these tokens but in the future it may be able
 /// to issue the error then continue on to output as many errors
 /// as possible.
-#[derive(Debug, PartialEq, Eq, Copy, Clone, Serialize, Deserialize, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize, Hash)]
 pub enum LexerError {
     InvalidCharacterInSignificantWhitespace(char), // Only spaces are allowed in significant whitespace
     InvalidEscapeSequence(char),
@@ -37,6 +38,7 @@ pub enum LexerError {
     UnknownChar(char),
     MismatchedBracketInQuote { expected: ClosingBracket },
     QuoteWithEndBracketAndNoStart { unexpected: ClosingBracket },
+    FailedToParseNumber { integer_string: String },
 }
 
 /// Each Token::IntegerLiteral and Ast::LiteralKind::Integer has
@@ -329,6 +331,9 @@ impl Display for LexerError {
             QuoteWithEndBracketAndNoStart { unexpected } => {
                 write!(f, "Cannot quote a lone {unexpected}, all brackets and indentation must be matched")
             },
+            FailedToParseNumber { integer_string } => {
+                write!(f, "Integer is too large: {}", integer_string.purple())
+            }
         }
     }
 }

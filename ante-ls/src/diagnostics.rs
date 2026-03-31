@@ -6,7 +6,8 @@ use std::{
 use ante::{
     diagnostics::{Diagnostic as AnteDiagnostic, DiagnosticKind},
     find_files,
-    incremental::{AllDiagnostics, Db, SourceFile, TargetPointerSize},
+    incremental::{AllDiagnostics, Db, GetCrateGraph, SourceFile, TargetPointerSize},
+    name_resolution::namespace::CrateId,
 };
 
 use dashmap::DashMap;
@@ -25,7 +26,13 @@ pub fn init_db(db: &mut Db, starting_file: &std::path::Path) {
 /// Incrementally update a single file's content. inc-complete invalidates only
 /// the cached queries that depend on this input.
 pub fn set_file_content(db: &mut Db, path: &std::path::Path, rope: &Rope) {
-    let file_id = ante::name_resolution::namespace::SourceFileId::new_in_local_crate(path);
+    // The SourceFileId hash must use the same (relative) path that populate_crates_and_files
+    // used when it registered the file. URIs from the LSP client carry absolute paths, so we
+    // strip the cwd prefix here to match. The absolute path is still kept inside SourceFile so
+    // that Url::from_file_path works correctly when converting diagnostics.
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let normalized = path.strip_prefix(&cwd).unwrap_or(path);
+    let file_id = ante::name_resolution::namespace::SourceFileId::new_in_local_crate(normalized);
     file_id.set(db, Arc::new(SourceFile::new(Arc::new(path.to_path_buf()), rope.to_string())));
 }
 
@@ -69,6 +76,18 @@ pub fn collect_lsp_diagnostics(
 ) -> HashMap<Url, Vec<Diagnostic>> {
     let diagnostics = AllDiagnostics.get(compiler);
     let mut url_to_diagnostics = HashMap::<_, Vec<_>>::default();
+
+    // Pre-populate with empty lists so that files whose errors were all fixed
+    // get a publishDiagnostics call that clears the stale squiggles.
+    let crates = GetCrateGraph.get(compiler);
+    if let Some(local_crate) = crates.get(&CrateId::LOCAL) {
+        for file_id in local_crate.source_files.values() {
+            let source_file = file_id.get(compiler);
+            if let Ok(uri) = Url::from_file_path(source_file.path.as_ref()) {
+                url_to_diagnostics.entry(uri).or_default();
+            }
+        }
+    }
 
     for diagnostic in diagnostics.iter() {
         if let Some((uri, lsp_diag)) = to_lsp_diagnostic(diagnostic, compiler, current_uri, current_rope, document_map)

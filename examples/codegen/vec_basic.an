@@ -2,10 +2,8 @@ import Std.Vec.empty, push
 
 main () =
     var v = empty ()
-
     push (mut v) 3i32
     push (mut v) 4
-
     print v
 
 // args: --delete-binary

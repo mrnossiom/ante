@@ -8,6 +8,8 @@
 extern
     // varargs is not supported by the cranelift backend
     // printf: Ptr Char - ... -> Unit
+    // TODO: These functions use absolute sized types like I32
+    //       which are not exact standins for C's integer types.
     puts: fn (Ptr Char) -> I32
     putchar: fn Char -> Unit
     getchar: fn Unit -> I32
@@ -17,6 +19,7 @@ extern
     realloc: fn (Ptr a) Usz -> Ptr a
     free: fn (Ptr a) -> Unit
     memcpy: fn (Ptr a) (Ptr b) Usz -> Ptr a
+    memcmp: fn (Ptr a) (Ptr b) Usz -> I32
     system: fn (Ptr Char) -> I32
     strlen: fn (Ptr Char) -> Usz
 
@@ -60,19 +63,19 @@ type Result t e =
    | Ok t
    | Error e
 
-// impl eq_maybe {Eq e}: Eq (Maybe e) with
-//     (==) l r =
-//         match l, r
-//         | Some lv, Some rv -> lv == rv
-//         | None, None -> true
-//         | _ -> false
-// 
-// first (a, _) = a
-// second (_, b) = b
-// third (_, _, c) = c
-// fourth (_, _, _, d) = d
-// fifth (_, _, _, _, e) = e
-// 
+impl eq_maybe {Eq e}: Eq (Maybe e) with
+    (==) l r =
+        match l, r
+        | Some lv, Some rv -> lv == rv
+        | None, None -> true
+        | _ -> false
+
+first (a, _) = a
+second (_, b) = b
+third (_, _, c) = c
+fourth (_, _, _, d) = d
+fifth (_, _, _, _, e) = e
+
 /// A type conversion from a to b
 trait Cast a b with
     cast: fn a -> b
@@ -88,11 +91,11 @@ impl cast_ptr_usz: Cast (Ptr a) Usz with
 impl cast_usz_ptr: Cast Usz (Ptr a) with
     cast address = transmute address
 
-// impl cast_maybe_string {Cast m String}: Cast (Maybe m) String with
-//     cast maybe =
-//         match maybe
-//         | Some val -> "Some (" ++ cast val ++ ")"
-//         | None -> "None"
+impl cast_maybe_string {Cast m String}: Cast (Maybe m) String with
+    cast maybe =
+        match maybe
+        | Some val -> "Some (" ++ cast val ++ ")"
+        | None -> "None"
 
 // Begin wall of casts
 // TODO: Perhaps we should only expose infallible casts, forcing users to explicitly truncate otherwise
@@ -302,6 +305,12 @@ impl mod_u64: Mod U64 with (%) x y = intrinsic "ModUnsigned" x y
 impl mod_usz: Mod Usz with (%) x y = intrinsic "ModUnsigned" x y
 // Cranelift backend does not support floating-point remainder or modulus
 
+
+// TODO: We do not have an integer-generic 0 value to use here
+(%%) (a: t) (b: t) {Mod t} {Eq t} {Cast U8 t} =
+    a % b == cast 0u8
+
+
 trait Eq t with (==): fn t t -> Bool
 impl eq_i8: Eq I8 with (==) x y = intrinsic "EqInt" x y
 impl eq_i16: Eq I16 with (==) x y = intrinsic "EqInt" x y
@@ -321,7 +330,17 @@ impl eq_bool: Eq Bool with (==) (x: Bool) (y: Bool): Bool = intrinsic "EqInt" x 
 
 (==) = Eq.(==)
 (!=) (l: t) (r: t) {Eq t} = not (l == r)
-(not) a = if a then false else true
+
+trait Not t with
+    (not): fn t -> t
+
+(not) = Not.(not)
+
+impl not_bool: Not Bool with
+    (not) b = if b then false else true
+
+impl not_i32: Not I32 with
+    (not) x = intrinsic "BitwiseNot" x
 
 trait Cmp a with
     (<): fn a a -> Bool
@@ -467,40 +486,37 @@ trait Append a with
 (|>) x f = f x
 (<|) f x = f x
 
-// trait Extract collection index -> elem with
-//     (.[): fn collection index -> elem
-// 
-// impl extract_ptr_usz: Extract (Ptr t) Usz t with
-//     (.[) ptr index = deref_ptr <| offset ptr index
-// 
-// 
-// // Bitwise functions
-// // TODO: Move these to separate module
-// //       Currently this is prevented by the use of 'intrinsic'
-// //       which is limited to the prelude.
-// 
-// // Should these be traits instead?
-// band (x: Int a) (y: Int a): Int a =
-//     intrinsic "BitwiseAnd" x y
-// 
-// bor (x: Int a) (y: Int a): Int a =
-//     intrinsic "BitwiseOr" x y
-// 
-// bxor (x: Int a) (y: Int a): Int a =
-//     intrinsic "BitwiseXor" x y
-// 
-// bnot (x: Int a): Int a =
-//     intrinsic "BitwiseNot" x
-// 
-// 
-// type Type t = | MkType
-// 
-// size_of (v: Type t): Usz = intrinsic "SizeOf" v
-// 
-// offset (ptr: Ptr t) (index: Usz): Ptr t =
-//     addr: Usz = transmute ptr
-//     new_addr = addr + index * size_of (MkType: Type t)
-//     transmute new_addr
+trait Extract collection index elem with
+    (.[): fn collection index -> elem
+
+impl extract_ptr_usz: Extract (Ptr t) Usz t with
+    (.[) ptr index = deref_ptr <| offset ptr index
+
+
+// Bitwise functions
+// TODO: Move these to separate module
+//       Currently this is prevented by the use of 'intrinsic'
+//       which is limited to the prelude.
+
+trait Bitwise t with
+    band: fn t t -> t
+    bor: fn t t -> t
+    bxor: fn t t -> t
+
+impl bitwise_i32: Bitwise I32 with
+    band x y = intrinsic "BitwiseAnd" x y
+    bxor x y = intrinsic "BitwiseXor" x y
+    bor x y = intrinsic "BitwiseOr" x y
+
+
+type Type t = | MkType
+
+size_of (v: Type t): Usz = intrinsic "SizeOf" v
+
+offset (ptr: Ptr t) (index: Usz): Ptr t =
+    addr: Usz = transmute ptr
+    new_addr = addr + index * size_of (MkType: Type t)
+    transmute new_addr
 
 offset_bytes (ptr: Ptr t) (index: Usz): Ptr t =
     addr: Usz = transmute ptr
@@ -745,35 +761,38 @@ impl print_bool: Print Bool with
 //         then None
 //         else Some (infile, next_line infile)
 // 
-// // TODO: manually construct a String from parts
-// // impl Cast (ref Char) String with
-// //     cast c_string = String c_string (cast (strlen c_string))
-// 
-// // impl Eq String
-// //     (==) l r =
-// //         if l.len != r.len then
-// //             return false
-// //
-// //         for i in 0 .. l.len do
-// //             if l.c_string#i != r.c_string#i then
-// //                 return false
-// //         true
 
-// impl append_string: Append String with
-//     (++) s1 s2 =
-//         if s1.length == 0u32 then return s2
-//         if s2.length == 0u32 then return s1
-// 
-//         len = s1.length + s2.length
-//         buf = malloc (cast len + 1usz)
-// 
-//         memcpy buf (s1.c_string) (cast s1.length)
-// 
-//         buf_offset = cast (cast buf + s1.length)
-// 
-//         //copy terminating null too
-//         memcpy buf_offset (s2.c_string) (cast s2.length + 1usz)
-//         String buf len
+String.len (s: ref String): U32 =
+    intrinsic "StringLen" s
+
+String.data (s: ref String): Ptr Char =
+    intrinsic "StringData" s
+
+String.from_parts (buffer: Ptr Char) (len: U32): String =
+    intrinsic "StringFromParts" buffer len
+
+impl eq_string: Eq String with
+    (==) l r =
+        if l.len() != r.len() then
+            false
+        else
+            memcmp (l.data ()) (r.data ()) (l.len ()) == 0
+
+impl append_string: Append String with
+    (++) s1 s2 =
+        if s1.length == 0u32 then return s2
+        if s2.length == 0u32 then return s1
+
+        len = s1.length + s2.length
+        buf = malloc (cast len + 1usz)
+
+        memcpy buf (s1.c_string) (cast s1.length)
+
+        buf_offset = cast (cast buf + s1.length)
+
+        //copy terminating null too
+        memcpy buf_offset (s2.c_string) (cast s2.length + 1usz)
+        String.from_parts buf len
 
 panic (msg: t) {Print t} =
     print msg
@@ -835,7 +854,7 @@ panic (msg: t) {Print t} =
 //         c = getchar ()
 //         c_char = cast c : Char
 // 
-//         buffer2 = if len % 32 == 0
+//         buffer2 = if len %% 32
 //             then realloc buffer (len + 32)
 //             else buffer
 // 

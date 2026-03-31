@@ -1,3 +1,5 @@
+import Std.Prelude.null, (==), size_of, Print, print
+
 type Vec t =
     data: Ptr t
     len: Usz
@@ -5,22 +7,13 @@ type Vec t =
 
 empty () = Vec (null ()) 0 0
 
-of iterable =
-    var v = empty ()
-    fill (mut v) iterable
-    v
+is_empty (v: ref Vec a) = v.len.* == 0
 
-is_empty v = v.len == 0
+indices (v: ref Vec a) = Range 0 v.len
 
-indices (v: Vec a) = Range 0 v.len
+len (v: ref Vec a) = v.len
 
-len v = v.len
-
-capacity v = v.cap
-
-//Fill Vec with items from the iterable
-fill (v: mut Vec t) iterable : Unit =
-    iter iterable (push v _)
+capacity (v: ref Vec a) = v.cap
 
 //reserve numElements in Vec v, elements will be uninitialized
 reserve (v: mut Vec t) (numElems: Usz) : Unit =
@@ -91,27 +84,27 @@ remove_indices (v: mut Vec t) (idxs: Vec Usz) : Unit =
         if cur < 0 or cur >= v.len then
             panic "Vec.remove: index $cur out of bounds for Vec of length ${v.len}"
 
-        moved := @moved + 1
+        moved := moved + 1
         if i != idxs.len - 1 then
             nxt = idxs.data.[i + 1]
             iter_range (cur + 1) nxt fn j ->
-                array_insert v.data (j - @moved) (v.data.[j])
+                array_insert v.data (j - moved) (v.data.[j])
         else
             iter_range (cur + 1) v.len fn j ->
-                array_insert v.data (j - @moved) (v.data.[j])
+                array_insert v.data (j - moved) (v.data.[j])
 
-    v.len := v.len - @moved
+    v.len := v.len - moved
 
 //remove all matching elements from the vector and
 //return the number of elements removed.
 //Uses = to determine element equality.
 remove_all (v: mut Vec t) (elem: t) : Usz =
     var idxs = empty ()
-    iter (indices @v) fn i ->
+    iter (indices v) fn i ->
         if elem == v.data.[i] then
             push idxs i
 
-    remove_indices v @idxs
+    remove_indices v (ref idxs)
     idxs.len
 
 
@@ -119,7 +112,7 @@ remove_all (v: mut Vec t) (elem: t) : Usz =
 //Returns true if a swap was performed or false otherwise.
 //Will not swap if the given index is the index of the last element.
 swap_last (v: mut Vec t) (idx: Usz) : Bool =
-    if idx >= v.len or idx + 1 == v.len then false
+    if idx >= v.len.* or idx + 1 == v.len.* then false
     else
         v.len := v.len - 1
         array_insert v.data idx (v.data.[v.len])
@@ -141,18 +134,18 @@ swap_last (v: mut Vec t) (idx: Usz) : Bool =
 // 
 // 
 impl print_vec {Print t}: Print (Vec t) with
-    printne v =
-        printne "["
+    print v =
+        print "["
         print_helper v 0
-        printne "]"
+        print "]"
 
 print_helper (v: Vec q) (i: Usz) : Unit =
     if i < v.len then
         // TODO: This fails to find the correct impl without
         // this type annotation
-        printne ((v.data.[i]) : q)
+        print ((v.data.[i]) : q)
         if i + 1 != v.len then
-            printne ", "
+            print ", "
 
         print_helper v (i + 1)
 

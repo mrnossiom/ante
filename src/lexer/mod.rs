@@ -230,6 +230,7 @@ impl<'contents> Lexer<'contents> {
 
         let word = &self.file_contents[start..self.current_position.byte_index];
         match word {
+            "f" => Ok(Some(FloatKind::F32)),
             "f32" => Ok(Some(FloatKind::F32)),
             "f64" => Ok(Some(FloatKind::F64)),
             "" => Ok(None),
@@ -589,6 +590,7 @@ impl<'contents> Iterator for Lexer<'contents> {
             ('(', ')') => self.advance2_with(Token::UnitLiteral),
             ('<', '=') => self.advance2_with(Token::LessThanOrEqual),
             ('>', '=') => self.advance2_with(Token::GreaterThanOrEqual),
+            ('%', '%') => self.advance2_with(Token::Divides),
             ('%', _) => self.advance_with(Token::Modulus),
             ('*', _) => self.advance_with(Token::Multiply),
             ('(', _) => {

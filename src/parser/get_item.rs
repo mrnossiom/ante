@@ -247,8 +247,10 @@ fn desugar_expression(expr: ExprId, context: &mut TopLevelContext) {
                 desugar_expression(arg.expr, context);
             }
             desugar_call_wildcards(&call, expr, context);
-            desugar_pipeline(&call, expr, context);
-            desugar_logical_operators(&call, expr, context);
+
+            if let Some(desugar) = classify_call(&call, context) {
+                desugar.apply(&call, expr, context);
+            }
         },
         Expr::If(if_) => {
             let if_ = if_.clone();
@@ -390,30 +392,53 @@ fn desugar_call_wildcards(call: &cst::Call, expr: ExprId, context: &mut TopLevel
     context.exprs[expr] = Expr::Lambda(Lambda { parameters, return_type: None, effects: None, body: new_call_id });
 }
 
+enum CallDesugar {
+    /// true = `|>`, false = `<|`
+    Pipe { pipe_right: bool },
+
+    /// true = `and`, false = `or`
+    LogicalOperator { is_or: bool },
+}
+
+/// Returns the desugaring to perform on this call, or `None` if there is nothing to do.
+fn classify_call(call: &cst::Call, context: &TopLevelContext) -> Option<CallDesugar> {
+    if let Expr::Variable(path_id) = &context.exprs[call.function] {
+        let path = &context.paths[*path_id];
+        // All desugarings apply to operators with 2 arguments currently
+        if path.components.len() > 1 || call.arguments.len() != 2 {
+            return None;
+        }
+
+        match path.last_ident() {
+            "|>" => Some(CallDesugar::Pipe { pipe_right: true }),
+            "<|" => Some(CallDesugar::Pipe { pipe_right: false }),
+            "or" => Some(CallDesugar::LogicalOperator { is_or: true }),
+            "and" => Some(CallDesugar::LogicalOperator { is_or: false }),
+            _ => None,
+        }
+    } else {
+        None
+    }
+}
+
+impl CallDesugar {
+    /// Apply the desugaring, mutating the TopLevelContext with new expressions
+    fn apply(self, call: &cst::Call, expr: ExprId, context: &mut TopLevelContext) {
+        match self {
+            Self::Pipe { pipe_right } => desugar_pipeline(call, expr, context, pipe_right),
+            Self::LogicalOperator { is_or } => desugar_logical_operators(call, expr, context, is_or),
+        }
+    }
+}
+
 /// Desugars `x |> foo a b` into `foo x a b` and `foo a b <| x` into `foo x a b`
 ///
 /// Although `|>` and `<|` always slot into the first argument, this can be combined with
 /// explicit currying via `_` to slot into the underscore's position:
 /// `x |> foo a _ b` => `x |> (fn _1 -> foo a _1 b)` => `(fn _1 -> foo a _1 b) x`
-fn desugar_pipeline(call: &cst::Call, expr: ExprId, context: &mut TopLevelContext) {
+fn desugar_pipeline(call: &cst::Call, expr: ExprId, context: &mut TopLevelContext, is_pipe_right: bool) {
     // TODO: This check bypasses name resolution of these operators. If the user shadows
     // the prelude's definitions of the pipeline operators they'll still get this behavior.
-    let (is_pipe_right, is_pipe_left) = if let Expr::Variable(path_id) = &context.exprs[call.function] {
-        let name = context.paths[*path_id].last_ident();
-        (name == "|>", name == "<|")
-    } else {
-        return;
-    };
-
-    if !is_pipe_right && !is_pipe_left {
-        return;
-    }
-
-    // Parse error
-    if call.arguments.len() != 2 {
-        return;
-    }
-
     // `x |> f`, `f <| x`
     let (x, f) = if is_pipe_right {
         (call.arguments[0], call.arguments[1].expr)
@@ -432,33 +457,17 @@ fn desugar_pipeline(call: &cst::Call, expr: ExprId, context: &mut TopLevelContex
 /// Desugars:
 /// - `a and b` into `if a then b else false`
 /// - `a or b` into `if a then true else b`
-fn desugar_logical_operators(call: &cst::Call, expr: ExprId, context: &mut TopLevelContext) {
-    let (is_and, is_or) = if let Expr::Variable(path_id) = &context.exprs[call.function] {
-        let name = context.paths[*path_id].last_ident();
-        (name == "and", name == "or")
-    } else {
-        return;
-    };
-
-    // This could be combined with `desugar_pipeline`
-    if !is_and && !is_or {
-        return;
-    }
-
-    // Parse error
-    if call.arguments.len() != 2 {
-        return;
-    }
-
+fn desugar_logical_operators(call: &cst::Call, expr: ExprId, context: &mut TopLevelContext, is_or: bool) {
     let a = call.arguments[0].expr;
     let b = call.arguments[1].expr;
     let location = context.expr_locations[expr].clone();
+    // We need `false` in the `and` case and `true` in the `or` case
     let boolean = Expr::Literal(Literal::Bool(is_or));
     let boolean = context.push_expr(boolean, location);
 
-    context.exprs[expr] = if is_and {
-        Expr::If(If { condition: a, then: b, else_: Some(boolean) })
-    } else {
+    context.exprs[expr] = if is_or {
         Expr::If(If { condition: a, then: boolean, else_: Some(b) })
+    } else {
+        Expr::If(If { condition: a, then: b, else_: Some(boolean) })
     };
 }

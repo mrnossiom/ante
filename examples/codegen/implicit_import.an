@@ -1,5 +1,5 @@
 main () =
-    var v = Vec.empty ()
+    var v = Std.Vec.empty ()
     Vec.push (mut v) 3i32
     Vec.push (mut v) 4
     print v

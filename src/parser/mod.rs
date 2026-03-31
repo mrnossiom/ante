@@ -1230,6 +1230,7 @@ impl<'tokens> Parser<'tokens> {
             | Token::GreaterThan
             | Token::LessThan
             | Token::GreaterThanOrEqual
+            | Token::Divides
             | Token::LessThanOrEqual => Some((7, false)),
             Token::In => Some((8, false)),
             Token::Append => Some((9, false)),

@@ -2,10 +2,10 @@ main () =
     x = 3
     y = 5
 
-    print (band x y)
-    print (bor x y)
-    print (bxor x y)
-    print (bnot x)
+    println (Bitwise.band x y)
+    println (Bitwise.bor x y)
+    println (Bitwise.bxor x y)
+    println (not x)
 
 // args: --delete-binary
 // expected exit status: 1

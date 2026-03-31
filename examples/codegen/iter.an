@@ -1,5 +1,5 @@
 
-trait MyIterable it -> elem with
+trait MyIterable it elem with
     mynext: fn it -> Maybe (elem, it)
 
 // Define iterating on I32s as counting down until 0
@@ -9,7 +9,7 @@ impl countdown: MyIterable I32 I32 with
         else Some (x, x - 1)
 
 my_iter iterable f =
-    match mynext iterable
+    match MyIterable.mynext iterable
     | None -> ()
     | Some (elem, rest) ->
         f elem

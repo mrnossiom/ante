@@ -382,8 +382,10 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
         let type_name_string = &self.context.names[type_name];
         let item_name_string = &self.context.names[item_name];
 
-        // panic safety: `type_name` should already be declared in global scope
-        let type_id = self.names_in_global_scope.definitions[type_name_string];
+        let Some(&type_id) = self.names_in_global_scope.definitions.get(type_name_string) else {
+            // Definition collection / parse error
+            return;
+        };
 
         if let Some(methods) = &self.names_in_global_scope.methods.get(&type_id.top_level_item) {
             let method = methods[item_name_string];

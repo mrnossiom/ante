@@ -243,6 +243,7 @@ pub enum Token {
     ApplyRight,         // |>
     Append,             // ++
     Modulus,            // %
+    Divides,            // %%
     Multiply,           // *
     ParenthesisLeft,    // (
     ParenthesisRight,   // )
@@ -294,6 +295,7 @@ impl Token {
                 | LessThanOrEqual
                 | GreaterThanOrEqual
                 | Divide
+                | Divides
                 | Range
                 | Index
                 | Copy
@@ -467,6 +469,7 @@ impl Display for Token {
             Token::LessThanOrEqual => write!(f, "<="),
             Token::GreaterThanOrEqual => write!(f, ">="),
             Token::Divide => write!(f, "/"),
+            Token::Divides => write!(f, "%%"),
             Token::Backslash => write!(f, "\\"),
             Token::Ampersand => write!(f, "&"),
             Token::At => write!(f, "@"),

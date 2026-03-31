@@ -1,4 +1,4 @@
-foo (a, b, _) =
+foo (a, (b: t), _) {Print t} =
     _: string = a
     print b
 

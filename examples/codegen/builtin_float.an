@@ -7,10 +7,10 @@ main () =
     div_f64 = 15.0 / 16.0
     // mod_float = 10.0 % 3.0
 
-    print add_f64
-    print sub_f64
-    print mul_f64
-    print div_f64
+    println add_f64
+    println sub_f64
+    println mul_f64
+    println div_f64
     // print mod_float
 
     ////////// F32 ////////
@@ -18,15 +18,15 @@ main () =
     sub_f32 = 7.0f - 8.0f
     mul_f32 = 11.0f * 12.0f
     div_f32 = 15.0f / 16.0f
-    print add_f32
-    print sub_f32
-    print mul_f32
-    print div_f32
+    println add_f32
+    println sub_f32
+    println mul_f32
+    println div_f32
 
     // F32 -> F64 -> F32 roundtrip cast should preserve the original value
     x = 1.0f / 7.0f
-    print x
-    print (cast (cast x : F64) : F32)
+    println x
+    println (cast (cast x : F64) : F32)
 
 // We used to check 1.0 for print mod_float but
 // cranelift does not support modulus for floats

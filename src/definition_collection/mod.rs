@@ -308,6 +308,8 @@ impl<'local, 'db> Declarer<'local, 'db> {
         if let Some(object_type) = self.definitions.get(type_name) {
             let object_type = object_type.top_level_item;
             self.declare_single_helper(item_name_id, id, context, |this| this.methods.entry(object_type).or_default());
+        } else if id.source_file == SourceFileId::prelude() {
+            // Let the prelude define methods on builtin types
         } else {
             let name = type_name.clone();
             let location = context.name_locations[type_name_id].clone();

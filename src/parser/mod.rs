@@ -1535,7 +1535,7 @@ impl<'tokens> Parser<'tokens> {
             let effects = this.parse_effects_clause();
 
             this.expect(Token::RightArrow, "a `->` to separate this lambda's parameters from its body")?;
-            let body = this.parse_expression()?;
+            let body = this.parse_block_or_expression()?;
 
             Ok(Expr::Lambda(Lambda { parameters, return_type, effects, body }))
         })

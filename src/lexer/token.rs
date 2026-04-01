@@ -475,7 +475,7 @@ impl Display for Token {
             Token::At => write!(f, "@"),
             Token::ExclamationMark => write!(f, "!"),
             Token::QuestionMark => write!(f, "?"),
-            Token::Index => write!(f, ".[]"),
+            Token::Index => write!(f, "{INDEX_OPERATOR_FUNCTION_NAME}"),
             Token::Copy => write!(f, ".*"),
             Token::Octothorpe => write!(f, "#"),
             Token::Quoted(tokens) => {

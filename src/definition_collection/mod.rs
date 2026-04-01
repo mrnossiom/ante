@@ -9,7 +9,7 @@ use crate::{
         GetItemRaw, Methods, Parse, TypeDefinitions, VisibleDefinitions, VisibleDefinitionsResult, VisibleImplicits,
         VisibleTypes,
     },
-    name_resolution::namespace::{CrateId, SourceFileId},
+    name_resolution::namespace::SourceFileId,
     parser::{
         context::TopLevelContext,
         cst::{Import, ItemName, Literal, Pattern, TopLevelItemKind, TypeDefinition, TypeDefinitionBody},

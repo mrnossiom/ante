@@ -811,9 +811,9 @@ impl<'tokens> Parser<'tokens> {
             parameters.push(ParameterType::explicit(Type::new(TypeKind::Unit, start.clone())));
         }
 
-        let environment = if self.accept(Token::BraceLeft) {
+        let environment = if self.accept(Token::BracketLeft) {
             let typ = self.parse_type()?;
-            self.expect(Token::BraceRight, "`]` to terminate the closure's `[` from the environment parameter")?;
+            self.expect(Token::BracketRight, "`]` to terminate the closure's `[` from the environment parameter")?;
             Some(Box::new(typ))
         } else {
             None

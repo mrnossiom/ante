@@ -1063,7 +1063,10 @@ where
 
             // If this is a union type we must also add the tag and cast to the union type
             if let Some(tag) = tag {
-                let raw_union_type = raw_union_type.unwrap();
+                let raw_union_type = raw_union_type.unwrap_or_else(|| {
+                    let name = this.context()[name_id].clone();
+                    panic!("Failed to unwrap raw union type. Full result type is: {result_type} for constructor {name}")
+                });
                 let casted = this.push_instruction(Instruction::Transmute(result), raw_union_type);
                 let fields_with_tag = vec![Value::tag_value(tag), casted];
                 result = this.push_instruction(Instruction::MakeTuple(fields_with_tag), result_type);

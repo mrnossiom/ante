@@ -756,9 +756,12 @@ impl print_bool: Print Bool with
 // iter_range (from: Usz) (to: Usz) (f: fn Usz => Unit): Unit =
 //     iter (Range from to) f
 // 
-// repeat (count: Usz) (f: fn Usz => Unit): Unit =
-//     iter (Range 0 count) f
-// 
+repeat (count: Usz) (f: fn Usz [env] -> Unit): Unit =
+    loop (i = 0) ->
+        if i < count then
+            f i
+            recur (i + 1)
+
 // // Iterating through an InFile iterates through each line
 // impl iterator_infile: Iterator InFile String with
 //     next infile =

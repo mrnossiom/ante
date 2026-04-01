@@ -274,31 +274,19 @@ where
         }
     }
 
-    fn literal(&mut self, literal: &Literal, _expr: ExprId) -> Value {
+    fn literal(&mut self, literal: &Literal, expr: ExprId) -> Value {
         match literal {
             Literal::Unit => Value::Unit,
             Literal::Bool(x) => Value::Bool(*x),
             Literal::Integer(x, None) => {
-                let x = *x as i32;
-                Value::Integer(IntConstant::I32(x))
-                // panic!("TODO: polymorphic integers")
+                // Use the type-inferred kind for unsuffixed integer literals
+                let kind = match self.expr_type(expr) {
+                    Type::Primitive(crate::mir::PrimitiveType::Int(kind)) => kind,
+                    _ => IntegerKind::I32,
+                };
+                Self::integer(*x, kind)
             },
-            Literal::Integer(x, Some(IntegerKind::I8)) => {
-                Value::Integer(IntConstant::I8((*x as i64).try_into().unwrap()))
-            },
-            Literal::Integer(x, Some(IntegerKind::I16)) => {
-                Value::Integer(IntConstant::I16((*x as i64).try_into().unwrap()))
-            },
-            Literal::Integer(x, Some(IntegerKind::I32)) => {
-                Value::Integer(IntConstant::I32((*x as i64).try_into().unwrap()))
-            },
-            Literal::Integer(x, Some(IntegerKind::I64)) => Value::Integer(IntConstant::I64(*x as i64)),
-            Literal::Integer(x, Some(IntegerKind::Isz)) => Value::Integer(IntConstant::Isz((*x).try_into().unwrap())),
-            Literal::Integer(x, Some(IntegerKind::U8)) => Value::Integer(IntConstant::U8((*x).try_into().unwrap())),
-            Literal::Integer(x, Some(IntegerKind::U16)) => Value::Integer(IntConstant::U16((*x).try_into().unwrap())),
-            Literal::Integer(x, Some(IntegerKind::U32)) => Value::Integer(IntConstant::U32((*x).try_into().unwrap())),
-            Literal::Integer(x, Some(IntegerKind::U64)) => Value::Integer(IntConstant::U64((*x).try_into().unwrap())),
-            Literal::Integer(x, Some(IntegerKind::Usz)) => Value::Integer(IntConstant::Usz((*x).try_into().unwrap())),
+            Literal::Integer(x, Some(kind)) => Self::integer(*x, *kind),
             Literal::Float(_, None) => {
                 panic!("TODO: polymorphic floats")
             },
@@ -306,6 +294,21 @@ where
             Literal::Float(x, Some(FloatKind::F64)) => Value::Float(FloatConstant::F64(*x)),
             Literal::String(x) => self.push_instruction(Instruction::MakeString(x.clone()), Type::string()),
             Literal::Char(x) => Value::Char(*x),
+        }
+    }
+
+    fn integer(value: u64, kind: IntegerKind) -> Value {
+        match kind {
+            IntegerKind::I8 => Value::Integer(IntConstant::I8((value as i64).try_into().unwrap())),
+            IntegerKind::I16 => Value::Integer(IntConstant::I16((value as i64).try_into().unwrap())),
+            IntegerKind::I32 => Value::Integer(IntConstant::I32(value as i32)),
+            IntegerKind::I64 => Value::Integer(IntConstant::I64(value as i64)),
+            IntegerKind::Isz => Value::Integer(IntConstant::Isz(value.try_into().unwrap())),
+            IntegerKind::U8 => Value::Integer(IntConstant::U8(value.try_into().unwrap())),
+            IntegerKind::U16 => Value::Integer(IntConstant::U16(value.try_into().unwrap())),
+            IntegerKind::U32 => Value::Integer(IntConstant::U32(value.try_into().unwrap())),
+            IntegerKind::U64 => Value::Integer(IntConstant::U64(value.try_into().unwrap())),
+            IntegerKind::Usz => Value::Integer(IntConstant::Usz(value.try_into().unwrap())),
         }
     }
 
@@ -1004,7 +1007,12 @@ where
         let constructors = match &type_definition.body {
             cst::TypeDefinitionBody::Struct(_) => vec![(type_definition.name, None)],
             cst::TypeDefinitionBody::Enum(variants) => {
-                mapvec(variants.iter().enumerate(), |(i, (name, _))| (*name, Some(i.try_into().unwrap())))
+                if variants.len() == 1 {
+                    // `type_body` translates single constructor enums into products, we need to mirror that here
+                    vec![(variants[0].0, None)]
+                } else {
+                    mapvec(variants.iter().enumerate(), |(i, (name, _))| (*name, Some(i.try_into().unwrap())))
+                }
             },
             cst::TypeDefinitionBody::Alias(_) | cst::TypeDefinitionBody::Error => return,
         };

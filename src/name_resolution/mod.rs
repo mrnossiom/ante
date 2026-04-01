@@ -538,11 +538,18 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
     }
 
     fn resolve_definition(&mut self, definition: &Definition) {
-        // TODO: Non-lambdas shouldn't see their own name in scope of their rhs. But we need to
-        // resolve type variables in the pattern to resolve type annotations which declare new
-        // variables which should be in scope in the rhs.
-        self.declare_names_in_pattern(definition.pattern, true, false);
+        let is_lambda = matches!(&self.context.exprs[definition.rhs], Expr::Lambda(_));
+        if is_lambda {
+            // Lambda definitions can call themselves recursively, so the name must be in scope
+            // before resolving the body.
+            self.declare_names_in_pattern(definition.pattern, true, false);
+        }
+        // TODO: Type variables declared in pattern type annotations should be in scope for the rhs,
+        // but the value variable itself should not see itself in its own rhs.
         self.resolve_expr(definition.rhs);
+        if !is_lambda {
+            self.declare_names_in_pattern(definition.pattern, true, false);
+        }
     }
 
     fn resolve_constructor(&mut self, constructor: &Constructor, id: ExprId) {

@@ -98,24 +98,17 @@ where
                 Type::tuple(mapvec(fields, |(_, field)| self.convert_type(&field, None)))
             },
             TypeBody::Sum(variants) => {
-                // TODO: Unify sum types and product types
-                if variants.len() == 1 {
-                    // Sum types with a single variant don't need a tag
-                    let variant = &variants[0].1;
-                    Type::tuple(mapvec(variant, |field| self.convert_type(&field, None)))
+                let union = if let Some((_, variant_args)) = variant_index.and_then(|i| variants.get(i)) {
+                    // If we want to retrieve 1 specific variant then create a tuple of each field
+                    Type::tuple(mapvec(variant_args, |field| self.convert_type(&field, None)))
                 } else {
-                    let union = if let Some((_, variant_args)) = variant_index.and_then(|i| variants.get(i)) {
-                        // If we want to retrieve 1 specific variant then create a tuple of each field
-                        Type::tuple(mapvec(variant_args, |field| self.convert_type(&field, None)))
-                    } else {
-                        // Otherwise we need a raw union of the fields of all variants
-                        Type::union(mapvec(variants, |(_, fields)| {
-                            Type::tuple(mapvec(fields, |field| self.convert_type(&field, None)))
-                        }))
-                    };
-                    // Then pack the result with a separate tag value.
-                    Type::tuple(vec![Type::tag_type(), union])
-                }
+                    // Otherwise we need a raw union of the fields of all variants
+                    Type::union(mapvec(variants, |(_, fields)| {
+                        Type::tuple(mapvec(fields, |field| self.convert_type(&field, None)))
+                    }))
+                };
+                // Then pack the result with a separate tag value.
+                Type::tuple(vec![Type::tag_type(), union])
             },
         }
     }

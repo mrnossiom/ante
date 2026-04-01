@@ -632,13 +632,20 @@ impl TopLevelId {
                 TypeBody::Product { type_name, fields }
             },
             cst::TypeDefinitionBody::Enum(variants) => {
-                let variants = mapvec(variants, |(name, _)| {
+                let mut variants = mapvec(variants, |(name, _)| {
                     let constructor_type = result.get_generalized(*name);
                     let constructor = apply_type_constructor(constructor_type, arguments, &result);
-                    let fields = constructor.function_parameter_types().collect();
+                    let fields: Vec<_> = constructor.function_parameter_types().collect();
                     (item_context.names[*name].clone(), fields)
                 });
-                TypeBody::Sum(variants)
+                if variants.len() == 1 {
+                    let (type_name, fields) = variants.pop().unwrap();
+                    let fields = mapvec(fields.into_iter().enumerate(), |(i, field)| (Arc::new(i.to_string()), field));
+
+                    TypeBody::Product { type_name, fields }
+                } else {
+                    TypeBody::Sum(variants)
+                }
             },
             // TODO: Type aliases
             cst::TypeDefinitionBody::Alias(_) | cst::TypeDefinitionBody::Error => {

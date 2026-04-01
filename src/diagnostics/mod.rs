@@ -4,7 +4,7 @@ use colored::{ColoredString, Colorize};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    incremental::{AllDiagnostics, Db, DbHandle, ExportedDefinitions, GetCrateGraph, Parse, TypeCheck}, iterator_extensions::mapvec, lexer::token::{IntegerKind, Token}, name_resolution::namespace::CrateId, parser::cst::Name, type_inference::{errors::TypeErrorKind, kinds::Kind}
+    incremental::{CheckAll, Db, DbHandle, ExportedDefinitions, GetCrateGraph, Parse, TypeCheck}, iterator_extensions::mapvec, lexer::token::{IntegerKind, Token}, name_resolution::namespace::CrateId, parser::cst::Name, type_inference::{errors::TypeErrorKind, kinds::Kind}
 };
 
 mod location;
@@ -557,17 +557,15 @@ impl std::fmt::Display for DiagnosticDisplay<'_> {
 }
 
 /// Check the entire program, collecting all diagnostics
-pub(crate) fn collect_all_diagnostics(_: &AllDiagnostics, compiler: &DbHandle) -> Arc<BTreeSet<Diagnostic>> {
+pub(crate) fn check_all(_: &CheckAll, compiler: &DbHandle) {
     let crates = GetCrateGraph.get(compiler);
-    let mut diagnostics = BTreeSet::new();
 
     for crate_ in crates.values() {
         for file in crate_.source_files.values() {
             let parse = Parse(*file).get(compiler);
 
             for item in &parse.cst.top_level_items {
-                let more_diagnostics = compiler.get_accumulated(TypeCheck(item.id));
-                diagnostics.extend(more_diagnostics);
+                TypeCheck(item.id).get(compiler);
             }
         }
     }
@@ -581,9 +579,11 @@ pub(crate) fn collect_all_diagnostics(_: &AllDiagnostics, compiler: &DbHandle) -
         if let Some(first_file) = local_crate.source_files.values().next() {
             let position = Position::start();
             let location = Span { start: position, end: position }.in_file(*first_file);
-            diagnostics.insert(Diagnostic::NoMainFunction { location });
+            compiler.accumulate(Diagnostic::NoMainFunction { location });
         }
     }
+}
 
-    Arc::new(diagnostics)
+pub fn collect_all_diagnostics(compiler: &mut Db) -> BTreeSet<Diagnostic> {
+    compiler.get_accumulated_uncached(CheckAll)
 }

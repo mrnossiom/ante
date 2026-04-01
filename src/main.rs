@@ -38,10 +38,10 @@ use std::{
 
 use crate::{
     cli::EmitTarget,
-    codegen::llvm::{codegen_llvm, CodegenLlvmResult},
-    diagnostics::DiagnosticKind,
+    codegen::llvm::{CodegenLlvmResult, codegen_llvm},
+    diagnostics::{DiagnosticKind, collect_all_diagnostics},
     files::{make_compiler, write_metadata},
-    incremental::{AllDiagnostics, TargetPointerSize, TypeCheck},
+    incremental::{TargetPointerSize, TypeCheck},
 };
 
 // All the compiler passes:
@@ -81,18 +81,18 @@ fn compile(args: Cli) {
     TargetPointerSize.set(&mut compiler, 8);
 
     let diagnostics = match args.emit {
-        _ if args.check => compiler.get(AllDiagnostics),
+        _ if args.check => collect_all_diagnostics(&mut compiler),
         Some(EmitTarget::Tokens) => {
             display_tokens(&compiler);
-            Arc::new(BTreeSet::new())
+            BTreeSet::new()
         },
-        Some(EmitTarget::Ast) => Arc::new(display_parse_tree(&compiler, args.emit_all)),
-        Some(EmitTarget::AstR) => Arc::new(display_name_resolution(&compiler, args.emit_all)),
-        Some(EmitTarget::AstT) => Arc::new(display_type_checking(&compiler, true, args.emit_all)),
-        Some(EmitTarget::Mir) => Arc::new(display_mir(&compiler, args.emit_all)),
-        Some(EmitTarget::MirMono) => Arc::new(display_mir_mono(&compiler)),
-        Some(EmitTarget::Ir) => llvm_codegen_separate(&compiler, true).2,
-        None => llvm_codegen_all(&compiler, &args.files, args.delete_binary),
+        Some(EmitTarget::Ast) => display_parse_tree(&mut compiler, args.emit_all),
+        Some(EmitTarget::AstR) => display_name_resolution(&mut compiler, args.emit_all),
+        Some(EmitTarget::AstT) => display_type_checking(&mut compiler, true, args.emit_all),
+        Some(EmitTarget::Mir) => display_mir(&mut compiler, args.emit_all),
+        Some(EmitTarget::MirMono) => display_mir_mono(&mut compiler),
+        Some(EmitTarget::Ir) => llvm_codegen_separate(&mut compiler, true).2,
+        None => llvm_codegen_all(&mut compiler, &args.files, args.delete_binary),
     };
 
     let (error_count, _) = classify_diagnostics(&diagnostics);
@@ -161,7 +161,7 @@ fn display_tokens(compiler: &Db) {
     }
 }
 
-fn display_parse_tree(compiler: &Db, emit_all: bool) -> BTreeSet<Diagnostic> {
+fn display_parse_tree(compiler: &mut Db, emit_all: bool) -> BTreeSet<Diagnostic> {
     let crates = GetCrateGraph.get(compiler);
     let mut diagnostics = BTreeSet::new();
 
@@ -171,7 +171,7 @@ fn display_parse_tree(compiler: &Db, emit_all: bool) -> BTreeSet<Diagnostic> {
                 let result = Parse(*file).get(compiler);
                 println!("{}", result.cst.display(&result.top_level_data));
 
-                let parse_diagnostics = compiler.get_accumulated(Parse(*file));
+                let parse_diagnostics = compiler.get_accumulated_uncached(Parse(*file));
                 diagnostics.extend(parse_diagnostics);
             }
         }
@@ -179,7 +179,7 @@ fn display_parse_tree(compiler: &Db, emit_all: bool) -> BTreeSet<Diagnostic> {
     diagnostics
 }
 
-fn display_name_resolution(compiler: &Db, emit_all: bool) -> BTreeSet<Diagnostic> {
+fn display_name_resolution(compiler: &mut Db, emit_all: bool) -> BTreeSet<Diagnostic> {
     let crates = GetCrateGraph.get(compiler);
     let mut diagnostics = BTreeSet::new();
 
@@ -189,7 +189,7 @@ fn display_name_resolution(compiler: &Db, emit_all: bool) -> BTreeSet<Diagnostic
                 let parse = Parse(*file).get(compiler);
 
                 for item in &parse.cst.top_level_items {
-                    let resolve_diagnostics = compiler.get_accumulated(Resolve(item.id));
+                    let resolve_diagnostics = compiler.get_accumulated_uncached(Resolve(item.id));
                     diagnostics.extend(resolve_diagnostics);
                 }
 
@@ -200,7 +200,7 @@ fn display_name_resolution(compiler: &Db, emit_all: bool) -> BTreeSet<Diagnostic
     diagnostics
 }
 
-fn display_type_checking(compiler: &Db, show_types: bool, emit_all: bool) -> BTreeSet<Diagnostic> {
+fn display_type_checking(compiler: &mut Db, show_types: bool, emit_all: bool) -> BTreeSet<Diagnostic> {
     let crates = GetCrateGraph.get(compiler);
     let mut diagnostics = BTreeSet::new();
 
@@ -210,7 +210,7 @@ fn display_type_checking(compiler: &Db, show_types: bool, emit_all: bool) -> BTr
                 let parse = Parse(*file).get(compiler);
 
                 for item in &parse.cst.top_level_items {
-                    let more_diagnostics = compiler.get_accumulated(TypeCheck(item.id));
+                    let more_diagnostics = compiler.get_accumulated_uncached(TypeCheck(item.id));
                     diagnostics.extend(more_diagnostics);
                 }
 
@@ -223,7 +223,7 @@ fn display_type_checking(compiler: &Db, show_types: bool, emit_all: bool) -> BTr
     diagnostics
 }
 
-fn display_mir(compiler: &Db, emit_all: bool) -> BTreeSet<Diagnostic> {
+fn display_mir(compiler: &mut Db, emit_all: bool) -> BTreeSet<Diagnostic> {
     let crates = GetCrateGraph.get(compiler);
     let mut diagnostics = BTreeSet::new();
 
@@ -237,7 +237,7 @@ fn display_mir(compiler: &Db, emit_all: bool) -> BTreeSet<Diagnostic> {
                     if let Some(mir) = mir {
                         print!("{mir}");
                     }
-                    let more_diagnostics = compiler.get_accumulated(TypeCheck(item.id));
+                    let more_diagnostics = compiler.get_accumulated_uncached(TypeCheck(item.id));
                     diagnostics.extend(more_diagnostics);
                 }
             }
@@ -246,7 +246,7 @@ fn display_mir(compiler: &Db, emit_all: bool) -> BTreeSet<Diagnostic> {
     diagnostics
 }
 
-fn display_mir_mono(compiler: &Db) -> BTreeSet<Diagnostic> {
+fn display_mir_mono(compiler: &mut Db) -> BTreeSet<Diagnostic> {
     let mir = mir::monomorphization::monomorphize(compiler);
     println!("{mir}");
 
@@ -257,7 +257,7 @@ fn display_mir_mono(compiler: &Db) -> BTreeSet<Diagnostic> {
             let parse = Parse(*file).get(compiler);
 
             for item in parse.cst.top_level_items.iter() {
-                let more_diagnostics = compiler.get_accumulated(TypeCheck(item.id));
+                let more_diagnostics = compiler.get_accumulated_uncached(TypeCheck(item.id));
                 diagnostics.extend(more_diagnostics);
             }
         }
@@ -267,8 +267,8 @@ fn display_mir_mono(compiler: &Db) -> BTreeSet<Diagnostic> {
 
 /// Codegen each item as a separate llvm module
 /// Returns (module strings, true if there are any errors, diagnostics)
-fn llvm_codegen_separate(compiler: &Db, display_ir: bool) -> (Vec<Arc<Vec<u8>>>, bool, Arc<BTreeSet<Diagnostic>>) {
-    let diagnostics = AllDiagnostics.get(compiler);
+fn llvm_codegen_separate(compiler: &mut Db, display_ir: bool) -> (Vec<Arc<Vec<u8>>>, bool, BTreeSet<Diagnostic>) {
+    let diagnostics = collect_all_diagnostics(compiler);
     let (errors, _) = classify_diagnostics(&diagnostics);
     if errors != 0 {
         return (Vec::new(), true, diagnostics);
@@ -296,7 +296,7 @@ fn display_llvm_bitcode(result: &CodegenLlvmResult, module_name: &str) {
 }
 
 /// Codegen everything, linking together each separate llvm module
-fn llvm_codegen_all(compiler: &Db, files: &[PathBuf], delete_binary: bool) -> Arc<BTreeSet<Diagnostic>> {
+fn llvm_codegen_all(compiler: &mut Db, files: &[PathBuf], delete_binary: bool) -> BTreeSet<Diagnostic> {
     let (mut modules, has_errors, diagnostics) = llvm_codegen_separate(compiler, false);
     if has_errors {
         return diagnostics;

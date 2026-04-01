@@ -1,4 +1,4 @@
-use std::{cell::Cell, collections::{BTreeMap, BTreeSet}, path::PathBuf, sync::Arc};
+use std::{cell::Cell, collections::BTreeMap, path::PathBuf, sync::Arc};
 
 use inc_complete::{
     DebugWithDb, Storage,
@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     definition_collection,
-    diagnostics::{collect_all_diagnostics, Diagnostic, Location},
+    diagnostics::{check_all, Diagnostic, Location},
     find_files::CrateGraph,
     name_resolution::{
         self, namespace::{CrateId, SourceFileId}, ResolutionResult
@@ -64,7 +64,7 @@ pub struct DbStorage {
     type_checks: HashMapStorage<TypeCheck>,
     type_dependency_graph: SingletonStorage<TypeCheckDependencyGraph>,
     get_type_check_sccs: HashMapStorage<GetTypeCheckSCC>,
-    all_diagnostics: SingletonStorage<AllDiagnostics>,
+    all_diagnostics: SingletonStorage<CheckAll>,
 
     #[inc_complete(accumulate)]
     diagnostics: Accumulator<Diagnostic>,
@@ -373,5 +373,5 @@ define_intermediate!(1800, GetTypeCheckSCC -> SCC, DbStorage, type_inference::de
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// Checks the entire program and returns any diagnostics found from all crates
 #[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AllDiagnostics;
-define_intermediate!(1900, AllDiagnostics -> Arc<BTreeSet<Diagnostic>>, DbStorage, collect_all_diagnostics);
+pub struct CheckAll;
+define_intermediate!(1900, CheckAll -> (), DbStorage, check_all);

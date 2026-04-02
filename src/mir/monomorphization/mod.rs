@@ -263,8 +263,8 @@ impl<'local> FunctionContext<'local> {
             | Instruction::FloatPromote(v)
             | Instruction::FloatDemote(v)
             | Instruction::Truncate(v)
-            | Instruction::Deref(v)
-            | Instruction::SizeOf(v) => remap(v),
+            | Instruction::Deref(v) => remap(v),
+            Instruction::SizeOf(typ) => self.specialize_type(typ),
             Instruction::MakeString(_) | Instruction::Instantiate(..) => {},
             Instruction::GetFieldPtr { struct_ptr, struct_type, .. } => {
                 remap(struct_ptr);

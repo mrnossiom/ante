@@ -32,6 +32,10 @@ pub struct SourceFileId {
 }
 
 impl SourceFileId {
+    /// Create a new [SourceFileId]. Note that _all_ [SourceFileId]s are created
+    /// with a hash of the file path, excluding the `src` directory, if present.
+    /// E.g. `foo/bar/module_root/src/baz/qux.an` is an invalid path, it should
+    /// be abbreviated to `baz/qux.an`
     pub fn new(crate_id: CrateId, path: &std::path::Path) -> SourceFileId {
         let local_module_id = LocalModuleId(crate::parser::ids::hash(path) as u32);
         SourceFileId { crate_id, local_module_id }
@@ -42,7 +46,7 @@ impl SourceFileId {
     }
 
     pub fn prelude() -> SourceFileId {
-        Self::new(CrateId::STDLIB, prelude_path_relative_to_stdlib())
+        Self::new(CrateId::STDLIB, prelude_path_relative_to_stdlib_source_folder())
     }
 }
 

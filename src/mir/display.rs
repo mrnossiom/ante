@@ -346,7 +346,7 @@ fn fmt_instruction(
         mir::Instruction::FloatDemote(x) => write!(f, "float_demote {}", v(x))?,
         mir::Instruction::Truncate(x) => write!(f, "truncate {}", v(x))?,
         mir::Instruction::Deref(x) => write!(f, "deref {}", v(x))?,
-        mir::Instruction::SizeOf(x) => write!(f, "size_of {}", v(x))?,
+        mir::Instruction::SizeOf(x) => write!(f, "size_of {x}")?,
     }
 
     writeln!(f)

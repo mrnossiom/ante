@@ -460,7 +460,9 @@ pub enum Instruction {
 
     Truncate(Value),
     Deref(Value),
-    SizeOf(Value),
+    /// Computes the size in bytes of the given type. The type may contain generics;
+    /// monomorphization specializes it to a concrete type and resolves the instruction to a constant.
+    SizeOf(Type),
 }
 
 impl Instruction {
@@ -518,7 +520,7 @@ impl Instruction {
             Instruction::FloatDemote(value) => f(value),
             Instruction::Truncate(value) => f(value),
             Instruction::Deref(value) => f(value),
-            Instruction::SizeOf(value) => f(value),
+            Instruction::SizeOf(_typ) => (),
             Instruction::GetFieldPtr { struct_ptr, .. } => f(struct_ptr),
         }
     }

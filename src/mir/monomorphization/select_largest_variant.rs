@@ -41,6 +41,15 @@ impl Definition {
                 parameter.select_largest_variants(ptr_size);
             }
         }
+
+        // Resolve SizeOf(concrete_type) to a Usz constant now that all types are concrete.
+        for instruction in self.instructions.values_mut() {
+            if let Instruction::SizeOf(typ) = instruction {
+                typ.select_largest_variants(ptr_size);
+                let size = typ.size_in_bytes(ptr_size) as usize;
+                *instruction = Instruction::Id(Value::Integer(IntConstant::Usz(size)));
+            }
+        }
     }
 }
 

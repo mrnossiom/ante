@@ -4,7 +4,11 @@ use crate::{
     incremental::{GetItem, GetItemRaw, TypeCheck},
     mir::{Instruction, Value, builder::Context},
     name_resolution::{Origin, builtin::Builtin},
-    parser::{cst, ids::ExprId},
+    parser::{
+        cst::{self, Argument},
+        ids::ExprId,
+    },
+    type_inference::types::Type as TCType,
 };
 
 impl<'local, Db> Context<'local, Db>
@@ -86,8 +90,27 @@ where
             "Deref" => push_1arg_ins(self, Instruction::Deref),
             "Transmute" => push_1arg_ins(self, Instruction::Transmute),
 
-            "SizeOf" => push_1arg_ins(self, Instruction::SizeOf),
+            "SizeOf" => {
+                // The argument has type `Type t`, we need to extract `t` from it.
+                // The Mir builder must still be resiliant to type errors
+                let t = self.get_t_from_type_t(args).unwrap_or(super::Type::ERROR);
+                self.push_instruction(Instruction::SizeOf(t), result_type.clone())
+            },
             other => panic!("Unknown intrinsic `{other}`"),
         })
+    }
+
+    /// Given arguments where the first (and only) argument has the type `Type t`, return `t`
+    fn get_t_from_type_t(&self, args: &[Argument]) -> Option<super::Type> {
+        if args.len() != 1 {
+            return None;
+        }
+
+        // `Type t` type
+        let type_t = self.types.result.maps.expr_types[&args[0].expr].follow(&self.types.bindings);
+        match &type_t {
+            TCType::Application(_, args) if args.len() == 1 => Some(self.convert_type(&args[0], None)),
+            _ => None,
+        }
     }
 }

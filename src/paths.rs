@@ -48,7 +48,7 @@ pub fn stdlib_path() -> PathBuf {
     }
 }
 
-/// Returns "src/Prelude.an"
-pub fn prelude_path_relative_to_stdlib() -> &'static std::path::Path {
-    std::path::Path::new("src/Prelude.an")
+/// Returns "Prelude.an"
+pub fn prelude_path_relative_to_stdlib_source_folder() -> &'static std::path::Path {
+    std::path::Path::new("Prelude.an")
 }

@@ -390,18 +390,18 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     /// Returns any new bindings created on success
     fn try_unify(&mut self, actual: &Type, expected: &Type) -> Result<TypeBindings, ()> {
         let mut bindings = TypeBindings::new();
-        self.try_unify_helper(actual, expected, &mut bindings).map(|_| bindings)
+        self.try_unify_with_bindings(actual, expected, &mut bindings).map(|_| bindings)
     }
 
     /// Same as [Self::try_unify] but carries the new type bindings as an argument instead of
     /// a return value.
-    fn try_unify_helper(&self, actual: &Type, expected: &Type, new_bindings: &mut TypeBindings) -> Result<(), ()> {
+    fn try_unify_with_bindings(&self, actual: &Type, expected: &Type, new_bindings: &mut TypeBindings) -> Result<(), ()> {
         match (actual, expected) {
             (Type::Variable(actual_id), expected) => {
                 if let Some(actual) = self.bindings.get(actual_id).cloned() {
-                    self.try_unify_helper(&actual, &expected, new_bindings)
+                    self.try_unify_with_bindings(&actual, &expected, new_bindings)
                 } else if let Some(actual) = new_bindings.get(actual_id).cloned() {
-                    self.try_unify_helper(&actual, &expected, new_bindings)
+                    self.try_unify_with_bindings(&actual, &expected, new_bindings)
                 } else {
                     let expected = expected.follow_two(&self.bindings, new_bindings);
                     self.try_bind_type_variable(*actual_id, expected, new_bindings)
@@ -409,9 +409,9 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             },
             (actual, Type::Variable(expected_id)) => {
                 if let Some(expected) = self.bindings.get(expected_id).cloned() {
-                    self.try_unify_helper(actual, &expected, new_bindings)
+                    self.try_unify_with_bindings(actual, &expected, new_bindings)
                 } else if let Some(expected) = new_bindings.get(expected_id).cloned() {
-                    self.try_unify_helper(actual, &expected, new_bindings)
+                    self.try_unify_with_bindings(actual, &expected, new_bindings)
                 } else {
                     let actual = actual.follow_two(&self.bindings, new_bindings);
                     self.try_bind_type_variable(*expected_id, actual, new_bindings)
@@ -427,12 +427,12 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                     if actual.is_implicit != expected.is_implicit {
                         return Err(());
                     }
-                    self.try_unify_helper(&actual.typ, &expected.typ, new_bindings)?;
+                    self.try_unify_with_bindings(&actual.typ, &expected.typ, new_bindings)?;
                 }
 
-                self.try_unify_helper(&actual.environment, &expected.environment, new_bindings)?;
-                self.try_unify_helper(&actual.effects, &expected.effects, new_bindings)?;
-                self.try_unify_helper(&actual.return_type, &expected.return_type, new_bindings)
+                self.try_unify_with_bindings(&actual.environment, &expected.environment, new_bindings)?;
+                self.try_unify_with_bindings(&actual.effects, &expected.effects, new_bindings)?;
+                self.try_unify_with_bindings(&actual.return_type, &expected.return_type, new_bindings)
             },
             (
                 Type::Application(actual_constructor, actual_args),
@@ -441,9 +441,9 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 if actual_args.len() != expected_args.len() {
                     return Err(());
                 }
-                self.try_unify_helper(actual_constructor, expected_constructor, new_bindings)?;
+                self.try_unify_with_bindings(actual_constructor, expected_constructor, new_bindings)?;
                 for (actual, expected) in actual_args.iter().zip(expected_args.iter()) {
-                    self.try_unify_helper(actual, expected, new_bindings)?;
+                    self.try_unify_with_bindings(actual, expected, new_bindings)?;
                 }
                 Ok(())
             },
@@ -452,9 +452,9 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                     return Err(());
                 }
                 for (actual, expected) in actual_generics.iter().zip(expected_generics.iter()) {
-                    self.try_unify_helper(&actual.as_type(), &expected.as_type(), new_bindings)?;
+                    self.try_unify_with_bindings(&actual.as_type(), &expected.as_type(), new_bindings)?;
                 }
-                self.try_unify_helper(actual, expected, new_bindings)
+                self.try_unify_with_bindings(actual, expected, new_bindings)
             },
             (
                 Type::Primitive(PrimitiveType::Reference(actual)),

@@ -5,7 +5,7 @@
 
 use crate::{
     incremental::TargetPointerSize,
-    mir::{Definition, Mir, Type},
+    mir::{Definition, Instruction, IntConstant, Mir, Type, Value},
 };
 use inc_complete::DbGet;
 use std::sync::Arc;

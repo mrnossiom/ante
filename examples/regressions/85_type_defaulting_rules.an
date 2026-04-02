@@ -18,8 +18,6 @@ main () =
     closure = count_down _ print_offset
     closure 2
 
-main ()
-
 // args: --delete-binary
 // expected exit status: 1
 // expected stderr:

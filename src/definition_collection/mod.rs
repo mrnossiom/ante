@@ -79,10 +79,11 @@ fn push_no_such_file_error(import: &Import, db: &DbHandle) {
 
 fn get_file_id(target_crate_name: &String, module_path: &PathBuf, db: &DbHandle) -> Option<SourceFileId> {
     let crates = GetCrateGraph.get(db);
+    let module_file = module_path.with_extension("an");
 
     for (_, crate_) in crates.iter() {
         if crate_.name == *target_crate_name {
-            return crate_.source_files.get(module_path).copied();
+            return crate_.source_files.get(&module_file).copied();
         }
     }
 

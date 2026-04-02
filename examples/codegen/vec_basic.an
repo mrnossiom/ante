@@ -1,10 +1,10 @@
-import Std.Vec.empty, push
+import Std.Vec.empty, push, print_vec
 
 main () =
     var v = empty ()
     push (mut v) 3i32
     push (mut v) 4
-    print v
+    println v
 
 // args: --delete-binary
 // expected exit status: 1

@@ -6,7 +6,7 @@ use std::{
 use ante::{
     diagnostics::{Diagnostic as AnteDiagnostic, DiagnosticKind},
     find_files,
-    incremental::{AllDiagnostics, Db, GetCrateGraph, SourceFile, TargetPointerSize},
+    incremental::{CheckAll, Db, GetCrateGraph, SourceFile, TargetPointerSize},
     name_resolution::namespace::CrateId,
 };
 
@@ -74,7 +74,7 @@ impl Backend {
 pub fn collect_lsp_diagnostics(
     compiler: &Db, current_uri: &Url, current_rope: &Rope, document_map: &DashMap<Url, Rope>,
 ) -> HashMap<Url, Vec<Diagnostic>> {
-    let diagnostics = AllDiagnostics.get(compiler);
+    let diagnostics = compiler.get_accumulated(CheckAll);
     let mut url_to_diagnostics = HashMap::<_, Vec<_>>::default();
 
     // Pre-populate with empty lists so that files whose errors were all fixed

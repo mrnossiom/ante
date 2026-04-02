@@ -58,7 +58,9 @@ fn populate_local_crate_with_starting_files(compiler: &mut Db, crates: &mut Crat
 
     for path in starting_files {
         let path = path.to_path_buf();
+        // All source file paths are relative with the `src` prefix stripped
         let relative_path = path.strip_prefix(&cwd).unwrap_or(&path);
+        let relative_path = path.strip_prefix("src").unwrap_or(&relative_path);
         let id = SourceFileId::new(CrateId::LOCAL, relative_path);
         let data = read_file_data(path.clone());
         id.set(compiler, Arc::new(data));
@@ -85,31 +87,32 @@ fn add_source_files_of_crate(compiler: &mut Db, crates: &mut CrateGraph, crate_i
     let mut src_folder = crate_root.clone();
     src_folder.push("src");
 
-    let mut remaining = vec![src_folder];
+    let mut remaining = vec![src_folder.clone()];
     let mut source_files = BTreeMap::new();
 
     // Push every crate in the `deps` folder as a new crate
-    while let Some(src_folder) = remaining.pop() {
+    while let Some(current_dir) = remaining.pop() {
         // We should error in the future when failing to read a directory but for now we want to
         // allow either the local crate or the stdlib to not be present and still compile when
         // we're only working on a single source file. We may want to separate the compile mode
         // more explicitly in the CLI in the future.
-        let Ok(src_folder) = src_folder.read_dir() else {
+        let Ok(dir) = current_dir.read_dir() else {
             continue;
         };
 
-        for file in src_folder.flatten() {
+        for file in dir.flatten() {
             let path = file.path();
 
             if path.is_dir() {
                 remaining.push(path);
             } else if path.extension() == Some(&OsStr::from("an")) {
-                let relative_path = path.strip_prefix(&crate_root).unwrap_or(&path);
-                let id = SourceFileId::new(crate_id, relative_path);
+                // All paths are relative to the `src` directory so that they
+                // can be reconstructed from only the module names. E.g. `Foo.Bar` = `foo_crate_root/src/bar.an`
+                let src_relative = path.strip_prefix(&src_folder).unwrap_or(&path);
+                let id = SourceFileId::new(crate_id, src_relative);
                 let data = read_file_data(path.clone());
                 id.set(compiler, Arc::new(data));
-                let path = Arc::new(path);
-                source_files.insert(path, id);
+                source_files.insert(Arc::new(src_relative.to_path_buf()), id);
             }
         }
     }

@@ -198,6 +198,26 @@ impl Type {
         panic!("Infinite loop in follow_type!")
     }
 
+    /// Follow two sets of bindings
+    pub fn follow_two<'a>(mut self: &'a Self, one: &'a TypeBindings, two: &'a TypeBindings) -> Type {
+        // Arbitrary upper limit
+        for _ in 0..1000 {
+            match self {
+                typ @ Type::Variable(id) => {
+                    if let Some(binding) = one.get(&id) {
+                        self = binding;
+                    } else if let Some(binding) = two.get(&id) {
+                        self = binding;
+                    } else {
+                        return typ.clone();
+                    }
+                },
+                other => return other.clone(),
+            }
+        }
+        panic!("Infinite loop in follow_two!")
+    }
+
     /// Similar to [Self::follow] but will replace all bound type variables reachable within
     /// this type with their bindings if found. This is sometimes referred to as "zonking."
     pub fn follow_all(self: &Self, bindings: &TypeBindings) -> Type {

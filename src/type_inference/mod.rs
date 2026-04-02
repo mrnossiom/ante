@@ -16,7 +16,12 @@ use crate::{
         ids::{ExprId, NameId, PathId, PatternId, TopLevelId, TopLevelName},
     },
     type_inference::{
-        dependency_graph::TypeCheckResult, errors::{Locateable, TypeErrorKind}, fresh_expr::ExtendedTopLevelContext, generics::Generic, implicits::ImplicitsContext, types::{PrimitiveType, Type, TypeBindings, TypeVariableId}
+        dependency_graph::TypeCheckResult,
+        errors::{Locateable, TypeErrorKind},
+        fresh_expr::ExtendedTopLevelContext,
+        generics::Generic,
+        implicits::ImplicitsContext,
+        types::{PrimitiveType, Type, TypeBindings, TypeVariableId},
     },
 };
 
@@ -339,14 +344,15 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
 
     /// Unifies the two types. Returns false on failure
     fn unify(&mut self, actual: &Type, expected: &Type, kind: TypeErrorKind, locator: impl Locateable) -> bool {
-        if self.try_unify(actual, expected).is_err() {
+        if let Ok(new_bindings) = self.try_unify(actual, expected) {
+            self.bindings.extend(new_bindings);
+            true
+        } else {
             let actual = self.type_to_string(actual);
             let expected = self.type_to_string(expected);
             let location = locator.locate(self);
             self.compiler.accumulate(Diagnostic::TypeError { actual, expected, kind, location });
             false
-        } else {
-            true
         }
     }
 
@@ -381,27 +387,34 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
 
     /// Try to unify the given types, returning `Err(())` on error without pushing a Diagnostic.
     ///
-    /// Note that any type variable bindings will remain bound.
-    fn try_unify(&mut self, actual: &Type, expected: &Type) -> Result<(), ()> {
-        if actual == expected {
-            return Ok(());
-        }
+    /// Returns any new bindings created on success
+    fn try_unify(&mut self, actual: &Type, expected: &Type) -> Result<TypeBindings, ()> {
+        let mut bindings = TypeBindings::new();
+        self.try_unify_helper(actual, expected, &mut bindings).map(|_| bindings)
+    }
 
+    /// Same as [Self::try_unify] but carries the new type bindings as an argument instead of
+    /// a return value.
+    fn try_unify_helper(&self, actual: &Type, expected: &Type, new_bindings: &mut TypeBindings) -> Result<(), ()> {
         match (actual, expected) {
             (Type::Variable(actual_id), expected) => {
                 if let Some(actual) = self.bindings.get(actual_id).cloned() {
-                    self.try_unify(&actual, &expected)
+                    self.try_unify_helper(&actual, &expected, new_bindings)
+                } else if let Some(actual) = new_bindings.get(actual_id).cloned() {
+                    self.try_unify_helper(&actual, &expected, new_bindings)
                 } else {
-                    let expected = expected.follow(&self.bindings).clone();
-                    self.try_bind_type_variable(*actual_id, expected)
+                    let expected = expected.follow_two(&self.bindings, new_bindings);
+                    self.try_bind_type_variable(*actual_id, expected, new_bindings)
                 }
             },
             (actual, Type::Variable(expected_id)) => {
                 if let Some(expected) = self.bindings.get(expected_id).cloned() {
-                    self.try_unify(actual, &expected)
+                    self.try_unify_helper(actual, &expected, new_bindings)
+                } else if let Some(expected) = new_bindings.get(expected_id).cloned() {
+                    self.try_unify_helper(actual, &expected, new_bindings)
                 } else {
-                    let actual = actual.follow(&self.bindings).clone();
-                    self.try_bind_type_variable(*expected_id, actual)
+                    let actual = actual.follow_two(&self.bindings, new_bindings);
+                    self.try_bind_type_variable(*expected_id, actual, new_bindings)
                 }
             },
             (Type::Primitive(PrimitiveType::Error), _) | (_, Type::Primitive(PrimitiveType::Error)) => Ok(()),
@@ -414,11 +427,12 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                     if actual.is_implicit != expected.is_implicit {
                         return Err(());
                     }
-                    self.try_unify(&actual.typ, &expected.typ)?;
+                    self.try_unify_helper(&actual.typ, &expected.typ, new_bindings)?;
                 }
 
-                self.try_unify(&actual.effects, &expected.effects)?;
-                self.try_unify(&actual.return_type, &expected.return_type)
+                self.try_unify_helper(&actual.environment, &expected.environment, new_bindings)?;
+                self.try_unify_helper(&actual.effects, &expected.effects, new_bindings)?;
+                self.try_unify_helper(&actual.return_type, &expected.return_type, new_bindings)
             },
             (
                 Type::Application(actual_constructor, actual_args),
@@ -427,9 +441,9 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 if actual_args.len() != expected_args.len() {
                     return Err(());
                 }
-                self.try_unify(actual_constructor, expected_constructor)?;
+                self.try_unify_helper(actual_constructor, expected_constructor, new_bindings)?;
                 for (actual, expected) in actual_args.iter().zip(expected_args.iter()) {
-                    self.try_unify(actual, expected)?;
+                    self.try_unify_helper(actual, expected, new_bindings)?;
                 }
                 Ok(())
             },
@@ -438,9 +452,9 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                     return Err(());
                 }
                 for (actual, expected) in actual_generics.iter().zip(expected_generics.iter()) {
-                    self.try_unify(&actual.as_type(), &expected.as_type())?;
+                    self.try_unify_helper(&actual.as_type(), &expected.as_type(), new_bindings)?;
                 }
-                self.try_unify(actual, expected)
+                self.try_unify_helper(actual, expected, new_bindings)
             },
             (
                 Type::Primitive(PrimitiveType::Reference(actual)),
@@ -461,44 +475,49 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     }
 
     /// Try to bind a type variable, possibly erroring instead if the binding would lead
-    /// to a recursive type.
+    /// to a recursive type. Inserts the binding into `new_bindings` on success.
     ///
     /// Before calling this function its argument must be zonked! `binding == binding.follow(...)`
-    fn try_bind_type_variable(&mut self, id: TypeVariableId, binding: Type) -> Result<(), ()> {
+    fn try_bind_type_variable(
+        &self, id: TypeVariableId, binding: Type, new_bindings: &mut TypeBindings,
+    ) -> Result<(), ()> {
         if binding == Type::Variable(id) {
             // Already equal, don't recursively bind self to self
             Ok(())
-        } else if self.occurs(&binding, id) {
+        } else if self.occurs(&binding, id, new_bindings) {
             // Recursive type error
             Err(())
         } else {
-            self.bindings.insert(id, binding);
+            new_bindings.insert(id, binding);
             Ok(())
         }
     }
 
     /// True if `variable` occurs within `typ`.
     /// Used to prevent the creation of infinitely recursive types when binding type variables.
-    fn occurs(&self, typ: &Type, variable: TypeVariableId) -> bool {
+    fn occurs(&self, typ: &Type, variable: TypeVariableId, new_bindings: &TypeBindings) -> bool {
         match typ {
             Type::Primitive(_) | Type::Generic(_) | Type::UserDefined(_) => false,
             Type::Variable(candidate_id) => {
                 if let Some(binding) = self.bindings.get(candidate_id) {
-                    self.occurs(binding, variable)
+                    self.occurs(binding, variable, new_bindings)
+                } else if let Some(binding) = new_bindings.get(candidate_id) {
+                    self.occurs(binding, variable, new_bindings)
                 } else {
                     *candidate_id == variable
                 }
             },
             Type::Function(function_type) => {
-                function_type.parameters.iter().any(|param| self.occurs(&param.typ, variable))
-                    || self.occurs(&function_type.environment, variable)
-                    || self.occurs(&function_type.return_type, variable)
-                    || self.occurs(&function_type.effects, variable)
+                function_type.parameters.iter().any(|param| self.occurs(&param.typ, variable, new_bindings))
+                    || self.occurs(&function_type.environment, variable, new_bindings)
+                    || self.occurs(&function_type.return_type, variable, new_bindings)
+                    || self.occurs(&function_type.effects, variable, new_bindings)
             },
             Type::Application(constructor, args) => {
-                self.occurs(constructor, variable) || args.iter().any(|arg| self.occurs(arg, variable))
+                self.occurs(constructor, variable, new_bindings)
+                    || args.iter().any(|arg| self.occurs(arg, variable, new_bindings))
             },
-            Type::Forall(_, typ) => self.occurs(typ, variable),
+            Type::Forall(_, typ) => self.occurs(typ, variable, new_bindings),
         }
     }
 

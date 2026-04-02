@@ -11,7 +11,9 @@ use crate::{
         ids::{ExprId, NameId, PatternId},
     },
     type_inference::{
-        errors::TypeErrorKind, types::{FunctionType, ParameterType, PrimitiveType, Type, TypeVariableId}, Locateable, TypeChecker
+        Locateable, TypeChecker,
+        errors::TypeErrorKind,
+        types::{FunctionType, ParameterType, PrimitiveType, Type, TypeBindings, TypeVariableId},
     },
 };
 
@@ -61,7 +63,6 @@ impl ImplicitsContext {
         self.deferred_closure_checks.push((lambda, environment))
     }
 }
-
 
 impl<'local, 'inner> TypeChecker<'local, 'inner> {
     /// Perform an implicit parameter coercion.
@@ -134,8 +135,10 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             // integer type variable, unification may still succeed (e.g. searching for `Foo _`
             // where only `Foo U8` exists binds `_ := U8`). Failures are collected for retry.
             let mut failed_implicits = Vec::new();
+            let implicits_in_scope = self.collect_implicits_in_scope();
+
             for implicit in implicits {
-                if let Err(error) = self.find_implicit_value(implicit) {
+                if let Err(error) = self.find_implicit_value(implicit, &implicits_in_scope) {
                     failed_implicits.push((implicit, error));
                 }
             }
@@ -152,7 +155,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             // `_ := I32` exactly one candidate remains. If the retry still fails, accumulate the
             // original error so the diagnostic reflects the unbound type the user wrote.
             for (implicit, original_error) in failed_implicits {
-                if let Err(_) = self.find_implicit_value(implicit) {
+                if let Err(_) = self.find_implicit_value(implicit, &implicits_in_scope) {
                     self.compiler.accumulate(original_error);
                 }
             }
@@ -210,43 +213,39 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         self.check_int_fits(value, kind, location);
     }
 
-    /// Search for an implicit value in scope with the given type, returning an error if no implicit
-    /// is found or if multiple matching implicits are found.
+    /// Collect all implicits in scope into a single Vec
+    fn collect_implicits_in_scope(&self) -> Vec<NameId> {
+        self.implicits.iter().flat_map(|scope| &scope.implicits_in_scope).copied().collect()
+    }
+
+    /// Find an implicit value & modify the current cst to insert the implicit if found,
+    /// or report an error otherwise.
     ///
-    /// If an implicit is found, its value is emplaced into the `destination` expression.
-    fn find_implicit_value(&mut self, implicit: DelayedImplicit) -> Result<(), Diagnostic> {
+    /// Accepts `implicits_in_scope` as a parameter to avoid repeated work collecting it
+    /// across nested & repeated calls.
+    fn find_implicit_value(
+        &mut self, implicit: DelayedImplicit, implicits_in_local_scope: &[NameId],
+    ) -> Result<(), Diagnostic> {
         let target_type = self.expr_types[&implicit.destination].clone();
+
         let parameter_index = implicit.parameter_index;
         let function = implicit.source;
         let destination = implicit.destination;
 
         // A Vec of (implicit name, implicit origin, implicit type, implicit arguments)
         // Non-function implicits will not have any arguments
-        let mut candidates = Candidates::new();
+        let mut candidates = Vec::new();
 
-        // Parallel vec tracking the bindings committed by each candidate's check. We save and
-        // restore bindings around each check so that the first candidate's successful try_unify
-        // doesn't permanently commit type variables (e.g. binding a free variable to I16 just
-        // because add_i16 comes before add_i32 alphabetically in VisibleImplicits). After
-        // collecting all candidates we apply only the single winner's bindings.
-        let mut candidate_bindings = Vec::new();
-
-        // TODO: Remove clone by making try_unify no longer require a mutable self
-        let implicits_in_scope =
-            self.implicits.iter().rev().flat_map(|scope| &scope.implicits_in_scope).copied().collect::<Vec<_>>();
-
-        for name in implicits_in_scope {
+        for name in implicits_in_local_scope.iter().copied() {
             if candidates.len() > MULTIPLE_MATCHING_IMPLS_CUTOFF {
                 // Multiple matching impls, don't waste time looking for more.
                 // There are many Eq impls we could waste time on for example.
                 break;
             }
 
-            let saved = self.bindings.clone();
             let name_type = self.name_types[&name].follow(&self.bindings).clone();
             let origin = Origin::Local(name);
             let name = self.current_extended_context()[name].clone();
-            let prev_len = candidates.len();
             self.check_implicit_candidate(
                 name_type,
                 None,
@@ -256,15 +255,13 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 &mut candidates,
                 parameter_index,
                 function,
+                implicits_in_local_scope,
             );
-            let committed = std::mem::replace(&mut self.bindings, saved);
-            if candidates.len() > prev_len {
-                candidate_bindings.push(committed);
-            }
         }
 
         // Need to check globally visible implicits separately
         // TODO: Make this more efficient so we don't need to go through every single implicit
+        // TODO: We could key each implicit by the type it creates
         if candidates.len() <= MULTIPLE_MATCHING_IMPLS_CUTOFF
             && let Some(item) = self.current_item
         {
@@ -276,40 +273,27 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 }
 
                 let (name_type, bindings) = self.type_and_bindings_of_top_level_name(name_id);
-                let saved = self.bindings.clone();
-                // Pre-filter: skip impls that clearly can't match. After the pre-filter succeeds
-                // we restore bindings so the committed state is captured per-candidate below.
-                if self.try_unify(&name_type, &target_type).is_ok() {
-                    self.bindings = saved.clone();
-                    let prev_len = candidates.len();
-                    let origin = Origin::TopLevelDefinition(*name_id);
-                    self.check_implicit_candidate(
-                        name_type,
-                        bindings,
-                        &target_type,
-                        name.clone(),
-                        origin,
-                        &mut candidates,
-                        parameter_index,
-                        function,
-                    );
-                    let committed = std::mem::replace(&mut self.bindings, saved);
-                    if candidates.len() > prev_len {
-                        candidate_bindings.push(committed);
-                    }
-                } else {
-                    self.bindings = saved;
-                }
+                let origin = Origin::TopLevelDefinition(*name_id);
+                self.check_implicit_candidate(
+                    name_type,
+                    bindings,
+                    &target_type,
+                    name.clone(),
+                    origin,
+                    &mut candidates,
+                    parameter_index,
+                    function,
+                    implicits_in_local_scope,
+                );
             }
         }
 
         if candidates.is_empty() {
             Err(self.no_implicit_found_error(&target_type, parameter_index, function))
         } else if candidates.len() == 1 {
-            self.bindings = candidate_bindings.remove(0);
-            let (name, origin, bindings, name_type, arguments) = candidates.remove(0);
+            let candidate = candidates.remove(0);
             let location = function.locate(self);
-            self.create_implicit_argument_expr(name, origin, bindings, name_type, arguments, destination, location);
+            self.create_implicit_argument_expr(candidate, destination, location);
             Ok(())
         } else {
             Err(self.multiple_matching_implicits_error(candidates, &target_type, parameter_index, function))
@@ -320,15 +304,23 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     /// called as a function to produce the target type. If either are true, push the candidate to
     /// the candidates list.
     fn check_implicit_candidate(
-        &mut self, implicit_type: Type, type_bindings: Option<Vec<Type>>, target_type: &Type, name: Name,
-        origin: Origin, candidates: &mut Candidates, parameter_index: usize, function: ExprId,
+        &mut self, implicit_type: Type, instantiation_bindings: Option<Vec<Type>>, target_type: &Type, name: Name,
+        origin: Origin, candidates: &mut Vec<Candidate>, parameter_index: usize, function: ExprId,
+        implicits_in_local_scope: &[NameId],
     ) {
         match self.implicit_type_matches(&implicit_type, target_type) {
             ImplicitMatch::NoMatch => (),
-            ImplicitMatch::MatchedAsIs => {
-                candidates.push((name, origin, type_bindings, implicit_type, Vec::new()));
+            ImplicitMatch::MatchedAsIs(type_bindings) => {
+                candidates.push(Candidate {
+                    name,
+                    origin,
+                    instantiation_bindings,
+                    type_bindings,
+                    typ: implicit_type,
+                    arguments: Vec::new(),
+                });
             },
-            ImplicitMatch::Call(function_type) => {
+            ImplicitMatch::Call(function_type, type_bindings) => {
                 // TODO: Make this algorithm iterative instead of recursive
                 let mut arguments = Vec::new();
                 for parameter in &function_type.parameters {
@@ -338,14 +330,21 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                         let destination = self.push_expr(cst::Expr::Error, arg_type, arg_location);
                         let implicit = DelayedImplicit { source: function, destination, parameter_index };
 
-                        if self.find_implicit_value(implicit).is_ok() {
+                        if self.find_implicit_value(implicit, implicits_in_local_scope).is_ok() {
                             arguments.push(cst::Argument::implicit(destination));
                         }
                     }
                 }
 
                 if arguments.len() == function_type.parameters.len() {
-                    candidates.push((name, origin, type_bindings, implicit_type, arguments));
+                    candidates.push(Candidate {
+                        name,
+                        origin,
+                        instantiation_bindings,
+                        type_bindings,
+                        typ: implicit_type,
+                        arguments,
+                    });
                 }
             },
         }
@@ -355,11 +354,11 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     /// given implicit is a match for the target type, whether it can produce such a type by
     /// calling it as a function, or whether there is no match.
     fn implicit_type_matches(&mut self, implicit_type: &Type, target_type: &Type) -> ImplicitMatch {
-        if self.try_unify(implicit_type, target_type).is_ok() {
-            ImplicitMatch::MatchedAsIs
+        if let Ok(bindings) = self.try_unify(implicit_type, target_type) {
+            ImplicitMatch::MatchedAsIs(bindings)
         } else if let Type::Function(f) = implicit_type {
-            if self.try_unify(&f.return_type, target_type).is_ok() {
-                ImplicitMatch::Call(f.clone())
+            if let Ok(bindings) = self.try_unify(&f.return_type, target_type) {
+                ImplicitMatch::Call(f.clone(), bindings)
             } else {
                 ImplicitMatch::NoMatch
             }
@@ -378,13 +377,13 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
 
     // error: No implicit found for parameter N of type T
     fn multiple_matching_implicits_error(
-        &self, matching: Candidates, implicit_type: &Type, parameter_index: usize, function: ExprId,
+        &self, matching: Vec<Candidate>, implicit_type: &Type, parameter_index: usize, function: ExprId,
     ) -> Diagnostic {
         let type_string = self.type_to_string(&implicit_type);
         let function_name = self.try_get_name(function);
         let location = function.locate(self);
 
-        let mut matches = mapvec(matching, |(name, _, _, _, _)| name);
+        let mut matches = mapvec(matching, |candidate| candidate.name);
         if matches.len() > MULTIPLE_MATCHING_IMPLS_CUTOFF {
             matches.truncate(MULTIPLE_MATCHING_IMPLS_CUTOFF);
             matches.push(Arc::new("..".to_string()));
@@ -467,27 +466,29 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     /// Creates a new expression referring to the given implicit value.
     /// - 0 arguments: The expression is a variable
     /// - 1+ arguments: The expression is a function call to the given name, using the given arguments.
-    fn create_implicit_argument_expr(
-        &mut self, name: Name, origin: Origin, type_bindings: Option<Vec<Type>>, name_type: Type,
-        arguments: Vec<cst::Argument>, destination: ExprId, location: Location,
-    ) {
-        let name = name.as_ref().clone();
-        let path = self.push_path(cst::Path::ident(name, location.clone()), name_type.clone(), location.clone());
+    fn create_implicit_argument_expr(&mut self, candidate: Candidate, destination: ExprId, location: Location) {
+        let name = candidate.name.as_ref().clone();
+        let path = self.push_path(cst::Path::ident(name, location.clone()), candidate.typ.clone(), location.clone());
         let variable = cst::Expr::Variable(path);
 
-        let context = self.current_extended_context_mut();
-        context.insert_path_origin(path, origin);
+        // Commit type bindings from the prior `try_unify` call(s) made to find this implicit
+        self.bindings.extend(candidate.type_bindings);
 
-        if let Some(bindings) = type_bindings {
+        let context = self.current_extended_context_mut();
+        context.insert_path_origin(path, candidate.origin);
+
+        // And remember the generic instantiation (if there was one) of any generic implicits
+        // so the mir-builder can pick this up and mark it for monomorphization.
+        if let Some(bindings) = candidate.instantiation_bindings {
             context.insert_instantiation(path, bindings);
         }
 
-        let (expr, typ) = if arguments.is_empty() {
-            (variable, name_type)
+        let (expr, typ) = if candidate.arguments.is_empty() {
+            (variable, candidate.typ)
         } else {
-            let return_type = name_type.return_type().unwrap().clone();
-            let function = self.push_expr(variable, name_type, location.clone());
-            let call = cst::Expr::Call(cst::Call { function, arguments });
+            let return_type = candidate.typ.return_type().unwrap().clone();
+            let function = self.push_expr(variable, candidate.typ, location.clone());
+            let call = cst::Expr::Call(cst::Call { function, arguments: candidate.arguments });
             (call, return_type)
         };
 
@@ -499,10 +500,22 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
 /// Candidates when searching for an implicit value.
 /// Contains the name, origin, instantiation type bindings, type for the implicit, along with any arguments to
 /// call it with (if any) if we should call this implicit for its return value.
-type Candidates = Vec<(Name, Origin, Option<Vec<Type>>, Type, Vec<cst::Argument>)>;
+struct Candidate {
+    name: Name,
+    origin: Origin,
+    instantiation_bindings: Option<Vec<Type>>,
+    typ: Type,
+
+    /// Bindings to commit to the current context on success.
+    type_bindings: TypeBindings,
+
+    /// Arguments to call this implicit with (if any) if it is an implicit function
+    /// we want to call for its return value.
+    arguments: Vec<cst::Argument>,
+}
 
 enum ImplicitMatch {
     NoMatch,
-    MatchedAsIs,
-    Call(Arc<FunctionType>),
+    MatchedAsIs(TypeBindings),
+    Call(Arc<FunctionType>, TypeBindings),
 }

@@ -62,11 +62,6 @@ impl Mir {
         self.get(id).map(|def| &def.name).or_else(|| self.externals.get(&id).map(|ext| &ext.name))
     }
 
-    fn with_externals(mut self, externals: FxHashMap<DefinitionId, Extern>) -> Mir {
-        self.externals = externals;
-        self
-    }
-
     /// Returns the type of the given value given that the value originates in the given [Definition].
     pub fn type_of_value(&self, value: &Value, definition: &Definition) -> Type {
         definition

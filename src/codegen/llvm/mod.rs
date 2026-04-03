@@ -1,14 +1,7 @@
 use std::sync::Arc;
 
 use inkwell::{
-    AddressSpace, FloatPredicate, IntPredicate,
-    basic_block::BasicBlock,
-    builder::Builder,
-    memory_buffer::MemoryBuffer,
-    module::Module,
-    targets::{CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetMachine},
-    types::{BasicType, BasicTypeEnum, IntType},
-    values::{AggregateValue, AnyValue, BasicValue, BasicValueEnum, FunctionValue, GlobalValue},
+    basic_block::BasicBlock, builder::Builder, memory_buffer::MemoryBuffer, module::Module, targets::{CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetMachine}, types::{BasicType, BasicTypeEnum, IntType}, values::{AggregateValue, AnyValue, BasicValue, BasicValueEnum, FunctionValue, GlobalValue}, AddressSpace, FloatPredicate, IntPredicate
 };
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
@@ -45,9 +38,7 @@ pub fn codegen_llvm(compiler: &Db) -> Option<CodegenLlvmResult> {
         module.codegen_function(function, *id);
     }
 
-    for (id, typ) in &mir.externals {
-        module.codegen_extern(*id, typ);
-    }
+    assert!(mir.externals.is_empty(), "All Mir compilation units should be linked");
 
     if let Err(error) = module.module.verify() {
         module.module.print_to_stderr();
@@ -138,16 +129,16 @@ impl<'ctx> ModuleContext<'ctx> {
 
     fn codegen_global(&mut self, global: &mir::Definition, id: mir::DefinitionId) {
         let typ = self.convert_type(&global.typ);
-        let name = self.get_name(id);
-        let global_var = self.module.add_global(typ, None, name);
+        let mangled_name = format!("{}_{}", self.get_name(id), id);
+        let global_var = self.module.add_global(typ, None, &mangled_name);
 
         // Save the current values map (may be non-empty if called from within function codegen)
         let saved_values = std::mem::take(&mut self.values);
 
         // Evaluate each instruction in the entry block as a constant
-        for instr_id in global.entry_block().instructions.iter().copied() {
-            let value = self.codegen_constant_instruction(global, instr_id);
-            self.values.insert(mir::Value::InstructionResult(instr_id), value);
+        for instruction in global.entry_block().instructions.iter().copied() {
+            let value = self.codegen_constant_instruction(global, instruction);
+            self.values.insert(mir::Value::InstructionResult(instruction), value);
         }
 
         // Get the Result value and use it as the initializer
@@ -249,16 +240,16 @@ impl<'ctx> ModuleContext<'ctx> {
                 Self::undef_value(result_type)
             },
             mir::Instruction::Extern(name) => {
-                // TODO: We should deduplicate these
                 let typ = global.instruction_result_type(id);
                 match self.convert_function_type(typ) {
-                    Some(typ) => {
-                        let global = self.module.add_function(name, typ, None).as_global_value();
-                        global.as_pointer_value().into()
+                    Some(fn_type) => {
+                        let fn_val = self.module.get_function(name)
+                            .unwrap_or_else(|| self.module.add_function(name, fn_type, None));
+                        fn_val.as_global_value().as_pointer_value().into()
                     },
                     None => {
-                        let typ = self.convert_type(typ);
-                        let global = self.module.add_global(typ, None, name);
+                        let global = self.module.get_global(name)
+                            .unwrap_or_else(|| self.module.add_global(self.convert_type(typ), None, name));
                         global.as_pointer_value().into()
                     },
                 }
@@ -277,7 +268,12 @@ impl<'ctx> ModuleContext<'ctx> {
             Some(existing) => existing.as_any_value_enum().into_function_value(),
             None => {
                 let function_type = self.convert_function_type(&function.typ).unwrap();
-                let function_value = self.module.add_function(&function.name, function_type, None);
+                let mangled_name = if function.name.as_str() == "main" {
+                    function.name.as_ref().clone()
+                } else {
+                    format!("{}_{}", function.name, function.id)
+                };
+                let function_value = self.module.add_function(&mangled_name, function_type, None);
                 self.global_values.insert(mir::Value::Definition(id), function_value.as_global_value());
                 function_value
             },
@@ -456,10 +452,11 @@ impl<'ctx> ModuleContext<'ctx> {
                 }
 
                 if is_function && !is_let_global {
-                    // True function definition or extern function — create a declaration
+                    // True function definition — create a forward declaration with the mangled
+                    // name matching codegen_function, to avoid colliding with C extern names.
                     let fn_type = self.convert_function_type(&typ).unwrap();
-                    let name = self.get_name(*function_id);
-                    let function_value = self.module.add_function(name, fn_type, None).as_global_value();
+                    let mangled_name = format!("{}_{}", self.get_name(*function_id), function_id);
+                    let function_value = self.module.add_function(&mangled_name, fn_type, None).as_global_value();
                     self.global_values.insert(*value, function_value);
                     function_value.as_pointer_value().into()
                 } else {
@@ -798,17 +795,6 @@ impl<'ctx> ModuleContext<'ctx> {
             TerminatorInstruction::Result(_) => {
                 unreachable!("Result terminator encountered during function codegen")
             },
-        }
-    }
-
-    fn codegen_extern(&mut self, id: DefinitionId, external: &mir::Extern) {
-        if !self.values.contains_key(&mir::Value::Definition(id)) {
-            let function_type = self
-                .convert_function_type(&external.typ)
-                .unwrap_or_else(|| panic!("convert_function_type failed for {}: {}", external.name, external.typ));
-            let name = &external.name;
-            let function_value = self.module.add_function(name, function_type, None);
-            self.values.insert(mir::Value::Definition(id), function_value.as_global_value().as_pointer_value().into());
         }
     }
 }

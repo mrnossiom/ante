@@ -70,13 +70,11 @@ where
             acc.extend(monomorphized)
         })
         //.reduce(Mir::default, Mir::extend)
-        .with_externals(initial_mir.externals)
-        .remove_internal_externs()
         .select_largest_variants(compiler)
+        .closure_deconvert()
         .assert_fully_linked()
         .assert_type_checks()
         .assert_no_unions_or_generics()
-        .closure_deconvert()
 }
 
 /// The entry point to monomorphization is any non-generic definition.

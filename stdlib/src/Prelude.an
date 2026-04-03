@@ -688,29 +688,29 @@ impl print_bool: Print Bool with
 //     (==) l r = (transmute l : Usz) == transmute r
 // 
 // 
-// trait Iterator it -> elem with
-//     next: fn it -> Maybe (it, elem)
-// 
-// iter iterable f =
-//     match next iterable
-//     | None -> ()
-//     | Some (rest, elem) ->
-//         f elem
-//         iter rest f
-// 
-// type Range t = start: t, end: t
-// 
-// impl iterator_range {Cmp (Int a)}: Iterator (Range (Int a)) (Int a) with
-//     next range =
-//         if range.start >= range.end
-//         then None
-//         else
-//             next = Range (range.start + 1) range.end
-//             Some (next, range.start)
-// 
-// iter_range (from: Usz) (to: Usz) (f: fn Usz => Unit): Unit =
-//     iter (Range from to) f
-// 
+trait Iterator it elem with
+    next: fn it -> Maybe (it, elem)
+
+iter iterable f =
+    match Iterator.next iterable
+    | None -> ()
+    | Some (rest, elem) ->
+        f elem
+        iter rest f
+
+type Range t = start: t, end: t
+
+impl iterator_range: Iterator (Range Usz) Usz with
+    next range =
+        if range.start >= range.end
+        then None
+        else
+            next = Range (range.start + 1) range.end
+            Some (next, range.start)
+
+iter_range (from: Usz) (to: Usz) (f: fn Usz => Unit): Unit =
+    iter (Range from to) f
+
 repeat (count: Usz) (f: fn Usz [env] -> Unit): Unit =
     loop (i = 0) ->
         if i < count then

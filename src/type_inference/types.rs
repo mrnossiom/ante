@@ -5,11 +5,11 @@ use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    diagnostics::Diagnostic,
+    diagnostics::{Diagnostic, Location},
     incremental::{DbHandle, GetItem},
     iterator_extensions::mapvec,
     lexer::token::{FloatKind, IntegerKind},
-    name_resolution::{Origin, builtin::Builtin},
+    name_resolution::{builtin::Builtin, Origin},
     parser::{
         cst::{self, ReferenceKind},
         ids::NameStore,
@@ -415,11 +415,11 @@ impl Type {
             crate::parser::cst::TypeKind::Char => (Type::CHAR, Kind::Type),
             crate::parser::cst::TypeKind::Named(path) => {
                 let origin = resolve.path_origins.get(path).copied();
-                Self::convert_origin_to_type(origin, db, Type::UserDefined)
+                Self::convert_origin_to_type(origin, db, &typ.location, Type::UserDefined)
             },
             crate::parser::cst::TypeKind::Variable(name) => {
                 let origin = resolve.name_origins.get(name).copied();
-                Self::convert_origin_to_type(origin, db, |origin| Type::Generic(Generic::Named(origin)))
+                Self::convert_origin_to_type(origin, db, &typ.location, |origin| Type::Generic(Generic::Named(origin)))
             },
             crate::parser::cst::TypeKind::Function(function) => {
                 let parameters = mapvec(&function.parameters, |param| {
@@ -479,7 +479,7 @@ impl Type {
     }
 
     fn convert_origin_to_type(
-        origin: Option<Origin>, db: &DbHandle, make_type: impl FnOnce(Origin) -> Type,
+        origin: Option<Origin>, db: &DbHandle, location: &Location, make_type: impl FnOnce(Origin) -> Type,
     ) -> (Type, Kind) {
         match origin {
             Some(Origin::Builtin(builtin)) => match builtin {
@@ -495,8 +495,12 @@ impl Type {
                 Builtin::Intrinsic => (Type::ERROR, Kind::Error),
             },
             Some(origin @ Origin::TopLevelDefinition(type_name)) => {
-                let (item, _ctx) = GetItem(type_name.top_level_item).get(db);
-                let cst::TopLevelItemKind::TypeDefinition(definition) = &item.kind else { unreachable!() };
+                let (item, ctx) = GetItem(type_name.top_level_item).get(db);
+                let cst::TopLevelItemKind::TypeDefinition(definition) = &item.kind else {
+                    let name = item.kind.name().to_string(&ctx);
+                    db.accumulate(Diagnostic::NotAType { name, location: location.clone() });
+                    return (Type::ERROR, Kind::Type)
+                };
                 let kind = crate::definition_collection::kind_of_type_definition(definition);
                 (make_type(origin), kind)
             },

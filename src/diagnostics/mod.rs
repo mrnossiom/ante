@@ -177,6 +177,7 @@ pub enum Diagnostic {
         location: Location,
     },
     TypeAnnotationNeeded { location: Location },
+    NotAType { name: String, location: Location },
 }
 
 impl Ord for Diagnostic {
@@ -404,6 +405,9 @@ impl Diagnostic {
             Diagnostic::TypeAnnotationNeeded { location: _ } => {
                 "Type annotation needed".to_string()
             },
+            Diagnostic::NotAType { name, location: _ } => {
+                format!("{} is not a type", name.purple())
+            },
         }
     }
 
@@ -447,6 +451,7 @@ impl Diagnostic {
             | Diagnostic::IntegerTooLarge { location, .. }
             | Diagnostic::Unimplemented { location, .. }
             | Diagnostic::TypeAnnotationNeeded { location, .. }
+            | Diagnostic::NotAType { location, .. }
             | Diagnostic::NoMainFunction { location } => location,
         }
     }

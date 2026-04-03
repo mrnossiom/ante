@@ -60,7 +60,7 @@ fn populate_local_crate_with_starting_files(compiler: &mut Db, crates: &mut Crat
         let path = path.to_path_buf();
         // All source file paths are relative with the `src` prefix stripped
         let relative_path = path.strip_prefix(&cwd).unwrap_or(&path);
-        let relative_path = path.strip_prefix("src").unwrap_or(&relative_path);
+        let relative_path = relative_path.strip_prefix("src").unwrap_or(relative_path);
         let id = SourceFileId::new(CrateId::LOCAL, relative_path);
         let data = read_file_data(path.clone());
         id.set(compiler, Arc::new(data));

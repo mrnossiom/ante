@@ -143,7 +143,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             let implicits_in_scope = self.collect_implicits_in_scope();
 
             for implicit in implicits {
-                if let Err(error) = self.find_implicit_value(implicit, &implicits_in_scope, &TypeBindings::new()) {
+                if let Err(error) = self.find_implicit_value(implicit, &implicits_in_scope) {
                     failed_implicits.push((implicit, error));
                 }
             }
@@ -160,7 +160,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             // `_ := I32` exactly one candidate remains. If the retry still fails, accumulate the
             // original error so the diagnostic reflects the unbound type the user wrote.
             for (implicit, original_error) in failed_implicits {
-                if let Err(_) = self.find_implicit_value(implicit, &implicits_in_scope, &TypeBindings::new()) {
+                if let Err(_) = self.find_implicit_value(implicit, &implicits_in_scope) {
                     self.compiler.accumulate(original_error);
                 }
             }
@@ -229,7 +229,20 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     /// Accepts `implicits_in_scope` as a parameter to avoid repeated work collecting it
     /// across nested & repeated calls.
     fn find_implicit_value(
+        &mut self, implicit: DelayedImplicit, implicits_in_local_scope: &[NameId],
+    ) -> Result<(), Diagnostic> {
+        // TODO: This prevents infinite recursion but still slows us down when searching for an implicit
+        // 20 levels deep. We could check for `Type::ERROR` object/implicit types to help catch this early.
+        let arbitrary_recursion_limit = 20;
+        // The type bindings parameter is for recursive calls when we need to find implicits
+        // to slot in for another implicit function's arguments.
+        let no_bindings = TypeBindings::new();
+        self.find_implicit_value_inner(implicit, implicits_in_local_scope, &no_bindings, arbitrary_recursion_limit)
+    }
+
+    fn find_implicit_value_inner(
         &mut self, implicit: DelayedImplicit, implicits_in_local_scope: &[NameId], type_bindings: &TypeBindings,
+        fuel: u32,
     ) -> Result<(), Diagnostic> {
         let target_type = self.expr_types[&implicit.destination].clone();
 
@@ -263,6 +276,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 function,
                 implicits_in_local_scope,
                 type_bindings,
+                fuel,
             );
         }
 
@@ -292,6 +306,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                     function,
                     implicits_in_local_scope,
                     type_bindings,
+                    fuel,
                 );
             }
         }
@@ -311,12 +326,16 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     /// Check if the given `implicit_type` matches the `target_type` directly, or if it can be
     /// called as a function to produce the target type. If either are true, push the candidate to
     /// the candidates list.
+    ///
+    /// TODO: Way too many parameters.
     fn check_implicit_candidate(
         &mut self, implicit_type: Type, instantiation_bindings: Option<Vec<Type>>, target_type: &Type, name: Name,
         origin: Origin, candidates: &mut Vec<Candidate>, parameter_index: usize, function: ExprId,
-        implicits_in_local_scope: &[NameId], type_bindings: &TypeBindings,
+        implicits_in_local_scope: &[NameId], type_bindings: &TypeBindings, fuel: u32
     ) {
         match self.implicit_type_matches(&implicit_type, target_type, type_bindings) {
+            // Prevent infinite recursion
+            _ if fuel == 0 => (),
             ImplicitMatch::NoMatch => (),
             ImplicitMatch::MatchedAsIs(type_bindings) => {
                 candidates.push(Candidate {
@@ -338,7 +357,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                         let destination = self.push_expr(cst::Expr::Error, arg_type, arg_location);
                         let implicit = DelayedImplicit { source: function, destination, parameter_index };
 
-                        if self.find_implicit_value(implicit, implicits_in_local_scope, &type_bindings).is_ok() {
+                        if self.find_implicit_value_inner(implicit, implicits_in_local_scope, &type_bindings, fuel - 1).is_ok() {
                             arguments.push(cst::Argument::implicit(destination));
                         }
                     }

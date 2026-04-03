@@ -19,10 +19,10 @@ main () = is_even 4
 // (is_even: fn I32 -> Bool can _) (n: I32) =
 //     if (fn (p8: I32) (p9: I32) -> (==: fn I32 I32 {Eq I32} -> Bool pure) (p8: I32) (p9: I32) {(eq_i32: Eq I32)}) (n: I32) 0 then true else 
 //         (fn (p10: I32) -> (print: fn I32 {Print I32} -> Unit pure) (p10: I32) {(print_i32: Print I32)}) (n: I32)
-//         (not: fn Bool -> Bool can _) ((is_odd: fn I32 -> Bool can _) ((fn (p11: I32) (p12: I32) -> (-: fn I32 I32 {Sub I32} -> I32 pure) (p11: I32) (p12: I32) {(sub_i32: Sub I32)}) (n: I32) 1))
+//         (fn (p11: Bool) -> (not: fn Bool {Not Bool} -> Bool pure) (p11: Bool) {(not_bool: Not Bool)}) ((is_odd: fn I32 -> Bool can _) ((fn (p12: I32) (p13: I32) -> (-: fn I32 I32 {Sub I32} -> I32 pure) (p12: I32) (p13: I32) {(sub_i32: Sub I32)}) (n: I32) 1))
 // 
 // (is_odd: fn I32 -> Bool can _) (n: I32) =
-//     if (fn (p7: I32) (p8: I32) -> (==: fn I32 I32 {Eq I32} -> Bool pure) (p7: I32) (p8: I32) {(eq_i32: Eq I32)}) (n: I32) 1 then true else (not: fn Bool -> Bool can _) ((is_even: fn I32 -> Bool can _) ((fn (p9: I32) (p10: I32) -> (-: fn I32 I32 {Sub I32} -> I32 pure) (p9: I32) (p10: I32) {(sub_i32: Sub I32)}) (n: I32) 1))
+//     if (fn (p7: I32) (p8: I32) -> (==: fn I32 I32 {Eq I32} -> Bool pure) (p7: I32) (p8: I32) {(eq_i32: Eq I32)}) (n: I32) 1 then true else (fn (p9: Bool) -> (not: fn Bool {Not Bool} -> Bool pure) (p9: Bool) {(not_bool: Not Bool)}) ((is_even: fn I32 -> Bool can _) ((fn (p10: I32) (p11: I32) -> (-: fn I32 I32 {Sub I32} -> I32 pure) (p10: I32) (p11: I32) {(sub_i32: Sub I32)}) (n: I32) 1))
 // 
 // (main: fn Unit -> Bool can _) () = (is_even: fn I32 -> Bool can _) 4
 

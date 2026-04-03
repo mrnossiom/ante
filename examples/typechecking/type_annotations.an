@@ -1,3 +1,4 @@
+import Std.C.puts, exit
 
 foo (_: I32) (_: String) : Char = c"a"
 
@@ -14,10 +15,11 @@ main () =
     exit2 "test"
     puts2
 
-// TODO: This first error is duplicated
-
 // args: -e ast-t
+// expected exit status: 1
 // expected stdout:
+// import Std.C.puts, exit
+// 
 // (foo: fn I32 String -> Char pure) ((_: I32)) ((_: String)) : Char = c"a"
 // 
 // (bar: fn a a -> I32 pure) =
@@ -33,10 +35,10 @@ main () =
 //     (puts2: fn (Ptr Char) -> I32 pure)
 
 // expected stderr:
-// examples/typechecking/type_annotations.an:5:14	error: Expected I32 but found a
+// examples/typechecking/type_annotations.an:6:14	error: Expected I32 but found a
 //     fn _ b -> b
 // 
-// examples/typechecking/type_annotations.an:14:10	error: Expected I32 but found String
+// examples/typechecking/type_annotations.an:15:10	error: Expected I32 but found String
 //     exit2 "test"
 // 
 // Found 2 errors and 0 warnings

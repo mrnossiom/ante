@@ -1,25 +1,27 @@
 type T = a: I32, b: String
 
 main () =
-    // t = T 1 "one"
-    // print "t = "
-    // print (t.a)
-    // print ", "
+    t = T 1 "one"
+    print "t = "
+    print (t.a)
+    print ", "
 
-    // puts t.b.c_string
+    println t.b.c_string
 
     s = Maybe.Some 2
 
     match s
     | Some x -> 
         print "s = "
+        // The type variable from the literal `2` defaults in the outer scope 
+        // so by this point we still get an impl error
         println x
     | None -> println "s = None"
 
 // args: --delete-binary
 // expected exit status: 1
 // expected stderr:
-// examples/codegen/data.an:16:8	error: Multiple matching implicits found for type Print _ required by parameter 2: print_bool, print_char, print_i16, print_i32, print_i64, ..
+// examples/codegen/data.an:18:8	error: Multiple matching implicits found for type Print _ required by parameter 2: print_bool, print_char, print_i16, print_i32, print_i64, ..
 //         println x
 // 
 // Found 1 error and 0 warnings

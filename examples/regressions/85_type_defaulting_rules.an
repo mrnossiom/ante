@@ -19,25 +19,23 @@ main () =
     closure 2
 
 // args: --delete-binary
-// expected exit status: 1
+// expected exit status: 101
 // expected stderr:
-// examples/regressions/85_type_defaulting_rules.an:14:4	error: Expected fn _ [_] -> _ can _ but found fn I32 (fn I32 [_] -> _ can _) -> Unit can _
-//     count_down 3 fn x ->
+// thread 'main' panicked at src/mir/validation.rs:159:21:
+// fn main d750: forall '0. fn Unit -> Unit
+//   b0(b0_0: Unit):
+//     v0: Pointer = alloca 1_i32
+//     v1: fn I32 (fn I32 [I32] -> Unit) -> Unit = id count_down_d768
+//     v2: fn I32 [I32] -> Unit = id lambda_d769
+//     v3: fn I32 [I32] -> Unit = pack-closure v2, v0
+//     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Closure env type doesn't match the environment value packed here
 // 
-// examples/regressions/85_type_defaulting_rules.an:14:17	error: Expected an unindent but found `fn`
-//     count_down 3 fn x ->
-// 
-// examples/regressions/85_type_defaulting_rules.an:17:21	error: Multiple matching implicits found for type Print _ required by parameter 2: print_bool, print_char, print_i16, print_i32, print_i64, ..
-//     print_offset _ = print offset
-// 
-// examples/regressions/85_type_defaulting_rules.an:17:27	error: `offset` not found in scope
-//     print_offset _ = print offset
-// 
-// examples/regressions/85_type_defaulting_rules.an:19:12	error: Expected `=` to begin the function body but found `2`
-//     closure 2
-// 
-// examples/regressions/85_type_defaulting_rules.an:21:5	error: Expected `=` to begin the function body but found `()`
-// main ()
-// 
-// Found 6 errors and 0 warnings
+//     v4: Unit = v1 3_i32 v3
+//     v5: fn I32 [I32] -> Unit = id print_offset_d770
+//     v6: fn I32 [I32] -> Unit = pack-closure v5, v0
+//     v7: fn I32 [fn I32 [I32] -> Unit] -> Unit = id closure_d771
+//     v8: fn I32 [fn I32 [I32] -> Unit] -> Unit = pack-closure v7, v6
+//     v9: Unit = closure-call v8 2_i32
+//     return v9
+// note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 

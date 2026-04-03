@@ -1,10 +1,8 @@
 
-extern foo: fn a -> b
-
-extern
-    add: fn I32 I32 -> I32
-    puts2: fn String -> Unit
-    exit2: fn I32 -> never_returns
+foo: fn a -> b = extern foo
+add: fn I32 I32 -> I32 = extern add
+puts2: fn String -> Unit = extern puts2
+exit2: fn I32 -> never_returns = extern exit2
 
 foo_result = foo 1
 puts2_result = puts2 "test"
@@ -12,13 +10,13 @@ exit2_result = exit2 0
 
 // args: -e ast-t
 // expected stdout:
-// extern (foo: fn a -> b pure): fn a -> b
+// (foo: fn a -> b pure) = extern "foo"
 // 
-// extern (add: fn I32 I32 -> I32 pure): fn I32 I32 -> I32
+// (add: fn I32 I32 -> I32 pure) = extern "add"
 // 
-// extern (puts2: fn String -> Unit pure): fn String -> Unit
+// (puts2: fn String -> Unit pure) = extern "puts2"
 // 
-// extern (exit2: fn I32 -> never_returns pure): fn I32 -> never_returns
+// (exit2: fn I32 -> never_returns pure) = extern "exit2"
 // 
 // (foo_result: _) = (foo: fn I32 -> _ pure) 1
 // 

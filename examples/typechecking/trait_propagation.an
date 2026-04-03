@@ -1,5 +1,5 @@
 
-extern bar : a
+bar: a = extern bar
 
 trait Baz a with baz: fn a -> Unit
 
@@ -11,8 +11,9 @@ foo () = baz bar
 //
 
 // args: -e ast-t
+// expected exit status: 1
 // expected stdout:
-// extern (bar: a): a
+// (bar: a) = extern "bar"
 // 
 // type Baz a [env] =
 //     baz: fn a [[env]] -> Unit

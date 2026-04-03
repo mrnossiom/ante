@@ -14,13 +14,14 @@ handle_count f =
 handle_count foo
 
 // args: -e ast-t
+// expected exit status: 1
 // expected stdout:
 // effect Count with
 //     (count: (error)): fn Unit -> Unit
 // 
-// (foo: fn Unit -> _ can _) () =
+// (foo: fn Unit -> Unit can _) () =
 //     (count: (error)) ()
-//     (repeat: (error)) 10 (fn (_: _) -> (count: (error)) ())
+//     (repeat: fn Usz (fn Usz -> Unit pure) -> Unit pure) 10 (fn (_: Usz) -> (count: (error)) ())
 // 
 // (handle_count: fn _ -> _ can _) (f: _) =
 //     handle 
@@ -32,9 +33,6 @@ handle_count foo
 // examples/typechecking/count_effect.an:5:4	error: `count` not found in scope
 //     count ()
 // 
-// examples/typechecking/count_effect.an:6:4	error: `repeat` not found in scope
-//     repeat 10 fn _ -> count ()
-// 
 // examples/typechecking/count_effect.an:6:22	error: `count` not found in scope
 //     repeat 10 fn _ -> count ()
 // 
@@ -44,5 +42,5 @@ handle_count foo
 // examples/typechecking/count_effect.an:14:13	error: Expected `=` to begin the function body but found `foo`
 // handle_count foo
 // 
-// Found 5 errors and 0 warnings
+// Found 4 errors and 0 warnings
 

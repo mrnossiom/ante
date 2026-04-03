@@ -1,3 +1,5 @@
+import Std.C.puts
+
 show (x: String) = puts x.c_string
 
 main () =
@@ -6,7 +8,7 @@ main () =
     | Some _ -> 1
     | None -> 0
 
-    show "foo"
+    show "foo\0"
     0
 
 // args: --delete-binary

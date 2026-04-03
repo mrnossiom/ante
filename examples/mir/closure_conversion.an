@@ -48,7 +48,7 @@ use y = ()
 //     v0: fn I32 [I32] -> Unit = pack-closure d7, b0_1
 //     v1: fn Unit [I32] -> I32 = instantiate d8 '0
 //     v2: fn Unit [I32] -> I32 = pack-closure v1, b0_1
-//     v3: fn (I32, I32) -> Unit = instantiate d2 I32, I32 error
+//     v3: fn (I32, I32) -> Unit = instantiate d2 I32, I32 Unit
 //     v4: I32 = closure-call v2 ()
 //     v5: I32, I32 = ,_d4 b0_0 v4
 //     v6: Unit = v3 v5
@@ -57,7 +57,7 @@ use y = ()
 // fn captures1 d3: forall '0. fn I32 [I32] -> Unit
 //   b0(b0_0: I32, b0_1: I32):
 //     v0: fn I32 [I32] -> Unit = pack-closure d3, b0_1
-//     v1: fn (I32, I32) -> Unit = instantiate d2 I32, I32 error
+//     v1: fn (I32, I32) -> Unit = instantiate d2 I32, I32 Unit
 //     v2: I32, I32 = ,_d4 b0_0 b0_1
 //     v3: Unit = v1 v2
 //     return v3
@@ -73,7 +73,7 @@ use y = ()
 //     v0: I32 = b0_1.0
 //     v1: I32 = b0_1.1
 //     v2: fn I32 [I32, I32] -> Unit = pack-closure d5, b0_1
-//     v3: fn (I32, (I32, I32)) -> Unit = instantiate d2 I32, (I32, I32) error
+//     v3: fn (I32, (I32, I32)) -> Unit = instantiate d2 I32, (I32, I32) Unit
 //     v4: I32, I32 = ,_d4 v0 v1
 //     v5: I32, (I32, I32) = ,_d4 b0_0 v4
 //     v6: Unit = v3 v5
@@ -81,7 +81,7 @@ use y = ()
 // 
 // fn free_function d1: forall '0. fn I32 -> Unit
 //   b0(b0_0: I32):
-//     v0: fn I32 -> Unit = instantiate d2 I32 error
+//     v0: fn I32 -> Unit = instantiate d2 I32 Unit
 //     v1: Unit = v0 b0_0
 //     return v1
 // 

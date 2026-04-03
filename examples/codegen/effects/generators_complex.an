@@ -77,14 +77,11 @@ iota 10
 // examples/codegen/effects/generators_complex.an:40:8	error: Expected an expression but found `@`
 //     x = @first x1
 // 
-// examples/codegen/effects/generators_complex.an:41:8	error: `second` not found in scope
-//     y = second x1
-// 
 // examples/codegen/effects/generators_complex.an:42:11	error: Expected an unindent but found `${`
 //     print "${x}, ${y}"
 // 
 // examples/codegen/effects/generators_complex.an:44:5	error: Expected `=` to begin the function body but found `10`
 // iota 10
 // 
-// Found 12 errors and 0 warnings
+// Found 11 errors and 0 warnings
 

@@ -17,7 +17,7 @@ mod hover;
 mod util;
 
 use definition::definition_at;
-use diagnostics::rope_for_file;
+use diagnostics::{file_id_for_path, rope_for_file};
 use hover::hover_at;
 use util::{byte_range_to_lsp_range, lsp_range_to_rope_range, position_to_byte_offset};
 
@@ -120,7 +120,7 @@ impl LanguageServer for Backend {
             Ok(p) => p,
             Err(_) => return Ok(None),
         };
-        let file_id = ante::name_resolution::namespace::SourceFileId::new_in_local_crate(&path);
+        let file_id = file_id_for_path(&path);
 
         let hover_text = {
             let compiler = self.compiler.read().await;
@@ -149,7 +149,7 @@ impl LanguageServer for Backend {
             Ok(p) => p,
             Err(_) => return Err(Error::method_not_found()),
         };
-        let file_id = ante::name_resolution::namespace::SourceFileId::new_in_local_crate(&path);
+        let file_id = file_id_for_path(&path);
 
         let lsp_location = {
             let compiler = self.compiler.read().await;

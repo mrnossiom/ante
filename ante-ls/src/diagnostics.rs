@@ -23,6 +23,16 @@ pub fn init_db(db: &mut Db, starting_file: &std::path::Path) {
     find_files::populate_crates_and_files(db, &[starting_file.to_path_buf()]);
 }
 
+/// Derive a SourceFileId for a local-crate file from its absolute on-disk path.
+/// Strips the CWD prefix and then the `src` directory component to match the
+/// convention used by `populate_crates_and_files`.
+pub fn file_id_for_path(path: &std::path::Path) -> ante::name_resolution::namespace::SourceFileId {
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let normalized = path.strip_prefix(&cwd).unwrap_or(path);
+    let normalized = normalized.strip_prefix("src").unwrap_or(normalized);
+    ante::name_resolution::namespace::SourceFileId::new_in_local_crate(normalized)
+}
+
 /// Incrementally update a single file's content. inc-complete invalidates only
 /// the cached queries that depend on this input.
 pub fn set_file_content(db: &mut Db, path: &std::path::Path, rope: &Rope) {
@@ -30,10 +40,7 @@ pub fn set_file_content(db: &mut Db, path: &std::path::Path, rope: &Rope) {
     // used when it registered the file. URIs from the LSP client carry absolute paths, so we
     // strip the cwd prefix and the `src` dir here to match. The absolute path is still kept
     // inside SourceFile so that Url::from_file_path works correctly when converting diagnostics.
-    let cwd = std::env::current_dir().unwrap_or_default();
-    let normalized = path.strip_prefix(&cwd).unwrap_or(path);
-    let normalized = normalized.strip_prefix("src").unwrap_or(normalized);
-    let file_id = ante::name_resolution::namespace::SourceFileId::new_in_local_crate(normalized);
+    let file_id = file_id_for_path(path);
     file_id.set(db, Arc::new(SourceFile::new(Arc::new(path.to_path_buf()), rope.to_string())));
 }
 

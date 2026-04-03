@@ -176,6 +176,7 @@ pub enum Diagnostic {
     NoMainFunction {
         location: Location,
     },
+    TypeAnnotationNeeded { location: Location },
 }
 
 impl Ord for Diagnostic {
@@ -400,6 +401,9 @@ impl Diagnostic {
             Diagnostic::NoMainFunction { location: _ } => {
                 "This program has no `main` function".to_string()
             },
+            Diagnostic::TypeAnnotationNeeded { location: _ } => {
+                "Type annotation needed".to_string()
+            },
         }
     }
 
@@ -442,6 +446,7 @@ impl Diagnostic {
             | Diagnostic::ReturnNotInFunction { location }
             | Diagnostic::IntegerTooLarge { location, .. }
             | Diagnostic::Unimplemented { location, .. }
+            | Diagnostic::TypeAnnotationNeeded { location, .. }
             | Diagnostic::NoMainFunction { location } => location,
         }
     }

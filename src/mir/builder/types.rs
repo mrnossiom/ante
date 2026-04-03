@@ -4,9 +4,15 @@ use inc_complete::DbGet;
 use rustc_hash::FxHashMap;
 
 use crate::{
-    incremental::{GetItem, TypeCheck}, iterator_extensions::mapvec, mir::{builder::Context, FunctionType, Type}, name_resolution::{builtin::Builtin, Origin}, parser::ids::{ExprId, PathId, PatternId}, type_inference::{
-        types::{Type as TCType, TypeBindings}, TypeBody
-    }
+    incremental::{GetItem, TypeCheck},
+    iterator_extensions::mapvec,
+    mir::{FunctionType, Type, builder::Context},
+    name_resolution::{Origin, builtin::Builtin},
+    parser::ids::{ExprId, PathId, PatternId},
+    type_inference::{
+        TypeBody,
+        types::{Type as TCType, TypeBindings, TypeVariableId},
+    },
 };
 
 impl<'local, Db> Context<'local, Db>
@@ -64,15 +70,24 @@ where
         match typ.follow(self.type_bindings) {
             TCType::Primitive(primitive_type) => self.convert_primitive_type(*primitive_type, args),
             TCType::Generic(generic) => self.generics_in_scope.get(&generic).map_or(Type::ERROR, |g| Type::Generic(*g)),
-            // Type variables not in our generics map are unbound and should be errors
             TCType::Variable(id) => {
-                let generic = crate::type_inference::generics::Generic::Inferred(*id);
-                self.generics_in_scope.get(&generic).map_or(Type::ERROR, |g| Type::Generic(*g))
+                // Any unbound variables at this point should be defaultable to Unit with only
+                // slight changes in behavior. Implicits should already be found so this won't affect
+                // impl search. A case where this triggers is `(transmute function) args` where even
+                // if the argument & return types of the function are constrained, the environment
+                // type will be left unbound.
+                self.convert_type_variable(*id, Type::UNIT)
             },
             TCType::Function(function_type) => {
                 // TODO: Effects
                 let parameters = mapvec(&function_type.parameters, |typ| self.convert_type(&typ.typ, None));
-                let environment = self.convert_type(&function_type.environment, None);
+
+                // Default to NoClosureEnv instead of Unit
+                let environment = match function_type.environment.follow(self.type_bindings) {
+                    TCType::Variable(id) => self.convert_type_variable(*id, Type::NO_CLOSURE_ENV),
+                    other => self.convert_type(other, None),
+                };
+
                 let return_type = self.convert_type(&function_type.return_type, None);
                 Type::Function(Arc::new(FunctionType { parameters, environment, return_type }))
             },
@@ -83,6 +98,11 @@ where
             TCType::UserDefined(origin) => self.convert_type_origin(*origin, args, None),
             TCType::Forall(_, typ) => self.convert_type(typ, args),
         }
+    }
+
+    fn convert_type_variable(&self, id: TypeVariableId, default: Type) -> Type {
+        let generic = crate::type_inference::generics::Generic::Inferred(id);
+        self.generics_in_scope.get(&generic).map_or(default, |g| Type::Generic(*g))
     }
 
     fn convert_type_origin(&self, origin: Origin, args: Option<&[TCType]>, variant_index: Option<usize>) -> Type {

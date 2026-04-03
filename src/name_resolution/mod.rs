@@ -19,7 +19,7 @@ use crate::{
     parser::{
         context::TopLevelContext,
         cst::{
-            Comptime, Constructor, Declaration, Definition, EffectDefinition, EffectType, Expr, Extern, Generics,
+            Comptime, Constructor, Declaration, Definition, EffectDefinition, EffectType, Expr, Generics,
             ItemName, Path, Pattern, TopLevelItemKind, TraitDefinition, TraitImpl, Type, TypeDefinition,
             TypeDefinitionBody, TypeKind,
         },
@@ -132,7 +132,6 @@ pub fn resolve_impl(context: &Resolve, compiler: &DbHandle) -> ResolutionResult 
         TopLevelItemKind::TraitDefinition(trait_definition) => resolver.resolve_trait_definition(trait_definition),
         TopLevelItemKind::TraitImpl(trait_impl) => resolver.resolve_trait_impl(trait_impl),
         TopLevelItemKind::EffectDefinition(effect_definition) => resolver.resolve_effect_definition(effect_definition),
-        TopLevelItemKind::Extern(extern_) => resolver.resolve_extern(extern_),
         TopLevelItemKind::Comptime(comptime_) => resolver.resolve_comptime(comptime_),
     }
 
@@ -534,6 +533,7 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
                 self.resolve_expr(assignment.rhs);
             },
             Expr::Error => (),
+            Expr::Extern(_) => (),
         }
     }
 
@@ -797,10 +797,6 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
         for declaration in &effect_definition.body {
             self.declare(declaration);
         }
-    }
-
-    fn resolve_extern(&mut self, extern_: &Extern) {
-        self.declare(&extern_.declaration);
     }
 
     /// Does this require special handling? This should be resolved before runtime

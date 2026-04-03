@@ -285,6 +285,7 @@ fn desugar_expression(expr: ExprId, context: &mut TopLevelContext) {
             desugar_expression(assignment.lhs, context);
             desugar_expression(rhs, context);
         },
+        Expr::Extern(_) => (),
     }
 }
 

@@ -85,6 +85,10 @@ pub(super) fn try_get_type(
         let lambda_location = context.expr_locations[definition.rhs].clone();
         let cst_fn_type = cst::Type::new(TypeKind::Function(cst_function_type), lambda_location);
         Type::from_cst_type_no_type_variables(&cst_fn_type, resolve, compiler)
+
+    // The body being a type annotation is common for `extern` declarations: `puts = extern "puts": fn ...`
+    } else if let Expr::TypeAnnotation(annotation) = &context.exprs[definition.rhs] {
+        Type::from_cst_type_no_type_variables(&annotation.rhs, resolve, compiler)
     } else {
         None
     }

@@ -226,7 +226,6 @@ impl<'a> CstDisplay<'a> {
             TopLevelItemKind::EffectDefinition(effect_definition) => {
                 self.fmt_effect_definition(effect_definition, context, f)
             },
-            TopLevelItemKind::Extern(extern_) => self.fmt_extern(extern_, context, f),
             TopLevelItemKind::Comptime(comptime) => self.fmt_comptime(comptime, context, f),
         }?;
         writeln!(f)
@@ -629,6 +628,7 @@ impl<'a> CstDisplay<'a> {
                 write!(f, " := ")?;
                 self.fmt_expr(assignment.rhs, context, f)
             },
+            Expr::Extern(extern_) => self.fmt_extern(extern_, f),
         }
     }
 
@@ -865,9 +865,8 @@ impl<'a> CstDisplay<'a> {
         Ok(())
     }
 
-    fn fmt_extern(&mut self, extern_: &Extern, context: &impl IdStore, f: &mut Formatter) -> std::fmt::Result {
-        write!(f, "extern ")?;
-        self.fmt_declaration(&extern_.declaration, context, f)
+    fn fmt_extern(&mut self, extern_: &Extern, f: &mut Formatter) -> std::fmt::Result {
+        write!(f, "extern \"{}\"", extern_.name)
     }
 
     fn fmt_lambda(

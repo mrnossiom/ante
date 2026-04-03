@@ -28,7 +28,7 @@ use crate::{
     },
     name_resolution::{Origin, builtin::Builtin},
     parser::{
-        cst::{self, Extern, Literal, Name, SequenceItem},
+        cst::{self, Literal, Name, SequenceItem},
         ids::{ExprId, NameId, PathId, PatternId, TopLevelId, TopLevelName},
     },
     type_inference::{
@@ -85,10 +85,6 @@ where
         cst::TopLevelItemKind::TraitDefinition(_) => unreachable!("Traits should be desguared to types"),
         cst::TopLevelItemKind::TraitImpl(_) => unreachable!("Trait impls should be desguared to definitions"),
         cst::TopLevelItemKind::EffectDefinition(_) => None,
-        cst::TopLevelItemKind::Extern(extern_) => {
-            context.external(extern_, item.id);
-            Some(context.finish())
-        },
         cst::TopLevelItemKind::Comptime(_) => None,
     }
 }
@@ -266,11 +262,8 @@ where
             cst::Expr::Quoted(quoted) => self.quoted(quoted),
             cst::Expr::Loop(_) => unreachable!("Loops should be desugared before MIR generation"),
             cst::Expr::Return(return_) => self.return_(return_.expression),
-            cst::Expr::Assignment(assignment) => {
-                let lhs = assignment.lhs;
-                let rhs = assignment.rhs;
-                self.assignment(lhs, rhs)
-            },
+            cst::Expr::Assignment(assignment) => self.assignment(assignment.lhs, assignment.rhs),
+            cst::Expr::Extern(extern_) => self.extern_(extern_, expr),
         }
     }
 
@@ -321,7 +314,7 @@ where
                 Some(Origin::TopLevelDefinition(name)) => {
                     let id = self.get_definition_id(&name);
                     let name = self.get_definition_name(&name);
-                    let typ = self.convert_type(&self.types.result.maps.path_types[&path_id], None);
+                    let typ = self.convert_path_type(path_id);
                     self.make_definition_value(id, name, typ)
                 },
                 Some(origin @ Origin::Builtin(Builtin::PairConstructor)) => {
@@ -339,7 +332,7 @@ where
                     });
                     if self.mutable_locals.contains(&name) {
                         // Mutable locals are StackAlloc'd pointers; auto-deref to load the value.
-                        let val_type = self.convert_type(&self.types.result.maps.path_types[&path_id], None);
+                        let val_type = self.convert_path_type(path_id);
                         self.push_instruction(Instruction::Deref(ptr), val_type)
                     } else {
                         ptr
@@ -360,7 +353,7 @@ where
         if let Value::Definition(id) = value
             && let Some(bindings) = self.types.result.context.get_instantiation(path_id)
         {
-            let typ = self.convert_type(&self.types.result.maps.path_types[&path_id], None);
+            let typ = self.convert_path_type(path_id);
             let bindings = Arc::new(mapvec(bindings, |typ| self.convert_type(typ, None)));
             let instruction = Instruction::Instantiate(id, bindings);
             value = self.push_instruction(instruction, typ);
@@ -421,8 +414,7 @@ where
 
         let previous_state = self.is_non_function_global(definition).then(|| {
             let generic_count = self.generics_in_scope.len() as u32;
-            let typ = &self.types.result.maps.pattern_types[&definition.pattern];
-            let typ = self.convert_type(&typ, None);
+            let typ = self.convert_pattern_type(definition.pattern);
             self.start_global(name, name_id, generic_count, typ)
         });
 
@@ -565,7 +557,7 @@ where
         &mut self, lambda: &cst::Lambda, name_id: Option<NameId>, name: Option<Name>, expr: ExprId, is_global: bool,
     ) -> Value {
         let name = name.unwrap_or_else(|| Arc::new("lambda".to_string()));
-        let full_type = self.convert_type(&self.types.result.maps.expr_types[&expr], None);
+        let full_type = self.convert_expr_type(expr);
         let Type::Function(function_type) = &full_type else { unreachable!("Lambda does not have a function type") };
 
         // Lambdas aren't really generic but they may capture generics from their containing
@@ -899,10 +891,11 @@ where
             LhsKind::FieldAccess(object_expr, field_expr) => {
                 let struct_ptr = self.lhs_as_pointer(object_expr);
                 let index = self.context().member_access_index(field_expr).unwrap_or(u32::MAX);
+
                 // If the object has a reference type, use the inner type for GEP.
-                let struct_type = {
-                    let object_tc = self.types.result.maps.expr_types[&object_expr].follow(&self.types.bindings);
-                    if let TCType::Application(constructor, args) = object_tc
+                let struct_type = self.types.result.maps.expr_types[&object_expr].follow(&self.types.bindings);
+                let struct_type =
+                    if let TCType::Application(constructor, args) = struct_type
                         && matches!(
                             constructor.as_ref().follow(&self.types.bindings),
                             TCType::Primitive(type_inference::types::PrimitiveType::Reference(_))
@@ -910,9 +903,8 @@ where
                     {
                         self.convert_type(&args[0], None)
                     } else {
-                        self.convert_type(object_tc, None)
-                    }
-                };
+                        self.convert_type(struct_type, None)
+                    };
                 self.push_instruction(Instruction::GetFieldPtr { struct_ptr, struct_type, index }, Type::POINTER)
             },
             LhsKind::Other => todo!("unhandled assignment LHS"),
@@ -952,6 +944,11 @@ where
         // TODO: We'll need to try to filter these return blocks from
         // matches & ifs, and potentially check for instructions after returns.
         Value::Error
+    }
+
+    fn extern_(&mut self, extern_: &cst::Extern, id: ExprId) -> Value {
+        let typ = self.convert_expr_type(id);
+        self.push_instruction(Instruction::Extern(extern_.name.clone()), typ)
     }
 
     /// Bind the given value to the given pattern
@@ -1162,15 +1159,5 @@ where
                 self.name_to_id.insert(top_level_name, id);
             }
         }
-    }
-
-    /// For an extern item, we only have to store its name and type in `self.external`
-    fn external(&mut self, extern_: &Extern, item_id: TopLevelId) {
-        let name_id = TopLevelName::new(item_id, extern_.declaration.name);
-        let id = self.get_definition_id(&name_id);
-        let typ = &self.types.result.maps.name_types[&extern_.declaration.name];
-        let typ = self.convert_type(&typ, None);
-        let name = self.context()[extern_.declaration.name].clone();
-        self.reference_definition(id, name, typ);
     }
 }

@@ -38,7 +38,6 @@ pub enum TopLevelItemKind {
     TraitDefinition(TraitDefinition),
     TraitImpl(TraitImpl),
     EffectDefinition(EffectDefinition),
-    Extern(Extern),
     Comptime(Comptime),
 }
 
@@ -50,7 +49,6 @@ impl TopLevelItemKind {
             TopLevelItemKind::TraitDefinition(trait_definition) => ItemName::Single(trait_definition.name),
             TopLevelItemKind::TraitImpl(trait_impl) => ItemName::Single(trait_impl.name),
             TopLevelItemKind::EffectDefinition(effect_definition) => ItemName::Single(effect_definition.name),
-            TopLevelItemKind::Extern(extern_) => ItemName::Single(extern_.declaration.name),
             TopLevelItemKind::Comptime(_) => ItemName::None,
         }
     }
@@ -236,6 +234,7 @@ pub enum Expr {
     Quoted(Quoted),
     Return(Return),
     Assignment(Assignment),
+    Extern(Extern),
 }
 
 impl ErrorDefault for Expr {
@@ -494,9 +493,12 @@ pub struct EffectDefinition {
     pub body: Vec<Declaration>,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
+/// An extern has a name and a type determined by the expected type
+/// when it is used in an expression. Most often this is bounded
+/// by a type annotation on the extern expression itself.
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
 pub struct Extern {
-    pub declaration: Declaration,
+    pub name: String,
 }
 
 /// A top-level item evaluated at compile-time, e.g:

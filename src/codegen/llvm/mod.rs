@@ -680,6 +680,9 @@ impl<'ctx> ModuleContext<'ctx> {
                 self.builder.build_struct_gep(struct_llvm_type, struct_ptr, *index, "").unwrap().into()
             },
             mir::Instruction::SizeOf(_) => todo!("SizeOf should be removed by monomorphization"),
+            mir::Instruction::Extern(name) => {
+                todo!("Import extern {name}")
+            }
         };
         self.values.insert(mir::Value::InstructionResult(id), result);
     }

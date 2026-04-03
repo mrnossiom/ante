@@ -139,7 +139,6 @@ pub fn visible_implicits_impl(context: &VisibleImplicits, db: &DbHandle) -> Defi
             TopLevelItemKind::TraitDefinition(_) => false,
             TopLevelItemKind::TraitImpl(_) => true,
             TopLevelItemKind::EffectDefinition(_) => false,
-            TopLevelItemKind::Extern(_) => false,
             TopLevelItemKind::Comptime(_) => false,
         }
     });

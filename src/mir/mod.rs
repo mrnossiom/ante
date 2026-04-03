@@ -424,6 +424,12 @@ pub enum Instruction {
     /// Returns the given value as-is. Used by monomorphization to replace `Instantiate` instructions.
     Id(Value),
 
+    /// Returns the value of the given external symbol. Its type is given by the result type of
+    /// this instruction. Note that "extern" here refers to an external definition such as the C
+    /// function `puts` rather than a definition which is just excluded from the current Mir
+    /// compilation unit.
+    Extern(String),
+
     // Arithmetic ops
     AddInt(Value, Value),
     AddFloat(Value, Value),
@@ -522,6 +528,7 @@ impl Instruction {
             Instruction::Deref(value) => f(value),
             Instruction::SizeOf(_typ) => (),
             Instruction::GetFieldPtr { struct_ptr, .. } => f(struct_ptr),
+            Instruction::Extern(_) => (),
         }
     }
 }

@@ -60,7 +60,6 @@ pub fn type_check_impl(context: &TypeCheckSCC, compiler: &DbHandle) -> TypeCheck
             TopLevelItemKind::TraitDefinition(_) => unreachable!("Traits should be desugared into types by this point"),
             TopLevelItemKind::TraitImpl(_) => unreachable!("Impls should be simplified into definitions by this point"),
             TopLevelItemKind::EffectDefinition(_) => (), // TODO
-            TopLevelItemKind::Extern(extern_) => checker.check_extern(extern_),
             TopLevelItemKind::Comptime(comptime) => checker.check_comptime(comptime),
         };
 

@@ -3,52 +3,7 @@
     Standard functions and datatypes pre-imported
     into every Ante source file.
 */
-
-//C functions
-extern
-    // varargs is not supported by the cranelift backend
-    // printf: Ptr Char - ... -> Unit
-    // TODO: These functions use absolute sized types like I32
-    //       which are not exact standins for C's integer types.
-    puts: fn (Ptr Char) -> I32
-    putchar: fn Char -> Unit
-    getchar: fn Unit -> I32
-    exit: fn I32 -> Unit
-    malloc: fn Usz -> Ptr a
-    calloc: fn /*items:*/Usz /*size:*/Usz -> Ptr a
-    realloc: fn (Ptr a) Usz -> Ptr a
-    free: fn (Ptr a) -> Unit
-    memcpy: fn (Ptr a) (Ptr b) Usz -> Ptr a
-    memcmp: fn (Ptr a) (Ptr b) Usz -> I32
-    system: fn (Ptr Char) -> I32
-    strlen: fn (Ptr Char) -> Usz
-
-//C stdio
-type File = f: Ptr Unit
-type FilePos = f: Ptr Unit
-
-type InFile = f: File
-type OutFile = f: File
-
-extern
-    fopen: fn (Ptr Char) (Ptr Char) -> File
-    fclose: fn File -> Unit
-
-    fputs: fn (Ptr Char) OutFile -> I32
-    fputc: fn I32 OutFile -> I32
-    fwrite: fn (Ptr U8) Usz Usz OutFile -> Usz
-
-    fgetc: fn InFile -> I32
-    fgets: fn (Ptr Char) I32 InFile -> (Ptr Char)
-    ungetc: fn I32 InFile -> I32
-
-    fgetpos: fn File FilePos -> Unit
-    ftell: fn File -> I32
-    fsetpos: fn File FilePos -> Unit
-    fseek: fn File I32 I32 -> I32
-
-    feof: fn InFile -> I32
-    ferror: fn File -> I32
+import Std.C.putchar, exit
 
 type Maybe t =
    | None
@@ -379,7 +334,7 @@ trait Num a with
     eq: Eq a
     cmp: Cmp a
 
-impl int_i8: Num I8 with
+impl num_i8: Num I8 with
     add = add_i8
     sub = sub_i8
     mul = mul_i8
@@ -388,7 +343,7 @@ impl int_i8: Num I8 with
     eq = eq_i8
     cmp = cmp_i8
 
-impl int_i16: Num I16 with
+impl num_i16: Num I16 with
     add = add_i16
     sub = sub_i16
     mul = mul_i16
@@ -397,7 +352,7 @@ impl int_i16: Num I16 with
     eq = eq_i16
     cmp = cmp_i16
 
-impl int_i32: Num I32 with
+impl num_i32: Num I32 with
     add = add_i32
     sub = sub_i32
     mul = mul_i32
@@ -406,7 +361,7 @@ impl int_i32: Num I32 with
     eq = eq_i32
     cmp = cmp_i32
 
-impl int_i64: Num I64 with
+impl num_i64: Num I64 with
     add = add_i64
     sub = sub_i64
     mul = mul_i64
@@ -415,7 +370,7 @@ impl int_i64: Num I64 with
     eq = eq_i64
     cmp = cmp_i64
 
-impl int_isz: Num Isz with
+impl num_isz: Num Isz with
     add = add_isz
     sub = sub_isz
     mul = mul_isz
@@ -424,7 +379,7 @@ impl int_isz: Num Isz with
     eq = eq_isz
     cmp = cmp_isz
 
-impl int_u8: Num U8 with
+impl num_u8: Num U8 with
     add = add_u8
     sub = sub_u8
     mul = mul_u8
@@ -433,7 +388,7 @@ impl int_u8: Num U8 with
     eq = eq_u8
     cmp = cmp_u8
 
-impl int_u16: Num U16 with
+impl num_u16: Num U16 with
     add = add_u16
     sub = sub_u16
     mul = mul_u16
@@ -442,7 +397,7 @@ impl int_u16: Num U16 with
     eq = eq_u16
     cmp = cmp_u16
 
-impl int_u32: Num U32 with
+impl num_u32: Num U32 with
     add = add_u32
     sub = sub_u32
     mul = mul_u32
@@ -451,7 +406,7 @@ impl int_u32: Num U32 with
     eq = eq_u32
     cmp = cmp_u32
 
-impl int_u64: Num U64 with
+impl num_u64: Num U64 with
     add = add_u64
     sub = sub_u64
     mul = mul_u64
@@ -460,7 +415,7 @@ impl int_u64: Num U64 with
     eq = eq_u64
     cmp = cmp_u64
 
-impl int_usz: Num Usz with
+impl num_usz: Num Usz with
     add = add_usz
     sub = sub_usz
     mul = mul_usz

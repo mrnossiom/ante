@@ -52,6 +52,7 @@ impl FreeVars {
         match &checker.current_extended_context()[expr] {
             cst::Expr::Error => (),
             cst::Expr::Literal(_) => (),
+            cst::Expr::Extern(_) => (),
             cst::Expr::Variable(path) => self.find_free_variable(*path, checker),
             cst::Expr::Sequence(items) => {
                 for item in items {

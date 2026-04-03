@@ -4,20 +4,30 @@ use inc_complete::DbGet;
 use rustc_hash::FxHashMap;
 
 use crate::{
-    incremental::{GetItem, TypeCheck},
-    iterator_extensions::mapvec,
-    mir::{FunctionType, Type, builder::Context},
-    name_resolution::{Origin, builtin::Builtin},
-    type_inference::{
-        TypeBody,
-        types::{Type as TCType, TypeBindings},
-    },
+    incremental::{GetItem, TypeCheck}, iterator_extensions::mapvec, mir::{builder::Context, FunctionType, Type}, name_resolution::{builtin::Builtin, Origin}, parser::ids::{ExprId, PathId, PatternId}, type_inference::{
+        types::{Type as TCType, TypeBindings}, TypeBody
+    }
 };
 
 impl<'local, Db> Context<'local, Db>
 where
     Db: DbGet<TypeCheck> + DbGet<GetItem>,
 {
+    pub(super) fn convert_expr_type(&self, expr: ExprId) -> Type {
+        let typ = &self.types.result.maps.expr_types[&expr];
+        self.convert_type(typ, None)
+    }
+
+    pub(super) fn convert_path_type(&self, path: PathId) -> Type {
+        let typ = &self.types.result.maps.path_types[&path];
+        self.convert_type(typ, None)
+    }
+
+    pub(super) fn convert_pattern_type(&self, pattern: PatternId) -> Type {
+        let typ = &self.types.result.maps.pattern_types[&pattern];
+        self.convert_type(typ, None)
+    }
+
     pub(super) fn convert_type(&self, typ: &TCType, args: Option<&[TCType]>) -> Type {
         let ctx = ConvertTypeContext {
             compiler: self.compiler,

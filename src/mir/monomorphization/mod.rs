@@ -265,7 +265,7 @@ impl<'local> FunctionContext<'local> {
             | Instruction::Truncate(v)
             | Instruction::Deref(v) => remap(v),
             Instruction::SizeOf(typ) => self.specialize_type(typ),
-            Instruction::MakeString(_) | Instruction::Instantiate(..) => {},
+            Instruction::MakeString(_) | Instruction::Instantiate(..) | Instruction::Extern(_) => {},
             Instruction::GetFieldPtr { struct_ptr, struct_type, .. } => {
                 remap(struct_ptr);
                 if !self.generic_mapping.is_empty() {

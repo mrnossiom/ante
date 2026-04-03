@@ -9,11 +9,11 @@ use crate::{
     diagnostics::{Diagnostic, ErrorDefault, Location, Span},
     incremental,
     iterator_extensions::mapvec,
-    lexer::{Lexer, token::Token},
+    lexer::{token::Token, Lexer},
     name_resolution::namespace::SourceFileId,
     parser::{
         context::TopLevelContext,
-        cst::{Argument, HandlePattern, Loop, LoopParameter, ParameterType, ReferenceKind},
+        cst::{Argument, Extern, HandlePattern, Loop, LoopParameter, ParameterType, ReferenceKind},
     },
 };
 
@@ -501,10 +501,7 @@ impl<'tokens> Parser<'tokens> {
                 return items;
             }
 
-            if *self.current_token() == Token::Extern {
-                self.try_parse_or_recover_to_newline(|this| this.parse_extern(comments, &mut items));
-            } else if let Some(item) = self.try_parse_or_recover_to_newline(|this| this.parse_top_level_item(comments))
-            {
+            if let Some(item) = self.try_parse_or_recover_to_newline(|this| this.parse_top_level_item(comments)) {
                 items.push(Arc::new(item));
             }
 
@@ -1774,6 +1771,14 @@ impl<'tokens> Parser<'tokens> {
     }
 
     fn parse_function_call_or_atom(&mut self) -> Result<ExprId> {
+        // Extern expressions are parsed here:
+        // - Type annotations take a `function_call_or_atom` as their lhs, and we want to allow
+        //   externs to be the lhs of a type annotation.
+        // - Function call arguments are atoms, and we want to disallow externs from being call args.
+        if let Token::Extern = self.current_token() {
+            return self.parse_extern();
+        }
+
         let function = self.parse_atom()?;
 
         if let Ok(arguments) = self.many1(Self::parse_function_arg) {
@@ -1860,31 +1865,18 @@ impl<'tokens> Parser<'tokens> {
         Ok(Declaration { name, typ })
     }
 
-    fn parse_extern(&mut self, mut comments: Vec<String>, items: &mut Vec<Arc<TopLevelItem>>) -> Result<()> {
-        self.expect(Token::Extern, "`extern` to begin external declarations")?;
+    fn parse_extern(&mut self) -> Result<ExprId> {
+        self.with_expr_id_and_location(|this| {
+            this.expect(Token::Extern, "`extern` to begin external declarations")?;
 
-        let declarations = if *self.current_token() == Token::Indent {
-            self.parse_indented(|this| {
-                let declaration = |this: &mut Self| {
-                    comments.extend(this.parse_comments());
-                    let declaration = this.parse_declaration()?;
-                    let id = this.new_top_level_id_from_name_id(declaration.name);
-                    Ok((std::mem::take(&mut comments), id, declaration))
-                };
-                Ok(this.delimited(declaration, Token::Newline, true))
-            })?
-        } else {
-            let declaration = self.parse_declaration()?;
-            let id = self.new_top_level_id_from_name_id(declaration.name);
-            vec![(comments, id, declaration)]
-        };
-
-        for (comments, id, declaration) in declarations {
-            let kind = TopLevelItemKind::Extern(cst::Extern { declaration });
-            items.push(Arc::new(TopLevelItem { id, comments, kind }));
-        }
-
-        Ok(())
+            let name = match this.current_token() {
+                Token::StringLiteral(name) => Ok(name.clone()),
+                Token::Identifier(name) => Ok(name.clone()),
+                _ => this.expected("an identifier or string for the name of this extern")?
+            }?;
+            this.advance();
+            Ok(Expr::Extern(Extern { name }))
+        })
     }
 
     fn parse_declaration_block(&mut self) -> Result<Vec<Declaration>> {

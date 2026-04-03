@@ -103,6 +103,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             Expr::Return(return_) => self.check_return(return_.expression, id),
             Expr::Assignment(assignment) => self.check_assignment(assignment, expected, id),
             Expr::Error => (),
+            Expr::Extern(_) => (),
         }
     }
 
@@ -599,11 +600,6 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 self.compiler.accumulate(Diagnostic::ReturnNotInFunction { location });
             },
         }
-    }
-
-    pub(super) fn check_extern(&mut self, extern_: &cst::Extern) {
-        let typ = self.from_cst_type(&extern_.declaration.typ);
-        self.check_name(extern_.declaration.name, &typ);
     }
 
     pub(super) fn check_comptime(&self, _comptime: &cst::Comptime) {

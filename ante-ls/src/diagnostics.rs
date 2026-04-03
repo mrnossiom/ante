@@ -28,10 +28,11 @@ pub fn init_db(db: &mut Db, starting_file: &std::path::Path) {
 pub fn set_file_content(db: &mut Db, path: &std::path::Path, rope: &Rope) {
     // The SourceFileId hash must use the same (relative) path that populate_crates_and_files
     // used when it registered the file. URIs from the LSP client carry absolute paths, so we
-    // strip the cwd prefix here to match. The absolute path is still kept inside SourceFile so
-    // that Url::from_file_path works correctly when converting diagnostics.
+    // strip the cwd prefix and the `src` dir here to match. The absolute path is still kept
+    // inside SourceFile so that Url::from_file_path works correctly when converting diagnostics.
     let cwd = std::env::current_dir().unwrap_or_default();
     let normalized = path.strip_prefix(&cwd).unwrap_or(path);
+    let normalized = normalized.strip_prefix("src").unwrap_or(normalized);
     let file_id = ante::name_resolution::namespace::SourceFileId::new_in_local_crate(normalized);
     file_id.set(db, Arc::new(SourceFile::new(Arc::new(path.to_path_buf()), rope.to_string())));
 }

@@ -142,6 +142,15 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             assert!(substitutions.is_empty());
             let mut method_type = self.from_cst_type(&method_type);
 
+            // Strip the closure environment from function-typed trait method fields.
+            // define_trait_methods creates free-function wrappers (not closures), so the
+            // method type must also be a free function to stay consistent.
+            if let Type::Function(fn_arc) = method_type {
+                let mut fn_type = Arc::unwrap_or_clone(fn_arc);
+                fn_type.environment = Type::NO_CLOSURE_ENV;
+                method_type = Type::Function(Arc::new(fn_type));
+            }
+
             if matches!(method_type, Type::Function(_)) {
                 method_type = self.add_implicit_arg_to_function_type(method_type, implicit_arg);
             }

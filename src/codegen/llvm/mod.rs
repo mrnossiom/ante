@@ -248,6 +248,21 @@ impl<'ctx> ModuleContext<'ctx> {
                 let result_type = self.convert_type(global.instruction_result_type(id));
                 Self::undef_value(result_type)
             },
+            mir::Instruction::Extern(name) => {
+                // TODO: We should deduplicate these
+                let typ = global.instruction_result_type(id);
+                match self.convert_function_type(typ) {
+                    Some(typ) => {
+                        let global = self.module.add_function(name, typ, None).as_global_value();
+                        global.as_pointer_value().into()
+                    },
+                    None => {
+                        let typ = self.convert_type(typ);
+                        let global = self.module.add_global(typ, None, name);
+                        global.as_pointer_value().into()
+                    },
+                }
+            },
             other => panic!("Unsupported instruction in global initializer: {other:?}"),
         }
     }
@@ -682,7 +697,7 @@ impl<'ctx> ModuleContext<'ctx> {
             mir::Instruction::SizeOf(_) => todo!("SizeOf should be removed by monomorphization"),
             mir::Instruction::Extern(name) => {
                 todo!("Import extern {name}")
-            }
+            },
         };
         self.values.insert(mir::Value::InstructionResult(id), result);
     }

@@ -1135,6 +1135,7 @@ where
                 let name = self.context()[*field_name_id].clone();
                 let top_level_name = TopLevelName::new(self.top_level_id, *field_name_id);
                 let field_type_clone = field_type.clone();
+                let field_is_closure = field_type_clone.is_closure();
                 let n_params = wrapper_params.len();
 
                 let id = self.new_definition(name.clone(), Some(*field_name_id), generic_count, wrapper_type, |this| {
@@ -1150,10 +1151,12 @@ where
                     );
                     // Call the extracted function/closure with the value arguments (all params except last)
                     let value_args = mapvec(0..n_params - 1, |j| Value::Parameter(BlockId::ENTRY_BLOCK, j as u32));
-                    let result = this.push_instruction(
-                        Instruction::Call { function: extracted, arguments: value_args },
-                        return_type.clone(),
-                    );
+                    let instruction = if field_is_closure {
+                        Instruction::CallClosure { closure: extracted, arguments: value_args }
+                    } else {
+                        Instruction::Call { function: extracted, arguments: value_args }
+                    };
+                    let result = this.push_instruction(instruction, return_type.clone());
                     this.terminate_block(TerminatorInstruction::Return(result));
                 });
                 self.name_to_id.insert(top_level_name, id);

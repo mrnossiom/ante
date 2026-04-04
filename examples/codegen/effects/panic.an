@@ -1,13 +1,15 @@
 effect Fail with
-    fail: Unit -> a
+    fail: fn Unit -> a
 
 effect Read a with
-    read: Unit -> a
+    read: fn Unit -> a
 
-read_or_none (f: Unit -> Unit can Read a, Fail): Maybe a =
+read_or_none (f: fn Unit -> Unit can Read a, Fail): Maybe a =
     handle Some (f ())
     | fail () -> None
     | read () -> resume ()
+
+main () = ()
 
 // panic.an:8:12	error: 
 // thread 'main' panicked at src/error/mod.rs:342:17:
@@ -17,17 +19,8 @@ read_or_none (f: Unit -> Unit can Read a, Fail): Maybe a =
 
 // expected exit status: 1
 // expected stderr:
-// examples/codegen/effects/panic.an:1:1	error: This program has no `main` function
-// effect Fail with
+// examples/codegen/effects/panic.an:8:4	error: Effects and handle expressions are currently unimplemented
+//     handle Some (f ())
 // 
-// examples/codegen/effects/panic.an:2:15	error: Expected an unindent but found `->`
-//     fail: Unit -> a
-// 
-// examples/codegen/effects/panic.an:5:15	error: Expected an unindent but found `->`
-//     read: Unit -> a
-// 
-// examples/codegen/effects/panic.an:7:13	error: Expected `=` to begin the function body but found `(`
-// read_or_none (f: Unit -> Unit can Read a, Fail): Maybe a =
-// 
-// Found 4 errors and 0 warnings
+// Found 1 error and 0 warnings
 

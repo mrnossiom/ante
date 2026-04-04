@@ -12,26 +12,17 @@ main () =
     // Making this mutable helps prevent inlining
     var offset = 1
     count_down 3 fn x ->
-        print (x + offset)
+        println (x + offset)
 
-    print_offset _ = print offset
+    print_offset _ = println offset
     closure = count_down _ print_offset
     closure 2
 
 // args: --delete-binary
-// expected exit status: 101
-// expected stderr:
-// thread 'main' panicked at src/mir/validation.rs:324:21:
-// fn lambda d865: fn I32 [I32,] -> Unit
-//   b0(b0_0: I32, b0_1: I32,):
-//     v0: I32 = b0_1.0
-//     v1: fn I32 -> Unit = id lambda_d871
-//     v2: fn I32 I32 -> I32 = id lambda_d872
-//     v3: I32 = deref v0
-//     ^^^^^^^^^^^^^^^^^^ Argument type is not a pointer
-// 
-//     v4: I32 = v2 b0_0 v3
-//     v5: Unit = v1 v4
-//     return v5
-// note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+// expected stdout:
+// 4
+// 3
+// 2
+// 1
+// 1
 

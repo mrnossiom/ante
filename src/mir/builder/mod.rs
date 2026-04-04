@@ -526,6 +526,7 @@ where
         // parameters.
         let generics_count = self.generics_in_scope.len() as u32;
         let old_scope = std::mem::take(&mut self.local_variables);
+        let old_mutables = std::mem::take(&mut self.mutable_locals);
 
         let id = self.new_definition(name.clone(), name_id, generics_count, full_type.clone(), |this| {
             for (i, parameter) in lambda.parameters.iter().enumerate() {
@@ -567,6 +568,7 @@ where
         });
 
         self.local_variables = old_scope;
+        self.mutable_locals = old_mutables;
 
         // If this is a generic lambda, it will have generics forward from the currenty context
         // which we need to manually instantiate.
@@ -588,7 +590,22 @@ where
         // We must match the packing done in [type_inference::free_vars::make_tuple_type]
         assert!(!free_vars.is_empty());
 
-        let values = mapvec(free_vars, |var| *self.local_variables.get(var).unwrap());
+        let values = mapvec(free_vars, |var| {
+            let value = *self.local_variables.get(var).unwrap();
+
+            // Mutable variables declared with `var` are pointers but the type checker
+            // captures them in closure environments by value.
+            // TODO: These variables will still look mutable in the closure but mutating
+            // them will not change the original variable in the outer scope. We should likely
+            // issue an error in the type checker when captured non-reference variables are mutated.
+            if self.mutable_locals.contains(var) {
+                let tc_type = &self.types.result.maps.name_types[var];
+                let val_type = self.convert_type(tc_type, None);
+                self.push_instruction(Instruction::Deref(value), val_type)
+            } else {
+                value
+            }
+        });
         let types = mapvec(&values, |value| self.type_of_value(value));
         let make_tuple = Instruction::MakeTuple(values);
         self.push_instruction(make_tuple, Type::tuple(types))

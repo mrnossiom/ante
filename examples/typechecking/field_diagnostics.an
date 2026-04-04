@@ -23,14 +23,15 @@ main () =
     _ = mut (mut ref tuple).first
 
 // args: -e ast-t
+// expected exit status: 1
 // expected stdout:
 // (main: fn Unit -> Unit can _) () =
 //     (tuple: I32, I32) = 1 (,: fn I32 I32 -> I32, I32 pure) 1
-//     (_: _) = (ref ref (tuple: I32, I32)).first
-//     (_: mut _) = mut (tuple: I32, I32).first
+//     (_: ref (ref I32)) = (ref ref (tuple: I32, I32)).first
+//     (_: mut I32) = mut (tuple: I32, I32).first
 //     (_: mut _) = mut (tuple: I32, I32).missing
 //     (imm_ref: ref (I32, I32)) = ref (tuple: I32, I32)
-//     (_: mut _) = mut (imm_ref: ref (I32, I32)).first
+//     (_: mut (ref I32)) = mut (imm_ref: ref (I32, I32)).first
 //     (_: mut _) = mut (imm_ref: ref (I32, I32)).missing
 //     mut (mut_tuple: I32, I32) = 1 (,: fn I32 I32 -> I32, I32 pure) 1
 //     (_: ref _) = ref (mut_tuple: I32, I32).missing
@@ -38,20 +39,11 @@ main () =
 //     (mut_ref: mut (I32, I32)) = mut (mut_tuple: I32, I32)
 //     (_: ref _) = ref (mut_ref: mut (I32, I32)).missing
 //     (_: mut _) = mut (mut_ref: mut (I32, I32)).missing
-//     (_: mut _) = mut (mut ref (tuple: I32, I32)).first
+//     (_: mut (mut (ref I32))) = mut (mut ref (tuple: I32, I32)).first
 
 // expected stderr:
-// examples/typechecking/field_diagnostics.an:4:23	error: ref (ref (_, _)) has no field named `first`
-//     _ = (ref ref tuple).first
-// 
-// examples/typechecking/field_diagnostics.an:6:17	error: _, _ has no field named `first`
-//     _ = mut tuple.first
-// 
 // examples/typechecking/field_diagnostics.an:7:17	error: _, _ has no field named `missing`
 //     _ = mut tuple.missing
-// 
-// examples/typechecking/field_diagnostics.an:10:19	error: ref (_, _) has no field named `first`
-//     _ = mut imm_ref.first
 // 
 // examples/typechecking/field_diagnostics.an:11:19	error: ref (_, _) has no field named `missing`
 //     _ = mut imm_ref.missing
@@ -68,8 +60,5 @@ main () =
 // examples/typechecking/field_diagnostics.an:21:19	error: mut (_, _) has no field named `missing`
 //     _ = mut mut_ref.missing
 // 
-// examples/typechecking/field_diagnostics.an:23:27	error: mut (ref (_, _)) has no field named `first`
-//     _ = mut (mut ref tuple).first
-// 
-// Found 10 errors and 0 warnings
+// Found 6 errors and 0 warnings
 

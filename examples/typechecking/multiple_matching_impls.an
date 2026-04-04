@@ -53,16 +53,16 @@ impl candidate2: Foo Thing with
 //     (foo: (error)) ((Thing: fn Unit -> Thing pure) ())
 // 
 // implicit (candidate1: fn {Bar a} -> Foo a pure) {(_: Bar a)} : Foo a (Bar a [env_0]) pure = Foo a (Bar a [env_0]) with
-//     (foo: fn a [Bar a] -> Unit pure) = fn (a: a) -> (bar: fn {Baz _} -> Bar _ pure) (a: a)
+//     (foo: fn a [(Bar a)] -> Unit pure) = fn (a: a) -> (bar: fn {Baz _} -> Bar _ pure) (a: a)
 // 
 // implicit (bar: fn {Baz a} -> Bar a pure) {(_: Baz a)} : Bar a (Baz a [env_0]) pure = Bar a (Baz a [env_0]) with
-//     (bar: fn a [Baz a] -> Unit pure) = fn (a: a) -> (baz: Baz Thing) (a: a)
+//     (bar: fn a [(Baz a)] -> Unit pure) = fn (a: a) -> (baz: Baz Thing) (a: a)
 // 
 // implicit (baz: Baz Thing) = Baz Thing NoClosureEnv with
 //     (baz: fn Thing -> Unit pure) = fn (_: Thing) -> ()
 // 
 // implicit (does_not_match: fn {Print a} -> Foo a pure) {(_: Print a)} : Foo a (Print a [env_0]) pure = Foo a (Print a [env_0]) with
-//     (foo: fn a [Print a] -> Unit pure) = fn (_: a) -> ()
+//     (foo: fn a [(Print a)] -> Unit pure) = fn (_: a) -> ()
 // 
 // implicit (candidate2: Foo Thing) = Foo Thing NoClosureEnv with
 //     (foo: fn Thing -> Unit pure) = fn (_: Thing) -> ()
@@ -71,19 +71,19 @@ impl candidate2: Foo Thing with
 // examples/typechecking/multiple_matching_impls.an:15:4	error: `foo` not found in scope
 //     foo (Thing ())
 // 
-// examples/typechecking/multiple_matching_impls.an:19:4	error: Expected the closure environment Bar a, but the actual environment was empty
+// examples/typechecking/multiple_matching_impls.an:19:4	error: Expected the closure environment (Bar a), but the actual environment was empty
 //     foo a = bar a
 // 
 // examples/typechecking/multiple_matching_impls.an:19:12	error: Expected fn _ [_] -> Unit can _ but found fn {Baz _} -> Bar _ pure
 //     foo a = bar a
 // 
-// examples/typechecking/multiple_matching_impls.an:22:4	error: Expected the closure environment Baz a, but the actual environment was empty
+// examples/typechecking/multiple_matching_impls.an:22:4	error: Expected the closure environment (Baz a), but the actual environment was empty
 //     bar a = baz a
 // 
 // examples/typechecking/multiple_matching_impls.an:22:12	error: Expected fn _ [_] -> Unit can _ but found Baz Thing
 //     bar a = baz a
 // 
-// examples/typechecking/multiple_matching_impls.an:30:4	error: Expected the closure environment Print a, but the actual environment was empty
+// examples/typechecking/multiple_matching_impls.an:30:4	error: Expected the closure environment (Print a), but the actual environment was empty
 //     foo _ = ()
 // 
 // Found 6 errors and 0 warnings

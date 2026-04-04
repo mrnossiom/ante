@@ -693,8 +693,8 @@ impl print_bool: Print Bool with
 trait Iterator it elem with
     next: fn it -> Maybe (it, elem)
 
-iter iterable f =
-    match Iterator.next iterable
+iter (iterable: it) f {i: Iterator it elem} =
+    match i.next iterable
     | None -> ()
     | Some (rest, elem) ->
         f elem

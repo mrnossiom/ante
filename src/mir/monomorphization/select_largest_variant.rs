@@ -60,7 +60,9 @@ impl Type {
             Type::Union(_) => true,
             Type::Tuple(fields) => fields.iter().any(Type::contains_union),
             Type::Function(function) => {
-                function.parameters.iter().any(Type::contains_union) || function.return_type.contains_union()
+                function.parameters.iter().any(Type::contains_union)
+                    || function.environment.contains_union()
+                    || function.return_type.contains_union()
             },
         }
     }
@@ -76,6 +78,7 @@ impl Type {
                 Type::Function(function) => {
                     let function = Arc::make_mut(function);
                     function.parameters.iter_mut().for_each(|typ| typ.select_largest_variants(ptr_size));
+                    function.environment.select_largest_variants(ptr_size);
                     function.return_type.select_largest_variants(ptr_size);
                 },
                 Type::Union(variants) => {

@@ -1,4 +1,4 @@
-impl countdown: Iterator U64 U64 with
+impl countdown: Iterator I32 I32 with
     next x =
         if x <= 0
         then None
@@ -6,24 +6,25 @@ impl countdown: Iterator U64 U64 with
 
 type TakeWhile i a =
     iter: i
-    pred: a -> Bool pure
+    pred: fn a -> Bool
 
 impl iter_take_while {_: Iterator i a}: Iterator (TakeWhile i a) a with
     next tw =
-        match next tw.iter
+        match Iterator.next tw.iter
         | Some (iter, new) ->
             if tw.pred new
             then Some (TakeWhile iter tw.pred, new)
             else None
         | None -> None
 
-i = TakeWhile 8u64 (_ >= 5)
-iter i print
+main () =
+    i = TakeWhile 8 (_ >= 5)
+    iter i println
 
 // args: --delete-binary
-// expected exit status: 101
-// expected stderr:
-// thread 'main' panicked at src/type_inference/types.rs:499:91:
-// internal error: entered unreachable code
-// note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+// expected stdout:
+// 8
+// 7
+// 6
+// 5
 

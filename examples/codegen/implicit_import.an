@@ -1,13 +1,14 @@
+// Still need to import this explicitly
+import Std.Vec.print_vec
+
 main () =
     var v = Std.Vec.empty ()
-    Vec.push (mut v) 3i32
-    Vec.push (mut v) 4
-    print v
+    Std.Vec.push (mut v) 3i32
+    Std.Vec.push (mut v) 4
+    println v
+
+// Found 1 error and 0 warnings
 
 // args: --delete-binary
-// expected exit status: 101
-// expected stderr:
-// thread 'main' panicked at src/incremental.rs:124:1:
-// Attempted to call `run` function on input SourceFileId, did you forget to call `update_input`?
-// note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+// expected stdout: [3, 4]
 

@@ -3,7 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use namespace::{Namespace, SourceFileId};
+use namespace::{Namespace, SourceFileId, CRATE_ROOT_MODULE};
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 
@@ -216,7 +216,28 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
     }
 
     fn get_item_in_submodule(&self, parent_module: SourceFileId, name: &str) -> Option<Namespace> {
-        parent_module.get(self.compiler).submodules.get(name).copied().map(Namespace::Module)
+        if parent_module.local_module_id == CRATE_ROOT_MODULE {
+            let crates = GetCrateGraph.get(self.compiler);
+            let crate_ = crates.get(&parent_module.crate_id)?;
+            let module_file = std::path::PathBuf::from(name).with_extension("an");
+
+            // TODO: This should be a relative lookup, not an absolute one in the current crate
+            // TODO: calling `parent_module.get()` can panic if the parent module is not a valid
+            //       source file to begin with. We should ensure it is always valid.
+            if let Some(id) = crate_.source_files.get(&module_file).copied() {
+                return Some(Namespace::Module(id));
+            }
+
+            // Fall back to absolute path (crate_root/src/Vec.an)
+            let absolute = crate_.path.join("src").join(&module_file);
+            if let Some(id) = crate_.source_files.get(&absolute).copied() {
+                return Some(Namespace::Module(id));
+            }
+
+            None
+        } else {
+            parent_module.get(self.compiler).submodules.get(name).copied().map(Namespace::Module)
+        }
     }
 
     /// Retrieve each visible item in the given namespace, restricting the namespace

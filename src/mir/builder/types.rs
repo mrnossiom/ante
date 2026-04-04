@@ -68,7 +68,7 @@ where
     /// TODO: The split of this from [Context::convert_type] ended up being unnecessary.
     pub(super) fn convert_type(&self, typ: &TCType, args: Option<&[TCType]>) -> Type {
         match typ.follow(self.type_bindings) {
-            TCType::Primitive(primitive_type) => self.convert_primitive_type(*primitive_type, args),
+            TCType::Primitive(primitive_type) => self.convert_primitive_type(*primitive_type),
             TCType::Generic(generic) => self.generics_in_scope.get(&generic).map_or(Type::ERROR, |g| Type::Generic(*g)),
             TCType::Variable(id) => {
                 // Any unbound variables at this point should be defaultable to Unit with only
@@ -97,6 +97,10 @@ where
             },
             TCType::UserDefined(origin) => self.convert_type_origin(*origin, args, None),
             TCType::Forall(_, typ) => self.convert_type(typ, args),
+            TCType::Tuple(elements) => {
+                let elements = mapvec(elements.iter(), |t| self.convert_type(t, None));
+                Type::Tuple(Arc::new(elements))
+            },
         }
     }
 
@@ -113,7 +117,7 @@ where
             },
             Origin::Local(_) => unreachable!("Types cannot be declared locally"),
             Origin::TypeResolution => unreachable!("Types should never be Origin::TypeResolution"),
-            Origin::Builtin(builtin) => self.convert_builtin_type(builtin, args),
+            Origin::Builtin(builtin) => self.convert_builtin_type(builtin),
         }
     }
 
@@ -143,22 +147,18 @@ where
         }
     }
 
-    fn convert_builtin_type(&self, builtin: Builtin, args: Option<&[TCType]>) -> Type {
+    fn convert_builtin_type(&self, builtin: Builtin) -> Type {
         match builtin {
             Builtin::Unit => Type::UNIT,
             Builtin::Char => Type::CHAR,
             Builtin::Bool => Type::BOOL,
             Builtin::String => Type::string(),
             Builtin::Ptr => Type::POINTER,
-            Builtin::PairType => self.convert_pair_type(args),
-            Builtin::PairConstructor => unreachable!("Builtin::PairConstructor is not a type"),
             Builtin::Intrinsic => unreachable!("Builtin::Intrinsic is not a type"),
         }
     }
 
-    fn convert_primitive_type(
-        &self, typ: crate::type_inference::types::PrimitiveType, args: Option<&[TCType]>,
-    ) -> Type {
+    fn convert_primitive_type(&self, typ: crate::type_inference::types::PrimitiveType) -> Type {
         match typ {
             crate::type_inference::types::PrimitiveType::Error => Type::ERROR,
             crate::type_inference::types::PrimitiveType::Unit => Type::UNIT,
@@ -166,19 +166,10 @@ where
             crate::type_inference::types::PrimitiveType::Pointer => Type::POINTER,
             crate::type_inference::types::PrimitiveType::Char => Type::CHAR,
             crate::type_inference::types::PrimitiveType::String => Type::string(),
-            crate::type_inference::types::PrimitiveType::Pair => self.convert_pair_type(args),
             crate::type_inference::types::PrimitiveType::Int(kind) => Type::int(kind),
             crate::type_inference::types::PrimitiveType::Float(kind) => Type::float(kind),
             crate::type_inference::types::PrimitiveType::Reference(..) => Type::POINTER,
             crate::type_inference::types::PrimitiveType::NoClosureEnv => Type::NO_CLOSURE_ENV,
-        }
-    }
-
-    fn convert_pair_type(&self, args: Option<&[TCType]>) -> Type {
-        match args {
-            Some(args) if args.len() == 2 => Type::tuple(mapvec(args, |arg| self.convert_type(arg, None))),
-            // Rely on type-checking to issue this argument-count mismatch error to the user
-            _ => Type::ERROR,
         }
     }
 }

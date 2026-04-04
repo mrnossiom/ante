@@ -295,26 +295,11 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     fn check_builtin(&mut self, builtin: Builtin, locator: impl Locateable) -> Type {
         match builtin {
             Builtin::Unit => Type::UNIT,
-            Builtin::Char
-            | Builtin::Bool
-            | Builtin::String
-            | Builtin::Ptr
-            | Builtin::PairType => {
+            Builtin::Char | Builtin::Bool | Builtin::String | Builtin::Ptr => {
                 let typ = Arc::new(builtin.to_string());
                 let location = locator.locate(self);
                 self.compiler.accumulate(Diagnostic::ValueExpected { location, typ });
-                return Type::ERROR;
-            },
-            Builtin::PairConstructor => {
-                let a = self.next_type_variable();
-                let b = self.next_type_variable();
-                let pair = Type::Application(Arc::new(Type::PAIR), Arc::new(vec![a.clone(), b.clone()]));
-                Type::Function(Arc::new(types::FunctionType {
-                    parameters: vec![types::ParameterType::explicit(a), types::ParameterType::explicit(b)],
-                    environment: Type::NO_CLOSURE_ENV,
-                    return_type: pair,
-                    effects: Type::UNIT,
-                }))
+                Type::ERROR
             },
             // This needs to match various different function types generally in the form
             // `fn String ... -> a`. For simplicity a type variable is issued here, those working

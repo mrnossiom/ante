@@ -1,7 +1,14 @@
 use std::sync::Arc;
 
 use inkwell::{
-    basic_block::BasicBlock, builder::Builder, memory_buffer::MemoryBuffer, module::Module, targets::{CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetMachine}, types::{BasicType, BasicTypeEnum, IntType}, values::{AggregateValue, AnyValue, BasicValue, BasicValueEnum, FunctionValue, GlobalValue}, AddressSpace, FloatPredicate, IntPredicate
+    AddressSpace, FloatPredicate, IntPredicate,
+    basic_block::BasicBlock,
+    builder::Builder,
+    memory_buffer::MemoryBuffer,
+    module::Module,
+    targets::{CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetMachine},
+    types::{BasicType, BasicTypeEnum, IntType},
+    values::{AggregateValue, AnyValue, BasicValue, BasicValueEnum, FunctionValue, GlobalValue},
 };
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
@@ -243,12 +250,16 @@ impl<'ctx> ModuleContext<'ctx> {
                 let typ = global.instruction_result_type(id);
                 match self.convert_function_type(typ) {
                     Some(fn_type) => {
-                        let fn_val = self.module.get_function(name)
+                        let fn_val = self
+                            .module
+                            .get_function(name)
                             .unwrap_or_else(|| self.module.add_function(name, fn_type, None));
                         fn_val.as_global_value().as_pointer_value().into()
                     },
                     None => {
-                        let global = self.module.get_global(name)
+                        let global = self
+                            .module
+                            .get_global(name)
                             .unwrap_or_else(|| self.module.add_global(self.convert_type(typ), None, name));
                         global.as_pointer_value().into()
                     },

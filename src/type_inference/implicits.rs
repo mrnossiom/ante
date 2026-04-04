@@ -331,7 +331,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     fn check_implicit_candidate(
         &mut self, implicit_type: Type, instantiation_bindings: Option<Vec<Type>>, target_type: &Type, name: Name,
         origin: Origin, candidates: &mut Vec<Candidate>, parameter_index: usize, function: ExprId,
-        implicits_in_local_scope: &[NameId], type_bindings: &TypeBindings, fuel: u32
+        implicits_in_local_scope: &[NameId], type_bindings: &TypeBindings, fuel: u32,
     ) {
         match self.implicit_type_matches(&implicit_type, target_type, type_bindings) {
             // Prevent infinite recursion
@@ -357,7 +357,10 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                         let destination = self.push_expr(cst::Expr::Error, arg_type, arg_location);
                         let implicit = DelayedImplicit { source: function, destination, parameter_index };
 
-                        if self.find_implicit_value_inner(implicit, implicits_in_local_scope, &type_bindings, fuel - 1).is_ok() {
+                        if self
+                            .find_implicit_value_inner(implicit, implicits_in_local_scope, &type_bindings, fuel - 1)
+                            .is_ok()
+                        {
                             arguments.push(cst::Argument::implicit(destination));
                         }
                     }

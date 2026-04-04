@@ -9,7 +9,7 @@ use crate::{
     incremental::{DbHandle, GetItem},
     iterator_extensions::mapvec,
     lexer::token::{FloatKind, IntegerKind},
-    name_resolution::{builtin::Builtin, Origin},
+    name_resolution::{Origin, builtin::Builtin},
     parser::{
         cst::{self, ReferenceKind},
         ids::NameStore,
@@ -41,6 +41,12 @@ pub enum Type {
     /// During unification the ordering of the type variables matters.
     /// `forall a b. (a, b)` will not unify with `forall b a. (a, b)`
     Forall(Arc<Vec<Generic>>, Arc<Type>),
+
+    /// This is an internal type only created when handling closure environments.
+    /// Most tuple types in source code refer to the `,` type defined in the prelude. While they
+    /// could use this type instead, using a UserDefinedType for them lets us reuse the existing
+    /// mechanisms to automatically define their constructor and retrieve their fields.
+    Tuple(Arc<Vec<Type>>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -86,8 +92,6 @@ pub enum PrimitiveType {
     Char,
     /// TODO: This should be a struct type
     String,
-    // * -> * -> *
-    Pair,
     Int(IntegerKind),
     Float(FloatKind),
     Reference(ReferenceKind),
@@ -109,7 +113,6 @@ impl Type {
     pub const POINTER: Type = Type::Primitive(PrimitiveType::Pointer);
     pub const CHAR: Type = Type::Primitive(PrimitiveType::Char);
     pub const STRING: Type = Type::Primitive(PrimitiveType::String);
-    pub const PAIR: Type = Type::Primitive(PrimitiveType::Pair);
 
     pub const I8: Type = Type::Primitive(PrimitiveType::Int(IntegerKind::I8));
     pub const I16: Type = Type::Primitive(PrimitiveType::Int(IntegerKind::I16));
@@ -265,6 +268,7 @@ impl Type {
                 let typ = Arc::new(typ.follow_all(bindings));
                 Type::Forall(generics.clone(), typ)
             },
+            Type::Tuple(elements) => Type::Tuple(Arc::new(mapvec(elements.iter(), |t| t.follow_all(bindings)))),
         }
     }
 
@@ -313,6 +317,9 @@ impl Type {
                 let typ = typ.clone();
                 typ.substitute(&bindings, bindings_in_scope)
             },
+            Type::Tuple(elements) => Type::Tuple(Arc::new(mapvec(elements.iter(), |t| {
+                t.substitute(bindings_to_substitute, bindings_in_scope)
+            }))),
         }
     }
 
@@ -439,9 +446,6 @@ impl Type {
             },
             crate::parser::cst::TypeKind::Error => (Type::ERROR, Kind::Error),
             crate::parser::cst::TypeKind::Unit => (Type::UNIT, Kind::Type),
-            crate::parser::cst::TypeKind::Pair => {
-                (Type::PAIR, Kind::TypeConstructorSimple(NonZeroUsize::new(2).unwrap()))
-            },
             crate::parser::cst::TypeKind::Application(f, args) => {
                 let (f, f_kind) = Self::from_cst_type_helper(f, resolve, db, next_id);
 
@@ -475,6 +479,10 @@ impl Type {
                 Kind::TypeConstructorSimple(NonZeroUsize::new(1).unwrap()),
             ),
             crate::parser::cst::TypeKind::NoClosureEnv => (Type::NO_CLOSURE_ENV, Kind::Type),
+            crate::parser::cst::TypeKind::Tuple(elements) => {
+                let elements = mapvec(elements, |t| Self::from_cst_type(t, resolve, db, next_id));
+                (Type::Tuple(Arc::new(elements)), Kind::Type)
+            },
         }
     }
 
@@ -488,10 +496,6 @@ impl Type {
                 Builtin::Bool => (Type::BOOL, Kind::Type),
                 Builtin::String => (Type::STRING, Kind::Type),
                 Builtin::Ptr => (Type::POINTER, Kind::TypeConstructorSimple(NonZeroUsize::new(1).unwrap())),
-                Builtin::PairType => (Type::PAIR, Kind::TypeConstructorSimple(NonZeroUsize::new(2).unwrap())),
-                Builtin::PairConstructor => {
-                    unreachable!("`,` in a type position should always resolve to Builtin::PairType")
-                },
                 Builtin::Intrinsic => (Type::ERROR, Kind::Error),
             },
             Some(origin @ Origin::TopLevelDefinition(type_name)) => {
@@ -499,7 +503,7 @@ impl Type {
                 let cst::TopLevelItemKind::TypeDefinition(definition) = &item.kind else {
                     let name = item.kind.name().to_string(&ctx);
                     db.accumulate(Diagnostic::NotAType { name, location: location.clone() });
-                    return (Type::ERROR, Kind::Type)
+                    return (Type::ERROR, Kind::Type);
                 };
                 let kind = crate::definition_collection::kind_of_type_definition(definition);
                 (make_type(origin), kind)
@@ -564,6 +568,11 @@ impl Type {
                     // `free_vars` before the previous call to `free_vars_helper(_, typ, _)`, but
                     // we expect scoping rules to prevent these cases.
                     free_vars.retain(|generic| !generics.contains(generic));
+                },
+                Type::Tuple(elements) => {
+                    for element in elements.iter() {
+                        free_vars_helper(element, bindings, free_vars);
+                    }
                 },
             }
         }
@@ -648,7 +657,20 @@ where
                 }
             }),
             Type::Application(constructor, args) => try_parenthesize(parenthesize, f, |f| {
-                if **constructor == Type::PAIR && args.len() == 2 {
+                // Hack: If the constructor formats to `,` then print it infix
+                let constructor = constructor.follow(self.bindings);
+                let is_pair = if let Type::UserDefined(Origin::TopLevelDefinition(name)) = constructor {
+                    let (item, context) = GetItem(name.top_level_item).get(self.db);
+                    if let cst::ItemName::Single(name) = item.kind.name() {
+                        context.names[name].as_str() == ","
+                    } else {
+                        unreachable!()
+                    }
+                } else {
+                    false
+                };
+
+                if is_pair && args.len() == 2 {
                     self.fmt_type(&args[0], true, f)?;
                     write!(f, ", ")?;
                     self.fmt_type(&args[1], true, f)
@@ -673,6 +695,16 @@ where
                 }
                 write!(f, ". ")?;
                 self.fmt_type(typ, parenthesize, f)
+            }),
+            Type::Tuple(elements) => try_parenthesize(parenthesize, f, |f| {
+                for (i, element) in elements.iter().enumerate() {
+                    if i != 0 {
+                        write!(f, ", ")?;
+                    }
+                    // TODO: Improve parenthesization here
+                    self.fmt_type(element, true, f)?;
+                }
+                Ok(())
             }),
         }
     }
@@ -728,7 +760,6 @@ impl std::fmt::Display for PrimitiveType {
             PrimitiveType::Float(kind) => write!(f, "{kind}"),
             PrimitiveType::String => write!(f, "String"),
             PrimitiveType::Char => write!(f, "Char"),
-            PrimitiveType::Pair => write!(f, ","),
             PrimitiveType::Reference(kind) => write!(f, "{kind}"),
             PrimitiveType::NoClosureEnv => write!(f, "{NO_CLOSURE_ENV_STRING}"),
         }

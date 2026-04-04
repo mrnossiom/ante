@@ -1,7 +1,10 @@
 //! Various methods for validating the well-formedness of [Mir]
 use rustc_hash::FxHashSet;
 
-use crate::{lexer::token::IntegerKind, mir::{Definition, Instruction, InstructionId, Mir, PrimitiveType, TerminatorInstruction, Type, Value}};
+use crate::{
+    lexer::token::IntegerKind,
+    mir::{Definition, Instruction, InstructionId, Mir, PrimitiveType, TerminatorInstruction, Type, Value},
+};
 
 impl Mir {
     /// Ensures:

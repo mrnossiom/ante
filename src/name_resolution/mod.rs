@@ -19,9 +19,9 @@ use crate::{
     parser::{
         context::TopLevelContext,
         cst::{
-            Comptime, Constructor, Declaration, Definition, EffectDefinition, EffectType, Expr, Generics,
-            ItemName, Path, Pattern, TopLevelItemKind, TraitDefinition, TraitImpl, Type, TypeDefinition,
-            TypeDefinitionBody, TypeKind,
+            Comptime, Constructor, Declaration, Definition, EffectDefinition, EffectType, Expr, Generics, ItemName,
+            Path, Pattern, TopLevelItemKind, TraitDefinition, TraitImpl, Type, TypeDefinition, TypeDefinitionBody,
+            TypeKind,
         },
         ids::{ExprId, NameId, PathId, PatternId, TopLevelId, TopLevelName},
     },
@@ -79,10 +79,7 @@ impl Origin {
         match self {
             Origin::TopLevelDefinition(..) | Origin::Local(_) => true,
             Origin::TypeResolution => false,
-            Origin::Builtin(builtin) => matches!(
-                builtin,
-                Builtin::Unit | Builtin::Char | Builtin::String | Builtin::PairType
-            ),
+            Origin::Builtin(builtin) => matches!(builtin, Builtin::Unit | Builtin::Char | Builtin::String),
         }
     }
 
@@ -246,7 +243,7 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
 
     /// Lookup the given path in the given namespace
     fn lookup_in<'a, Iter>(
-        &mut self, mut path: Iter, mut namespace: Namespace, allow_type_based_resolution: bool, is_type: bool,
+        &mut self, mut path: Iter, mut namespace: Namespace, allow_type_based_resolution: bool,
     ) -> Result<Origin, Diagnostic>
     where
         Iter: ExactSizeIterator<Item = &'a (String, Location)>,
@@ -281,7 +278,7 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
         let first_char = name.chars().next().unwrap();
         if allow_type_based_resolution && first_char.is_ascii_uppercase() && namespace == Namespace::Local {
             Ok(Origin::TypeResolution)
-        } else if let Some(origin) = self.lookup_builtin_name(name, is_type) {
+        } else if let Some(origin) = self.lookup_builtin_name(name) {
             Ok(origin)
         // Ad-hoc check to define `intrinsic` only within the stdlib for compiler intrinsics
         } else if namespace == Namespace::Local
@@ -296,8 +293,8 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
         }
     }
 
-    fn lookup_builtin_name(&self, name: &str, is_type: bool) -> Option<Origin> {
-        Builtin::from_name(name, is_type).map(Origin::Builtin)
+    fn lookup_builtin_name(&self, name: &str) -> Option<Origin> {
+        Builtin::from_name(name).map(Origin::Builtin)
     }
 
     /// Lookup a single name (not a full path) in local scope
@@ -315,7 +312,7 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
         None
     }
 
-    fn lookup(&mut self, path: &Path, allow_type_based_resolution: bool, is_type: bool) -> Result<Origin, Diagnostic> {
+    fn lookup(&mut self, path: &Path, allow_type_based_resolution: bool) -> Result<Origin, Diagnostic> {
         let mut components = path.components.iter().peekable();
 
         if components.len() > 1 {
@@ -331,23 +328,18 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
                 if **first == dependency.name {
                     // Discard the crate name
                     components.next();
-                    return self.lookup_in(
-                        components,
-                        Namespace::crate_(*dependency_id),
-                        allow_type_based_resolution,
-                        is_type,
-                    );
+                    return self.lookup_in(components, Namespace::crate_(*dependency_id), allow_type_based_resolution);
                 }
             }
         }
 
         // Not an absolute path
-        self.lookup_in(components, Namespace::Local, allow_type_based_resolution, is_type)
+        self.lookup_in(components, Namespace::Local, allow_type_based_resolution)
     }
 
     /// Links a path to its definition or errors if it does not exist
     fn link(&mut self, path: PathId, allow_type_based_resolution: bool, is_type: bool) {
-        match self.lookup(&self.context.paths[path], allow_type_based_resolution, is_type) {
+        match self.lookup(&self.context.paths[path], allow_type_based_resolution) {
             Ok(origin) => {
                 if !self.is_valid_for_position(origin, is_type) {
                     let last = self.context.paths[path].components.last().unwrap();
@@ -450,13 +442,7 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
                     _ => !is_type,
                 }
             },
-            Origin::Builtin(b) => {
-                if is_type {
-                    !matches!(b, Builtin::PairConstructor | Builtin::Intrinsic)
-                } else {
-                    matches!(b, Builtin::PairConstructor | Builtin::Intrinsic)
-                }
-            },
+            Origin::Builtin(b) => is_type == b.as_type().is_some(),
         }
     }
 
@@ -665,7 +651,6 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
             | TypeKind::Float(_)
             | TypeKind::String
             | TypeKind::Char
-            | TypeKind::Pair
             | TypeKind::NoClosureEnv
             | TypeKind::Reference(..) => (),
             TypeKind::Named(path) => self.link(*path, false, true),
@@ -689,6 +674,11 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
                 self.resolve_type(f, declare_type_vars);
                 for arg in args {
                     self.resolve_type(arg, declare_type_vars);
+                }
+            },
+            TypeKind::Tuple(elements) => {
+                for element in elements {
+                    self.resolve_type(element, declare_type_vars);
                 }
             },
         }

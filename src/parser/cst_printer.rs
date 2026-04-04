@@ -514,9 +514,9 @@ impl<'a> CstDisplay<'a> {
             TypeKind::Application(constructor, args) => self.fmt_type_application(constructor, args, context, f),
             TypeKind::String => write!(f, "String"),
             TypeKind::Char => write!(f, "Char"),
-            TypeKind::Pair => write!(f, ","),
             TypeKind::Reference(kind) => self.fmt_reference_type(*kind, f),
             TypeKind::NoClosureEnv => write!(f, "{}", NO_CLOSURE_ENV_STRING),
+            TypeKind::Tuple(elements) => self.fmt_tuple_type(elements, context, f),
         }
     }
 
@@ -529,10 +529,21 @@ impl<'a> CstDisplay<'a> {
         }
     }
 
+    fn fmt_tuple_type(&self, elements: &[Type], context: &impl IdStore, f: &mut Formatter) -> std::fmt::Result {
+        write!(f, "(")?;
+        for (i, element) in elements.iter().enumerate() {
+            if i != 0 {
+                write!(f, ", ")?;
+            }
+            self.fmt_type(element, context, f)?;
+        }
+        write!(f, ")")
+    }
+
     fn fmt_type_application(
         &self, constructor: &Type, args: &[Type], context: &impl IdStore, f: &mut Formatter,
     ) -> std::fmt::Result {
-        if matches!(constructor.kind, TypeKind::Pair) {
+        if self.is_pair_type(constructor, context) {
             return self.fmt_pair_type(args, context, f);
         }
 
@@ -548,12 +559,19 @@ impl<'a> CstDisplay<'a> {
         self.fmt_type_args(args, context, f)
     }
 
+    fn is_pair_type(&self, typ: &Type, context: &impl IdStore) -> bool {
+        match &typ.kind {
+            TypeKind::Named(path) => context.get_path(*path).last_ident() == ",",
+            _ => false,
+        }
+    }
+
     fn fmt_pair_type(&self, args: &[Type], context: &impl IdStore, f: &mut Formatter) -> std::fmt::Result {
         assert_eq!(args.len(), 2);
 
         let lhs_requires_parens = |typ: &Type| match &typ.kind {
             TypeKind::Function(_) => true,
-            TypeKind::Application(function, _) => matches!(function.kind, TypeKind::Pair),
+            TypeKind::Application(function, _) => self.is_pair_type(function, context),
             _ => false,
         };
 

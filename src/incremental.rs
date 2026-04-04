@@ -10,16 +10,23 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     definition_collection,
-    diagnostics::{check_all, Diagnostic, Location},
+    diagnostics::{Diagnostic, Location, check_all},
     find_files::CrateGraph,
     name_resolution::{
-        self, namespace::{CrateId, SourceFileId}, ResolutionResult
+        self, ResolutionResult,
+        namespace::{CrateId, SourceFileId},
     },
     parser::{
-        self, context::TopLevelContext, cst::TopLevelItem, get_item, ids::{TopLevelId, TopLevelName}, ParseResult
+        self, ParseResult,
+        context::TopLevelContext,
+        cst::TopLevelItem,
+        get_item,
+        ids::{TopLevelId, TopLevelName},
     },
     type_inference::{
-        self, dependency_graph::{TypeCheckDependencyGraphResult, TypeCheckResult, SCC}, kinds::Kind, TypeCheckSCCResult
+        self, TypeCheckSCCResult,
+        dependency_graph::{SCC, TypeCheckDependencyGraphResult, TypeCheckResult},
+        kinds::Kind,
     },
 };
 

@@ -25,6 +25,8 @@ type Result t e =
 //         | None, None -> true
 //         | _ -> false
 
+type (,) a b = first: a, second: b
+
 first (a, _) = a
 second (_, b) = b
 third (_, _, c) = c

@@ -2,7 +2,18 @@ use std::sync::Arc;
 
 use inc_complete::DbGet;
 
-use crate::{incremental::{GetItem, TypeCheck}, iterator_extensions::mapvec, parser::{cst::{self, Name, TopLevelItemKind}, ids::TopLevelId}, type_inference::{dependency_graph::TypeCheckResult, types::{Type, TypeBindings}}};
+use crate::{
+    incremental::{GetItem, TypeCheck},
+    iterator_extensions::mapvec,
+    parser::{
+        cst::{self, Name, TopLevelItemKind},
+        ids::TopLevelId,
+    },
+    type_inference::{
+        dependency_graph::TypeCheckResult,
+        types::{Type, TypeBindings},
+    },
+};
 
 #[derive(Debug)]
 pub enum TypeBody {

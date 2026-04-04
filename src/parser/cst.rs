@@ -106,7 +106,6 @@ pub enum TypeKind {
     Unit,
     Char,
     String,
-    Pair,
     Named(PathId),
     Variable(NameId),
     Integer(IntegerKind),
@@ -114,6 +113,12 @@ pub enum TypeKind {
     Function(FunctionType),
     Application(Box<Type>, Vec<Type>),
     Reference(ReferenceKind),
+
+    /// This is an internal type only created when desugaring closure environments in trait impls.
+    /// Most tuple types in source code refer to the `,` type defined in the prelude. While they
+    /// could use this type instead, using a UserDefinedType for them lets us reuse the existing
+    /// mechanisms to automatically define their constructor and retrieve their fields.
+    Tuple(Vec<Type>),
 
     /// This type can't be parsed, it is only used by `GetItem` to desugar
     /// trait types into in some cases.

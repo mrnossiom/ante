@@ -154,15 +154,9 @@ fn make_env_type_with_names(free_vars: &BTreeSet<NameId>, checker: &TypeChecker)
     make_env_type(free_vars)
 }
 
-fn make_env_type(mut free_vars: impl ExactSizeIterator<Item = Type>) -> Type {
-    let Some(free_var) = free_vars.next() else {
-        return Type::Primitive(PrimitiveType::NoClosureEnv);
-    };
-
+fn make_env_type(free_vars: impl ExactSizeIterator<Item = Type>) -> Type {
     if free_vars.len() == 0 {
-        free_var
-    } else {
-        let rest = make_env_type(free_vars);
-        Type::Application(Arc::new(Type::PAIR), Arc::new(vec![free_var, rest]))
+        return Type::Primitive(PrimitiveType::NoClosureEnv);
     }
+    Type::Tuple(Arc::new(free_vars.collect()))
 }

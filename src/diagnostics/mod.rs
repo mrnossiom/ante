@@ -4,7 +4,12 @@ use colored::{ColoredString, Colorize};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    incremental::{CheckAll, Db, DbHandle, ExportedDefinitions, GetCrateGraph, Parse, TypeCheck}, iterator_extensions::mapvec, lexer::token::{IntegerKind, Token}, name_resolution::namespace::CrateId, parser::cst::Name, type_inference::{errors::TypeErrorKind, kinds::Kind}
+    incremental::{CheckAll, Db, DbHandle, ExportedDefinitions, GetCrateGraph, Parse, TypeCheck},
+    iterator_extensions::mapvec,
+    lexer::token::{IntegerKind, Token},
+    name_resolution::namespace::CrateId,
+    parser::cst::Name,
+    type_inference::{errors::TypeErrorKind, kinds::Kind},
 };
 
 mod location;
@@ -176,8 +181,13 @@ pub enum Diagnostic {
     NoMainFunction {
         location: Location,
     },
-    TypeAnnotationNeeded { location: Location },
-    NotAType { name: String, location: Location },
+    TypeAnnotationNeeded {
+        location: Location,
+    },
+    NotAType {
+        name: String,
+        location: Location,
+    },
 }
 
 impl Ord for Diagnostic {
@@ -399,12 +409,8 @@ impl Diagnostic {
             Diagnostic::IntegerTooLarge { value, kind, location: _ } => {
                 format!("{} is too large for type {}", value.to_string().purple(), kind.to_string().blue())
             },
-            Diagnostic::NoMainFunction { location: _ } => {
-                "This program has no `main` function".to_string()
-            },
-            Diagnostic::TypeAnnotationNeeded { location: _ } => {
-                "Type annotation needed".to_string()
-            },
+            Diagnostic::NoMainFunction { location: _ } => "This program has no `main` function".to_string(),
+            Diagnostic::TypeAnnotationNeeded { location: _ } => "Type annotation needed".to_string(),
             Diagnostic::NotAType { name, location: _ } => {
                 format!("{} is not a type", name.purple())
             },
@@ -581,9 +587,10 @@ pub(crate) fn check_all(_: &CheckAll, compiler: &DbHandle) {
     }
 
     let local_crate = &crates[&CrateId::LOCAL];
-    let has_main = local_crate.source_files.values().any(|file| {
-        ExportedDefinitions(*file).get(compiler).definitions.keys().any(|k| k.as_str() == "main")
-    });
+    let has_main = local_crate
+        .source_files
+        .values()
+        .any(|file| ExportedDefinitions(*file).get(compiler).definitions.keys().any(|k| k.as_str() == "main"));
 
     if !has_main {
         if let Some(first_file) = local_crate.source_files.values().next() {

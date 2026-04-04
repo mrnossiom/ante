@@ -26,7 +26,7 @@ use crate::{
         Block, BlockId, Definition, DefinitionId, FloatConstant, Generic, Instruction, IntConstant, Mir,
         TerminatorInstruction, Type, Value, next_definition_id,
     },
-    name_resolution::{Origin, builtin::Builtin},
+    name_resolution::Origin,
     parser::{
         cst::{self, Literal, Name, SequenceItem},
         ids::{ExprId, NameId, PathId, PatternId, TopLevelId, TopLevelName},
@@ -317,15 +317,6 @@ where
                     let typ = self.convert_path_type(path_id);
                     self.make_definition_value(id, name, typ)
                 },
-                Some(origin @ Origin::Builtin(Builtin::PairConstructor)) => {
-                    if let Some(existing) = self.global_variables.get(&origin) {
-                        *existing
-                    } else {
-                        let function = self.define_pair_constructor();
-                        self.global_variables.insert(origin, function);
-                        function
-                    }
-                },
                 Some(Origin::Local(name)) => {
                     let ptr = *self.local_variables.get(&name).unwrap_or_else(|| {
                         panic!("No cached variable for {} with name {name}", self.context()[path_id])
@@ -350,47 +341,16 @@ where
         // type and make an explicit [Instruction::Instantiate]. We cannot check this only in the
         // `Origin::TopLevelDefinition` case because local lambdas may also be polymorphic.
         // TODO: Closures may be wrapped in an Instruction result which would break this check
-        if let Value::Definition(id) = value
-            && let Some(bindings) = self.types.result.context.get_instantiation(path_id)
-        {
-            let typ = self.convert_path_type(path_id);
-            let bindings = Arc::new(mapvec(bindings, |typ| self.convert_type(typ, None)));
-            let instruction = Instruction::Instantiate(id, bindings);
-            value = self.push_instruction(instruction, typ);
+        if let Value::Definition(id) = value {
+            if let Some(bindings) = self.types.result.context.get_instantiation(path_id) {
+                let typ = self.convert_path_type(path_id);
+                let bindings = Arc::new(mapvec(bindings, |typ| self.convert_type(typ, None)));
+                let instruction = Instruction::Instantiate(id, bindings);
+                value = self.push_instruction(instruction, typ);
+            }
         }
 
         value
-    }
-
-    /// Defines:
-    /// fn ,:
-    ///   b0(b0_0: ptr, b0_1: ptr):
-    ///     v0 = make_tuple(v0_0, v0_1)
-    ///     return v0
-    fn define_pair_constructor(&mut self) -> Value {
-        let name = Arc::new(Builtin::PairConstructor.to_string());
-        let tuple_type = Type::tuple(vec![Type::POINTER, Type::POINTER]);
-        let typ = Type::Function(Arc::new(super::FunctionType {
-            parameters: vec![Type::POINTER, Type::POINTER],
-            environment: Type::NO_CLOSURE_ENV,
-            return_type: tuple_type,
-        }));
-
-        // TODO: We have no NameId to cache this definition so we'll end up
-        // redefining the pair constructor each time it is used.
-        let id = self.new_definition(name.clone(), None, 2, typ.clone(), |this| {
-            this.push_parameter(Type::POINTER);
-            this.push_parameter(Type::POINTER);
-
-            let a = Value::Parameter(BlockId::ENTRY_BLOCK, 0);
-            let b = Value::Parameter(BlockId::ENTRY_BLOCK, 1);
-            let make_tuple = Instruction::MakeTuple(vec![a, b]);
-
-            let tuple_type = Type::tuple(vec![Type::generic(0), Type::generic(1)]);
-            let tuple = this.push_instruction(make_tuple, tuple_type.clone());
-            this.terminate_block(TerminatorInstruction::Return(tuple));
-        });
-        self.make_definition_value(id, name, typ)
     }
 
     fn sequence(&mut self, sequence: &[SequenceItem]) -> Value {
@@ -628,44 +588,25 @@ where
         // We must match the packing done in [type_inference::free_vars::make_tuple_type]
         assert!(!free_vars.is_empty());
 
-        // Iterating in reverse makes it easier to create the `(_, (_, (_, _)))`-shaped env
-        let mut vars = free_vars.iter().rev();
-        let mut env = *self.local_variables.get(vars.next().unwrap()).unwrap();
-
-        for var in vars {
-            let value = *self.local_variables.get(var).unwrap();
-            let value_type = self.type_of_value(&value);
-            let env_type = self.type_of_value(&env);
-            let make_tuple = Instruction::MakeTuple(vec![value, env]);
-            env = self.push_instruction(make_tuple, Type::tuple(vec![value_type, env_type]));
-        }
-
-        env
+        let values = mapvec(free_vars, |var| *self.local_variables.get(var).unwrap());
+        let types = mapvec(&values, |value| self.type_of_value(value));
+        let make_tuple = Instruction::MakeTuple(values);
+        self.push_instruction(make_tuple, Type::tuple(types))
     }
 
     /// Unpack a closure environment tuple parameter, defining each name id captured in the
     /// closure. Expects `free_vars` to be non-empty.
     ///
     /// Note that this modifies `self.local_variables`
-    fn unpack_closure_environment(&mut self, mut free_vars: impl ExactSizeIterator<Item = NameId>, environment: Value) {
-        let next_var = free_vars.next().unwrap();
+    fn unpack_closure_environment(&mut self, free_vars: impl ExactSizeIterator<Item = NameId>, environment: Value) {
+        let Type::Tuple(env_fields) = self.type_of_value(&environment) else { unreachable!() };
+        assert_eq!(env_fields.len(), free_vars.len());
 
-        if free_vars.len() == 0 {
-            let existing = self.local_variables.insert(next_var, environment);
+        for (i, (var, env_field)) in free_vars.zip(env_fields.iter().cloned()).enumerate() {
+            let index = Instruction::IndexTuple { tuple: environment, index: i as u32 };
+            let result = self.push_instruction(index, env_field);
+            let existing = self.local_variables.insert(var, result);
             assert!(existing.is_none(), "Closure is overwriting values from the outer scope");
-        } else {
-            let index0 = Instruction::IndexTuple { tuple: environment, index: 0 };
-            let index1 = Instruction::IndexTuple { tuple: environment, index: 1 };
-
-            let Type::Tuple(env_fields) = self.type_of_value(&environment) else { unreachable!() };
-            assert_eq!(env_fields.len(), 2);
-
-            let extract0 = self.push_instruction(index0, env_fields[0].clone());
-            let extract1 = self.push_instruction(index1, env_fields[1].clone());
-
-            let existing = self.local_variables.insert(next_var, extract0);
-            assert!(existing.is_none(), "Closure is overwriting values from the outer scope");
-            self.unpack_closure_environment(free_vars, extract1);
         }
     }
 
@@ -803,9 +744,16 @@ where
                 if fields.is_empty() {
                     unreachable!("Cannot match on an empty tuple")
                 }
-                let tag_type = fields[0].clone();
-                let instruction = Instruction::IndexTuple { tuple: value_being_matched, index: 0 };
-                self.push_instruction(instruction, tag_type)
+                // Tagged unions have the form `(u8_tag, Union[...])`. For product
+                // types (pairs, structs) there is always exactly one case, so return
+                // a constant 0 so the switch always selects case 0.
+                if fields.len() == 2 && matches!(fields[1], Type::Union(_)) {
+                    let tag_type = fields[0].clone();
+                    let instruction = Instruction::IndexTuple { tuple: value_being_matched, index: 0 };
+                    self.push_instruction(instruction, tag_type)
+                } else {
+                    Value::tag_value(0)
+                }
             },
             Type::Union(_) => unreachable!("Cannot match on a raw union type"),
             Type::Function(_) => unreachable!("Cannot match on a function type"),
@@ -813,19 +761,24 @@ where
         }
     }
 
-    /// Cast & Extract the variant value from the given `(tag, union)` tuple.
+    /// Cast & Extract the variant value from the given `(tag, union)` tuple,
+    /// or return the product type value directly if it has no union tag.
     /// Returns the variant (as a tuple, no longer a union).
     fn extract_variant(&mut self, value_being_matched: Value, variant_index: usize) -> Value {
         let fields = match self.type_of_value(&value_being_matched) {
             Type::Tuple(fields) => fields,
             _ => unreachable!("Only `(tag, union)` tuples may have fields to extract"),
         };
-        assert_eq!(fields.len(), 2);
 
-        let union_type = &fields[1];
-        let Type::Union(variants) = union_type else {
-            unreachable!("The second field of a tagged union should always be either a union or unit value")
-        };
+        // Tagged unions have the form `(u8_tag, Union[...])`.
+        // Product types (pairs, structs) are plain tuples — return the value directly
+        // so the caller can index its fields at positions 0, 1, etc.
+        if fields.len() != 2 || !matches!(fields[1], Type::Union(_)) {
+            return value_being_matched;
+        }
+
+        let union_type = fields[1].clone();
+        let Type::Union(variants) = &union_type else { unreachable!() };
 
         let variant_type = variants
             .get(variant_index)
@@ -835,7 +788,7 @@ where
             .clone();
 
         let extract_union = Instruction::IndexTuple { tuple: value_being_matched, index: 1 };
-        let union = self.push_instruction(extract_union, union_type.clone());
+        let union = self.push_instruction(extract_union, union_type);
         self.push_instruction(Instruction::Transmute(union), variant_type)
     }
 
@@ -894,17 +847,15 @@ where
 
                 // If the object has a reference type, use the inner type for GEP.
                 let struct_type = self.types.result.maps.expr_types[&object_expr].follow(&self.types.bindings);
-                let struct_type =
-                    if let TCType::Application(constructor, args) = struct_type
-                        && matches!(
-                            constructor.as_ref().follow(&self.types.bindings),
-                            TCType::Primitive(type_inference::types::PrimitiveType::Reference(_))
-                        )
-                    {
-                        self.convert_type(&args[0], None)
-                    } else {
-                        self.convert_type(struct_type, None)
-                    };
+                let struct_type = if let TCType::Application(constructor, args) = struct_type
+                    && matches!(
+                        constructor.as_ref().follow(&self.types.bindings),
+                        TCType::Primitive(type_inference::types::PrimitiveType::Reference(_))
+                    ) {
+                    self.convert_type(&args[0], None)
+                } else {
+                    self.convert_type(struct_type, None)
+                };
                 self.push_instruction(Instruction::GetFieldPtr { struct_ptr, struct_type, index }, Type::POINTER)
             },
             LhsKind::Other => todo!("unhandled assignment LHS"),

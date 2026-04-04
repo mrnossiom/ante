@@ -152,18 +152,11 @@ fn desugar_impl(impl_: &TraitImpl, context: &mut TopLevelContext) -> TopLevelIte
     TopLevelItemKind::Definition(Definition { implicit: true, mutable: false, pattern, rhs })
 }
 
-fn make_tuple_type(location: &Location, mut types: impl ExactSizeIterator<Item = Type>) -> Type {
-    let Some(first) = types.next() else {
-        return Type::new(TypeKind::NoClosureEnv, location.clone());
-    };
-
+fn make_tuple_type(location: &Location, types: impl ExactSizeIterator<Item = Type>) -> Type {
     if types.len() == 0 {
-        first
-    } else {
-        let rest = make_tuple_type(location, types);
-        let pair = Type::new(TypeKind::Pair, location.clone());
-        Type::new(TypeKind::Application(Box::new(pair), vec![first, rest]), location.clone())
+        return Type::new(TypeKind::NoClosureEnv, location.clone());
     }
+    Type::new(TypeKind::Tuple(types.collect()), location.clone())
 }
 
 /// Desugars

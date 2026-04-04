@@ -9,7 +9,7 @@ use crate::{
     diagnostics::{Diagnostic, ErrorDefault, Location, Span},
     incremental,
     iterator_extensions::mapvec,
-    lexer::{token::Token, Lexer},
+    lexer::{Lexer, token::Token},
     name_resolution::namespace::SourceFileId,
     parser::{
         context::TopLevelContext,
@@ -873,16 +873,21 @@ impl<'tokens> Parser<'tokens> {
         }
 
         let mut types = vec![typ];
-        while self.accept(Token::Comma) {
+        let mut commas = Vec::with_capacity(1);
+
+        while *self.current_token() == Token::Comma {
+            commas.push(self.parse_comma_as_path()?);
             types.push(self.parse_type_no_pair()?);
         }
 
         // `,` is right-associative
         let mut typ = types.pop().expect("Should always have at least one type");
-        while let Some(lhs) = types.pop() {
+        assert_eq!(commas.len(), types.len());
+
+        while let (Some(comma), Some(lhs)) = (commas.pop(), types.pop()) {
             let location = lhs.location.to(&typ.location);
-            let pair_location = location.clone();
-            let pair = Type::new(TypeKind::Pair, pair_location);
+            let pair_location = self.current_context.path_locations[comma].clone();
+            let pair = Type::new(TypeKind::Named(comma), pair_location);
             typ = Type::new(TypeKind::Application(Box::new(pair), vec![lhs, typ]), location);
         }
 
@@ -967,11 +972,32 @@ impl<'tokens> Parser<'tokens> {
         }
     }
 
+    fn parse_comma_as_path(&mut self) -> Result<PathId> {
+        if *self.current_token() == Token::Comma {
+            let location = self.current_token_location();
+            self.advance();
+            let comma = Token::Comma.to_string();
+            let components = vec![(comma, location.clone())];
+            Ok(self.push_path(Path { components }, location))
+        } else {
+            self.expected("a `,`")
+        }
+    }
+
     fn parse_type_name(&mut self) -> Result<String> {
         match self.current_token() {
             Token::TypeName(name) => {
                 self.advance();
                 Ok(name.clone())
+            },
+            // We allow all overloadable operators here like with identifiers but
+            // in reality this is mostly to allow `(,)` to be the pair type.
+            Token::ParenthesisLeft if self.peek_next_token().is_overloadable_operator() => {
+                self.advance();
+                let operator = self.current_token().to_string();
+                self.advance();
+                self.expect(Token::ParenthesisRight, "a `)` to close the opening parenthesis from this operator")?;
+                Ok(operator)
             },
             _ => self.expected("a capitalized type name"),
         }
@@ -1172,7 +1198,7 @@ impl<'tokens> Parser<'tokens> {
 
             let rhs = self.with_pattern_id_and_location(Self::parse_type_annotation_pattern)?;
 
-            let components = vec![(",".to_string(), comma_location.clone())];
+            let components = vec![(Token::Comma.to_string(), comma_location.clone())];
             let comma_path = self.push_path(Path { components }, comma_location);
             pattern = Pattern::Constructor(comma_path, vec![lhs, rhs]);
         }
@@ -1872,7 +1898,7 @@ impl<'tokens> Parser<'tokens> {
             let name = match this.current_token() {
                 Token::StringLiteral(name) => Ok(name.clone()),
                 Token::Identifier(name) => Ok(name.clone()),
-                _ => this.expected("an identifier or string for the name of this extern")?
+                _ => this.expected("an identifier or string for the name of this extern")?,
             }?;
             this.advance();
             Ok(Expr::Extern(Extern { name }))

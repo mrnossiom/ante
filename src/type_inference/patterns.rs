@@ -225,14 +225,10 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                     // The type checker should hold the origin of paths that require type resolution
                     origin = self.current_extended_context().path_origin(path)?;
                 },
-                Origin::Builtin(builtin) => {
-                    if let Some((type_id, variant_index)) = builtin.constructor() {
-                        return Some(Constructor::Variant(type_id, variant_index));
-                    } else {
-                        let location = self.current_context().path_locations[path].clone();
-                        self.compiler.accumulate(Diagnostic::InvalidPattern { location });
-                        return None;
-                    }
+                Origin::Builtin(_) => {
+                    let location = self.current_context().path_locations[path].clone();
+                    self.compiler.accumulate(Diagnostic::InvalidPattern { location });
+                    return None;
                 },
             }
         }
@@ -414,13 +410,6 @@ impl<'tc, 'local, 'db> MatchCompiler<'tc, 'local, 'db> {
                 Ok(DecisionTree::Switch(branch_var, cases, fallback))
             },
             Type::Application(constructor, arguments) => match self.checker.follow_type(constructor) {
-                Type::Primitive(PrimitiveType::Pair) => {
-                    let arguments = arguments.clone();
-                    let field_variables = self.fresh_match_variables(&arguments, location);
-                    let cases = vec![(Constructor::struct_(Type::PAIR), field_variables, Vec::new())];
-                    let (cases, fallback) = self.compile_constructor_cases(rows, branch_var, cases)?;
-                    Ok(DecisionTree::Switch(branch_var, cases, fallback))
-                },
                 Type::UserDefined(origin) => {
                     let origin = *origin;
                     let arguments = arguments.clone();
@@ -436,7 +425,12 @@ impl<'tc, 'local, 'db> MatchCompiler<'tc, 'local, 'db> {
                 let definition_type = definition_type.clone();
                 self.compile_userdefined_cases(rows, branch_var, &definition_type, *origin, &[], location)
             },
-            Type::Generic(_) | Type::Variable(_) | Type::Primitive(_) | Type::Function(_) | Type::Forall(..) => {
+            Type::Generic(_)
+            | Type::Variable(_)
+            | Type::Primitive(_)
+            | Type::Function(_)
+            | Type::Forall(..)
+            | Type::Tuple(_) => {
                 let typ = self.checker.type_to_string(&definition_type);
                 Err(Diagnostic::CannotMatchOnType { typ, location })
             },
@@ -852,7 +846,6 @@ impl<'tc, 'local, 'db> MatchCompiler<'tc, 'local, 'db> {
                 let constructor = constructor.clone();
                 self.user_defined_type_name(&constructor, variant_index)
             },
-            Type::Primitive(PrimitiveType::Pair) => Arc::new(",".to_string()),
             _ => unreachable!("Non-struct or enum datatype: {}", self.checker.type_to_string(typ)),
         }
     }
@@ -930,11 +923,7 @@ impl<'tc, 'local, 'db> MatchCompiler<'tc, 'local, 'db> {
                     "Origin::TypeResolution encountered in classify_type_origin, should be unreachable in a type position"
                 )
             },
-            Origin::Builtin(builtin) => {
-                let fields = builtin.fields(arguments.to_vec())?;
-                // There is no built-in sum type
-                Some(UserDefinedTypeKind::Product(fields))
-            },
+            Origin::Builtin(_) => None,
         }
     }
 }

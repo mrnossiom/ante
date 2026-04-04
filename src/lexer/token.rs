@@ -335,7 +335,7 @@ impl Display for LexerError {
             },
             FailedToParseNumber { integer_string } => {
                 write!(f, "Integer is too large: {}", integer_string.purple())
-            }
+            },
         }
     }
 }

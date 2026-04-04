@@ -257,7 +257,7 @@ impl<'contents> Lexer<'contents> {
                 Ok(int) => int,
                 Err(_) => {
                     let error = Token::Error(LexerError::FailedToParseNumber { integer_string });
-                    return Some((error, location))
+                    return Some((error, location));
                 },
             };
 

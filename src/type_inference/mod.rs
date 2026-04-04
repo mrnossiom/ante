@@ -15,7 +15,11 @@ use crate::{
         ids::{ExprId, NameId, PathId, PatternId, TopLevelId, TopLevelName},
     },
     type_inference::{
-        errors::{Locateable, TypeErrorKind}, fresh_expr::ExtendedTopLevelContext, generics::Generic, implicits::ImplicitsContext, types::{PrimitiveType, Type, TypeBindings, TypeVariableId}
+        errors::{Locateable, TypeErrorKind},
+        fresh_expr::ExtendedTopLevelContext,
+        generics::Generic,
+        implicits::ImplicitsContext,
+        types::{PrimitiveType, Type, TypeBindings, TypeVariableId},
     },
 };
 
@@ -26,10 +30,10 @@ mod free_variables;
 pub mod fresh_expr;
 pub mod generics;
 mod get_type;
-mod type_body;
 mod implicits;
 pub mod kinds;
 pub mod patterns;
+mod type_body;
 mod type_definitions;
 pub mod types;
 
@@ -390,7 +394,9 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
 
     /// Same as [Self::try_unify] but carries the new type bindings as an argument instead of
     /// a return value.
-    fn try_unify_with_bindings(&self, actual: &Type, expected: &Type, new_bindings: &mut TypeBindings) -> Result<(), ()> {
+    fn try_unify_with_bindings(
+        &self, actual: &Type, expected: &Type, new_bindings: &mut TypeBindings,
+    ) -> Result<(), ()> {
         match (actual, expected) {
             (Type::Variable(actual_id), expected) => {
                 if let Some(actual) = self.bindings.get(actual_id).cloned() {
@@ -513,6 +519,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                     || args.iter().any(|arg| self.occurs(arg, variable, new_bindings))
             },
             Type::Forall(_, typ) => self.occurs(typ, variable, new_bindings),
+            Type::Tuple(elements) => elements.iter().any(|element| self.occurs(element, variable, new_bindings)),
         }
     }
 

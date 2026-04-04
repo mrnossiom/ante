@@ -15,12 +15,17 @@ my_iter iterable f =
         f elem
         my_iter rest f
 
-main () = my_iter 10 print
+main () = my_iter 10 println
 
 // args: --delete-binary
-// expected exit status: 101
-// expected stderr:
-// thread 'main' panicked at src/mir/builder/mod.rs:827:13:
-// internal error: entered unreachable code: The second field of a tagged union should always be either a union or unit value
-// note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
-
+// expected stdout:
+// 10
+// 9
+// 8
+// 7
+// 6
+// 5
+// 4
+// 3
+// 2
+// 1

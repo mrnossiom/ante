@@ -122,6 +122,9 @@ pub enum TypeKind {
     /// This type can't be parsed, it is only used by `GetItem` to desugar
     /// trait types into in some cases.
     NoClosureEnv,
+
+    /// A filler type which corresponds to an unbound type variable to be inferred later
+    Hole,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Copy, Clone, PartialOrd, Ord)]

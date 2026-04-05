@@ -516,6 +516,7 @@ impl<'a> CstDisplay<'a> {
             TypeKind::Reference(kind) => self.fmt_reference_type(*kind, f),
             TypeKind::NoClosureEnv => write!(f, "{}", NO_CLOSURE_ENV_STRING),
             TypeKind::Tuple(elements) => self.fmt_tuple_type(elements, context, f),
+            TypeKind::Hole => write!(f, "_"),
         }
     }
 

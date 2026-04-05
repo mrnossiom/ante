@@ -121,12 +121,12 @@ pub(super) fn try_get_partial_type(
             })
             .collect::<Option<Vec<_>>>()?;
 
-        let environment = None;
+        let lambda_location = context.expr_locations[definition.rhs].clone();
 
+        let environment = Some(Box::new(cst::Type::new(cst::TypeKind::Hole, lambda_location.clone())));
         let cst_function_type =
             cst::FunctionType { parameters, environment, return_type, effects: lambda.effects.clone() };
 
-        let lambda_location = context.expr_locations[definition.rhs].clone();
         let cst_fn_type = cst::Type::new(TypeKind::Function(cst_function_type), lambda_location);
         Some(Type::from_cst_type(&cst_fn_type, resolve, compiler, next_id))
     } else if let Expr::TypeAnnotation(annotation) = &context.exprs[definition.rhs] {

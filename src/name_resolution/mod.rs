@@ -672,6 +672,7 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
             | TypeKind::Float(_)
             | TypeKind::Char
             | TypeKind::NoClosureEnv
+            | TypeKind::Hole
             | TypeKind::Reference(..) => (),
             TypeKind::Named(path) => self.link(*path, false, true),
             TypeKind::Variable(name) => self.resolve_variable(*name, declare_type_vars),

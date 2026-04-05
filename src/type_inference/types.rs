@@ -479,6 +479,11 @@ impl Type {
                 let elements = mapvec(elements, |t| Self::from_cst_type(t, resolve, db, next_id));
                 (Type::Tuple(Arc::new(elements)), Kind::Type)
             },
+            crate::parser::cst::TypeKind::Hole => {
+                let typ = Type::Variable(TypeVariableId(*next_id));
+                *next_id += 1;
+                (typ, Kind::Type)
+            },
         }
     }
 

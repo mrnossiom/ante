@@ -1,0 +1,28 @@
+trait Double a with
+    do_double: fn a -> a
+
+impl double_i32: Double I32 with
+    do_double x = x + x
+
+// Direct auto-deref: ref I32 -> I32
+deref_ref (x: ref I32): I32 = x
+
+// Auto-deref with mut reference
+deref_mut (x: mut I32): I32 = x
+
+trait_through_deref (x: ref I32): I32 =
+    // Coerce ref I32 to I32. This only works since there is only
+    // a single impl for Double
+    Double.do_double x
+
+main () =
+    y = 42
+    println (deref_ref (ref y))
+    println (deref_mut (mut y))
+    println (trait_through_deref (ref y))
+
+// args: --delete-binary
+// expected stdout:
+// 42
+// 42
+// 84

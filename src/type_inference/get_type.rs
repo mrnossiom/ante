@@ -93,3 +93,45 @@ pub(super) fn try_get_type(
         None
     }
 }
+
+/// Like `try_get_type` but allows the resulting type to contain fresh type variables
+/// for trait closure environments. The caller passes a `next_id` counter so that
+/// fresh IDs don't collide with other type variables.
+pub(super) fn try_get_partial_type(
+    definition: &Definition, context: &TopLevelContext, resolve: &ResolutionResult, compiler: &DbHandle,
+    next_id: &mut u32,
+) -> Option<Type> {
+    if let Pattern::TypeAnnotation(_, typ) = &context.patterns[definition.pattern] {
+        return Some(Type::from_cst_type(typ, resolve, compiler, next_id));
+    }
+
+    if let Expr::Lambda(lambda) = &context.exprs[definition.rhs] {
+        let return_type = Box::new(lambda.return_type.as_ref()?.clone());
+
+        let parameters = lambda
+            .parameters
+            .iter()
+            .map(|parameter| match &context.patterns[parameter.pattern] {
+                Pattern::TypeAnnotation(_, typ) => Some(cst::ParameterType::new(typ.clone(), parameter.is_implicit)),
+                Pattern::Literal(cst::Literal::Unit) => {
+                    let location = context.pattern_locations[parameter.pattern].clone();
+                    Some(cst::ParameterType::explicit(cst::Type::new(TypeKind::Unit, location)))
+                },
+                _ => None,
+            })
+            .collect::<Option<Vec<_>>>()?;
+
+        let environment = None;
+
+        let cst_function_type =
+            cst::FunctionType { parameters, environment, return_type, effects: lambda.effects.clone() };
+
+        let lambda_location = context.expr_locations[definition.rhs].clone();
+        let cst_fn_type = cst::Type::new(TypeKind::Function(cst_function_type), lambda_location);
+        Some(Type::from_cst_type(&cst_fn_type, resolve, compiler, next_id))
+    } else if let Expr::TypeAnnotation(annotation) = &context.exprs[definition.rhs] {
+        Some(Type::from_cst_type(&annotation.rhs, resolve, compiler, next_id))
+    } else {
+        None
+    }
+}

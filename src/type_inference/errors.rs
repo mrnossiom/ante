@@ -104,7 +104,7 @@ impl Locateable for Location {
 
 impl Locateable for ExprId {
     fn locate(&self, context: &TypeChecker) -> Location {
-        context.current_context().expr_locations[*self].clone()
+        context.current_extended_context().expr_location(*self)
     }
 }
 

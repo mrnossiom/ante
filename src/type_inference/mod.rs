@@ -5,11 +5,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     diagnostics::Diagnostic,
-    incremental::{self, DbHandle, ExportedTypes, GetItem, Resolve, TargetPointerSize, TypeCheckSCC},
-    name_resolution::namespace::SourceFileId,
+    incremental::{
+        self, DbHandle, ExportedDefinitions, ExportedTypes, GetItem, Resolve, TargetPointerSize, TypeCheckSCC,
+    },
     iterator_extensions::mapvec,
     lexer::token::IntegerKind,
-    name_resolution::{Origin, ResolutionResult},
+    name_resolution::{Origin, ResolutionResult, namespace::SourceFileId},
     parser::{
         context::TopLevelContext,
         cst::{self, ReferenceKind, TopLevelItem, TopLevelItemKind},
@@ -20,7 +21,7 @@ use crate::{
         fresh_expr::ExtendedTopLevelContext,
         generics::Generic,
         implicits::ImplicitsContext,
-        types::{PrimitiveType, Type, TypeBindings, TypeVariableId},
+        types::{FunctionType, ParameterType, PrimitiveType, Type, TypeBindings, TypeVariableId},
     },
 };
 
@@ -164,6 +165,9 @@ struct TypeChecker<'local, 'inner> {
 
     /// Cached type for the Prelude's `String` struct, lazily resolved on first use.
     string_type: Option<Type>,
+
+    /// Cached TopLevelName for the Prelude's `(.*)` (deref/Copy) function, lazily resolved on first use.
+    deref_name: Option<TopLevelName>,
 }
 
 /// Map from each TopLevelId to a tuple of (the item, parse context, resolution context)
@@ -192,13 +196,25 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             implicits: Vec::new(),
             coercion_wrapper_exprs: Default::default(),
             string_type: None,
+            deref_name: None,
         };
 
         let mut item_types = FxHashMap::default();
-        for (item_id, (_, _, resolution)) in item_contexts.iter() {
+        for (item_id, (item, context, resolution)) in item_contexts.iter() {
             for name in resolution.top_level_names.iter() {
-                let variable = this.next_type_variable();
-                item_types.insert(TopLevelName::new(*item_id, *name), variable);
+                let typ = if let TopLevelItemKind::Definition(definition) = &item.kind {
+                    get_type::try_get_partial_type(
+                        definition,
+                        context,
+                        resolution,
+                        compiler,
+                        &mut this.next_type_variable_id,
+                    )
+                    .unwrap_or_else(|| this.next_type_variable())
+                } else {
+                    this.next_type_variable()
+                };
+                item_types.insert(TopLevelName::new(*item_id, *name), typ);
             }
         }
         // We have to go through this extra step since `generalize_all` needs an Rc
@@ -265,12 +281,22 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             return typ.clone();
         }
         let exported_types = ExportedTypes(SourceFileId::prelude()).get(self.compiler);
-        let (top_level_name, _kind) = exported_types
-            .get(&Arc::new("String".to_string()))
-            .expect("String type not found in Prelude");
+        let (top_level_name, _kind) =
+            exported_types.get(&Arc::new("String".to_string())).expect("String type not found in Prelude");
         let typ = Type::UserDefined(Origin::TopLevelDefinition(*top_level_name));
         self.string_type = Some(typ.clone());
         typ
+    }
+
+    /// Returns the TopLevelName for the Prelude's `(.*)` (deref/Copy) function, caching it.
+    fn get_deref_name(&mut self) -> TopLevelName {
+        if let Some(name) = self.deref_name {
+            return name;
+        }
+        let exported = ExportedDefinitions(SourceFileId::prelude()).get(self.compiler);
+        let top_level_name = exported.definitions.get(&Arc::new(".*".to_string())).expect("(.*) not found in Prelude");
+        self.deref_name = Some(*top_level_name);
+        *top_level_name
     }
 
     fn finish(mut self, items: Vec<(TopLevelId, TypeMaps)>) -> TypeCheckSCCResult {
@@ -380,6 +406,8 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     /// Possible coercions:
     /// - If `actual` is a function type with more implicit parameters than `expected` has,
     /// search for implicit values in scope and create a new wrapper function over `expr`.
+    /// - If `actual` is a reference type `r t` and `expected` is `t` (non-reference, non-variable),
+    /// insert a `(.*)` call to auto-deref, requiring `t: Copy`.
     ///
     /// Returns `true` if `expr` was modified, or `false` otherwise
     fn try_coercion(&mut self, actual: &Type, expected: &Type, expr: ExprId) -> bool {
@@ -395,8 +423,55 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                     false
                 }
             },
+            // Auto-deref: coerce `ref-kind t` to `t` by inserting a `(.*) expr` call if `Copy t`
+            // can be found.
+            (Type::Application(constructor, args), expected) => {
+                if args.len() == 1
+                    && matches!(self.follow_type(constructor), Type::Primitive(PrimitiveType::Reference(_)))
+                    && !matches!(&expected, Type::Variable(_))
+                {
+                    let arg = args[0].clone();
+                    let expected = expected.clone();
+                    if let Ok(bindings) = self.try_unify(&arg, &expected) {
+                        self.bindings.extend(bindings);
+                        let new_expr = self.auto_deref_coercion(expr, expected);
+                        self.current_extended_context_mut().insert_expr(expr, new_expr);
+                        return true;
+                    }
+                }
+                false
+            },
             _ => false,
         }
+    }
+
+    /// Synthesize a `(.*) expr` call expression for auto-deref coercion.
+    /// The original expression at `expr` is copied to a new ExprId, and this returns
+    /// a Call expression wrapping it with the Prelude's `(.*)` function.
+    fn auto_deref_coercion(&mut self, expr: ExprId, element_type: Type) -> cst::Expr {
+        let location = expr.locate(self);
+
+        // Copy original expression to a new ExprId since we're replacing `expr`
+        let original_expr = self.current_extended_context()[expr].clone();
+        let original_type = self.expr_types[&expr].clone();
+        let arg_id = self.push_expr(original_expr, original_type.clone(), location.clone());
+
+        let deref_name = self.get_deref_name();
+        let deref_path = self.push_path(
+            cst::Path::ident(".*".to_string(), location.clone()),
+            Type::ERROR, // overwritten when check_expr re-checks the synthesized call
+            location.clone(),
+        );
+        self.current_extended_context_mut().insert_path_origin(deref_path, Origin::TopLevelDefinition(deref_name));
+
+        let function_type = Type::Function(Arc::new(FunctionType {
+            parameters: vec![ParameterType::explicit(original_type)],
+            environment: Type::NO_CLOSURE_ENV,
+            return_type: element_type,
+            effects: Type::UNIT, // TODO: Effects
+        }));
+        let func_expr = self.push_expr(cst::Expr::Variable(deref_path), function_type, location);
+        cst::Expr::Call(cst::Call { function: func_expr, arguments: vec![cst::Argument::explicit(arg_id)] })
     }
 
     fn type_to_string(&self, typ: &Type) -> String {

@@ -12,16 +12,18 @@ use crate::{
     type_inference::{
         Locateable, TypeChecker,
         errors::TypeErrorKind,
-        get_type::try_get_type,
+        get_type::try_get_partial_type,
         types::{self, Type},
     },
 };
 
 impl<'local, 'inner> TypeChecker<'local, 'inner> {
     pub(super) fn check_definition(&mut self, definition: &Definition) {
-        let expected_generalized_type =
-            try_get_type(definition, self.current_context(), &self.current_resolve(), self.compiler);
-        let expected_type = match expected_generalized_type {
+        let expected_type = try_get_partial_type(
+            definition, self.current_context(), &self.current_resolve(), self.compiler,
+            &mut self.next_type_variable_id,
+        );
+        let expected_type = match expected_type {
             // Ignore a possible `forall` here, we don't support polymorphic recursion
             Some(typ) => typ.ignore_forall().clone(),
             None => self.next_type_variable(),
@@ -420,7 +422,12 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         let fields = self.get_field_types(&struct_type, None);
         if let Some((field, field_index)) = fields.get(&member_access.member) {
             self.current_extended_context_mut().push_member_access_index(expr, *field_index);
-            self.unify(field, expected, TypeErrorKind::General, expr);
+
+            if self.try_coercion(field, expected, expr) {
+                self.check_expr(expr, expected);
+            } else {
+                self.unify(field, expected, TypeErrorKind::General, expr);
+            }
         } else if matches!(self.follow_type(&struct_type), Type::Variable(_)) {
             let location = self.current_context().expr_locations[expr].clone();
             self.compiler.accumulate(Diagnostic::TypeMustBeKnownMemberAccess { location });

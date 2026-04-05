@@ -274,7 +274,11 @@ fn desugar_expression(expr: ExprId, context: &mut TopLevelContext) {
                 desugar_expression(field.1, context);
             }
         },
-        Expr::Loop(loop_) => desugar_loop(loop_.clone(), expr, context),
+        Expr::Loop(loop_) => {
+            let loop_ = loop_.clone();
+            desugar_expression(loop_.body, context);
+            desugar_loop(loop_.clone(), expr, context)
+        }
         Expr::Assignment(assignment) => {
             let rhs = assignment.rhs;
             desugar_expression(assignment.lhs, context);

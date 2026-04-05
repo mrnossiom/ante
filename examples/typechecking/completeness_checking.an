@@ -88,9 +88,6 @@ main () =
 // examples/typechecking/completeness_checking.an:5:11	error: Missing case: 1..=18446744073709551615, None
 //     match (2, Maybe.None)
 // 
-// examples/typechecking/completeness_checking.an:7:6	warning: This case is already matched by prior patterns
-//     | (_, Some _) -> ()
-// 
 // examples/typechecking/completeness_checking.an:16:11	error: Missing cases: 0, 0..=1, 0, 3..=18446744073709551615, 2..=18446744073709551615, 0..=1, 2..=18446744073709551615, 3..=18446744073709551615
 //     match (1, 2)
 // 
@@ -112,5 +109,5 @@ main () =
 // examples/typechecking/completeness_checking.an:27:6	warning: This case is already matched by prior patterns
 //     | (_, _, _, _) -> 3
 // 
-// Found 7 errors and 3 warnings
+// Found 7 errors and 2 warnings
 

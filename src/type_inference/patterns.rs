@@ -565,7 +565,9 @@ impl<'tc, 'local, 'db> MatchCompiler<'tc, 'local, 'db> {
                         cols.push(Column::new(*var, pat));
                     }
 
-                    cases[idx].2.push(Row::new(cols, row.guard, row.body, row.location));
+                    let mut new_row = Row::new(cols, row.guard, row.body, row.location);
+                    new_row.original_body = row.original_body;
+                    cases[idx].2.push(new_row);
                 }
             } else {
                 for (_, _, rows) in &mut cases {

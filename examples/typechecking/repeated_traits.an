@@ -12,10 +12,10 @@ foo a =
 //     (fn (p5: _) -> (print: fn _ {Print _} -> Unit pure) (p5: _) {(error)}) (a: _)
 
 // expected stderr:
-// examples/typechecking/repeated_traits.an:2:4	error: Multiple matching implicits found for type Print _ required by parameter 2: print_bool, print_char, print_i16, print_i32, print_i64, ..
+// examples/typechecking/repeated_traits.an:2:4	error: Multiple matching implicits found for type Print _ required by parameter 2: print_bool, print_char, print_f32, print_f64, print_i16, ..
 //     print a
 // 
-// examples/typechecking/repeated_traits.an:3:4	error: Multiple matching implicits found for type Print _ required by parameter 2: print_bool, print_char, print_i16, print_i32, print_i64, ..
+// examples/typechecking/repeated_traits.an:3:4	error: Multiple matching implicits found for type Print _ required by parameter 2: print_bool, print_char, print_f32, print_f64, print_i16, ..
 //     print a
 // 
 // Found 2 errors and 0 warnings

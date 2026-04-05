@@ -272,7 +272,6 @@ where
             Literal::Unit => Value::Unit,
             Literal::Bool(x) => Value::Bool(*x),
             Literal::Integer(x, None) => {
-                // Use the type-inferred kind for unsuffixed integer literals
                 let kind = match self.expr_type(expr) {
                     Type::Primitive(crate::mir::PrimitiveType::Int(kind)) => kind,
                     _ => IntegerKind::I32,
@@ -280,8 +279,15 @@ where
                 Self::integer(*x, kind)
             },
             Literal::Integer(x, Some(kind)) => Self::integer(*x, *kind),
-            Literal::Float(_, None) => {
-                panic!("TODO: polymorphic floats")
+            Literal::Float(x, None) => {
+                match self.expr_type(expr) {
+                    Type::Primitive(crate::mir::PrimitiveType::Float(FloatKind::F32)) => {
+                        Value::Float(FloatConstant::F32(*x))
+                    },
+                    // Default to F64, there are cases when the type variable may still be unbound here.
+                    // Generally it means it was unused or there was an error.
+                    _ => Value::Float(FloatConstant::F64(*x)),
+                }
             },
             Literal::Float(x, Some(FloatKind::F32)) => Value::Float(FloatConstant::F32(*x)),
             Literal::Float(x, Some(FloatKind::F64)) => Value::Float(FloatConstant::F64(*x)),

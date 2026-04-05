@@ -4,16 +4,14 @@ use crate::{
     diagnostics::{Diagnostic, Location},
     incremental::VisibleImplicits,
     iterator_extensions::mapvec,
-    lexer::token::IntegerKind,
+    lexer::token::{FloatKind, IntegerKind},
     name_resolution::Origin,
     parser::{
         cst::{self, Name, Pattern},
         ids::{ExprId, NameId, PatternId},
     },
     type_inference::{
-        Locateable, TypeChecker,
-        errors::TypeErrorKind,
-        types::{FunctionType, ParameterType, PrimitiveType, Type, TypeBindings, TypeVariableId},
+        errors::TypeErrorKind, types::{FunctionType, ParameterType, PrimitiveType, Type, TypeBindings, TypeVariableId}, Locateable, TypeChecker
     },
 };
 
@@ -42,6 +40,10 @@ pub(super) struct ImplicitsContext {
     /// If not bound by the end of a scope they will be defaulted to I32.
     /// This is a tuple of (the integer's value, the integer type variable, location to use for errors)
     integer_type_variables: Vec<(u64, TypeVariableId, Location)>,
+
+    /// Similar to polymorphic integers, we track polymorphic floats as well. Their value is not stored
+    /// since we do not check if the float value fits in the resulting type.
+    float_type_variables: Vec<(TypeVariableId, Location)>,
 }
 
 #[derive(Clone, Copy)]
@@ -135,6 +137,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             let implicits = std::mem::take(&mut scope.delayed_implicits);
             let closures = std::mem::take(&mut scope.deferred_closure_checks);
             let integers = std::mem::take(&mut scope.integer_type_variables);
+            let floats = std::mem::take(&mut scope.float_type_variables);
 
             // Phase 1: Try to resolve all implicits. When the target type contains an unbound
             // integer type variable, unification may still succeed (e.g. searching for `Foo _`
@@ -152,6 +155,10 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             // in whatever type they are now.
             for (value, type_variable, location) in integers {
                 self.try_default_integer_to_i32(value, type_variable, location);
+            }
+
+            for (type_variable, location) in floats {
+                self.try_default_float_to_f64(type_variable, location);
             }
 
             // Phase 2: Retry implicits that failed in phase 1, now that integer type variables
@@ -179,6 +186,10 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         self.implicits.last_mut().unwrap().integer_type_variables.push((value, type_variable, location));
     }
 
+    pub(super) fn push_inferred_float(&mut self, type_variable: TypeVariableId, location: Location) {
+        self.implicits.last_mut().unwrap().float_type_variables.push((type_variable, location));
+    }
+
     /// Delay finding an implicit value until later when more types are known.
     ///
     /// This returns a fresh [ExprId] where the implicit value will be emplaced into when found.
@@ -191,6 +202,8 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         fresh_id
     }
 
+    /// Try to default the given integer to an I32, issuing an error if it is bound
+    /// to a non-integer type or the literal cannot fit into an I32.
     fn try_default_integer_to_i32(&mut self, value: u64, type_variable: TypeVariableId, location: Location) {
         let kind = match Type::Variable(type_variable).follow(&self.bindings) {
             Type::Variable(id) => {
@@ -216,6 +229,31 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
 
         // Now ensure the literal fits in the chosen kind
         self.check_int_fits(value, kind, location);
+    }
+
+    /// Try to default the given float to a F64, issuing an error if it is bound
+    /// to a non-float type.
+    fn try_default_float_to_f64(&mut self, type_variable: TypeVariableId, location: Location) {
+        match Type::Variable(type_variable).follow(&self.bindings) {
+            Type::Variable(id) => {
+                self.bindings.insert(*id, Type::Primitive(PrimitiveType::Float(FloatKind::F64)));
+            },
+            Type::Primitive(PrimitiveType::Float(_)) => (),
+            Type::Primitive(PrimitiveType::Error) => return,
+            _ => {
+                // The literal's type variable was bound to a non-float type through
+                // earlier unification. Since unification succeeded silently (both sides were type
+                // variables at the time), we catch the mismatch here and emit a type error.
+                let actual = self.type_to_string(&Type::Variable(type_variable));
+                self.compiler.accumulate(Diagnostic::TypeError {
+                    actual,
+                    expected: "a float type".to_string(),
+                    kind: TypeErrorKind::General,
+                    location,
+                });
+                return;
+            },
+        }
     }
 
     /// Collect all implicits in scope into a single Vec

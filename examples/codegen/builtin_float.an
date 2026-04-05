@@ -33,37 +33,15 @@ main () =
 // so we can no longer support this operation at all.
 
 // args: --delete-binary
-// expected exit status: 1
-// expected stderr:
-// examples/codegen/builtin_float.an:10:4	error: No implicit found for type Print F64 required by parameter 2
-//     println add_f64
-// 
-// examples/codegen/builtin_float.an:11:4	error: No implicit found for type Print F64 required by parameter 2
-//     println sub_f64
-// 
-// examples/codegen/builtin_float.an:12:4	error: No implicit found for type Print F64 required by parameter 2
-//     println mul_f64
-// 
-// examples/codegen/builtin_float.an:13:4	error: No implicit found for type Print F64 required by parameter 2
-//     println div_f64
-// 
-// examples/codegen/builtin_float.an:21:4	error: No implicit found for type Print F32 required by parameter 2
-//     println add_f32
-// 
-// examples/codegen/builtin_float.an:22:4	error: No implicit found for type Print F32 required by parameter 2
-//     println sub_f32
-// 
-// examples/codegen/builtin_float.an:23:4	error: No implicit found for type Print F32 required by parameter 2
-//     println mul_f32
-// 
-// examples/codegen/builtin_float.an:24:4	error: No implicit found for type Print F32 required by parameter 2
-//     println div_f32
-// 
-// examples/codegen/builtin_float.an:28:4	error: No implicit found for type Print F32 required by parameter 2
-//     println x
-// 
-// examples/codegen/builtin_float.an:29:4	error: No implicit found for type Print F32 required by parameter 2
-//     println (cast (cast x : F64) : F32)
-// 
-// Found 10 errors and 0 warnings
+// expected stdout:
+// 7.0
+// -1.0
+// 132.0
+// 0.9375
+// 7.0
+// -1.0
+// 132.0
+// 0.9375
+// 0.1428
+// 0.1428
 

@@ -278,7 +278,13 @@ impl eq_f64: Eq F64 with (==) x y = intrinsic "EqFloat" x y
 impl eq_char: Eq Char with (==) (x: Char) (y: Char): Bool = intrinsic "EqInt" x y
 impl eq_bool: Eq Bool with (==) (x: Bool) (y: Bool): Bool = intrinsic "EqInt" x y
 
-impl eq_ptr: Eq (Ptr t) with (==) x y = (cast x: Usz) == (cast y : Usz)
+// References are equal if their elements are equal
+impl eq_ref {Eq t}: Eq (ref t) with
+    (==) l r = deref l == deref r
+
+// Pointers are equal if their addresses are equal
+impl eq_ptr: Eq (Ptr t) with
+    (==) l r = (transmute l : Usz) == transmute r
 
 impl eq_maybe {Eq e}: Eq (Maybe e) with
     (==) l r =
@@ -485,11 +491,7 @@ offset_bytes (ptr: Ptr t) (index: Usz): Ptr t =
 
 deref (x: ref t): t =
     intrinsic "Deref" x
-// 
-// // Temporary. We should instead be polymorphic over each reference type
-// deref_mut (x: mut t): t =
-//     intrinsic "Deref" x
-// 
+
 deref_ptr (p: Ptr t): t =
     deref (transmute p)
 
@@ -532,22 +534,16 @@ null (): Ptr a = transmute 0usz
 transmute (x: a): b =
     intrinsic "Transmute" x
 
-// // TODO: 'mut' and special-case extract versus append
-// // trait Insert collection index elem
-// //     (#): mut collection - index - elem -> Unit
-// trait In elem col with
-//     (in): fn elem col -> Bool
-// 
-// (in) = In.(in)
-// 
-// // trait Deref ptr -> elem
-// //     deref: fn ptr -> elem
-// 
-// // TODO: Do we really need a separate trait for unary c"-"?
-// // trait Neg t
-// //     (-): fn t -> t
-// 
-// 
+// TODO: Special case insertion vs extraction
+// trait Insert collection index elem
+//     (.[): mut collection - index - elem -> Unit
+
+trait In elem col with
+    (in): fn elem col -> Bool
+
+(in) = In.(in)
+
+
 trait Print t with
     print: fn t -> Unit
 
@@ -583,21 +579,21 @@ impl print_isz: Print Isz with
 
 impl print_char: Print Char with print x = putchar x
 
-// impl print_f64: Print F64 with print = print_float
-// impl print_f32: Print F32 with print x = print_float (cast x)
+impl print_f64: Print F64 with print = print_float
+impl print_f32: Print F32 with print x = print_float (cast x)
 
-// // TODO: temporary, very inaccurate
-// print_float (f: F64) =
-//     if f < 0.0 then
-//         putchar c"-"
-//         print_float (0.0-f)
-//     else
-//         uint = cast f
-//         print_unsigned uint
-//         putchar c"."
-//         f2 = f - cast uint
-//         // Show up to 5 decimal places
-//         print_unsigned (cast (f2 * 10_000.0))
+// TODO: temporary, very inaccurate
+print_float (f: F64): Unit =
+    if f < 0.0 then
+        putchar c"-"
+        print_float (0.0-f)
+    else
+        uint = cast f
+        print_unsigned uint
+        putchar c"."
+        f2 = f - cast uint
+        // Show up to 5 decimal places
+        print_unsigned (cast (f2 * 10_000.0))
 
 impl print_string: Print String with print s = _print_string s 0u32
 impl print_ptr_char: Print (Ptr Char) with print s = print_c_string s
@@ -681,15 +677,7 @@ impl print_bool: Print Bool with
 //         then recur (pos - 1) buf (abs / 10)
 // 
 //       String buf (size - 1)
-// 
-// 
-// impl eq_ref {Eq t}: Eq (ref t) with
-//     (==) l r = deref l == deref r
-// 
-// impl eq_ptr: Eq (Ptr t) with
-//     (==) l r = (transmute l : Usz) == transmute r
-// 
-// 
+
 trait Iterator it elem with
     next: fn it -> Maybe (it, elem)
 

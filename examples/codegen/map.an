@@ -55,7 +55,7 @@ main () =
 // examples/codegen/map.an:18:4	error: `insert` not found in scope
 //     insert (mut map) 7 21
 // 
-// examples/codegen/map.an:20:4	error: Multiple matching implicits found for type Print _ required by parameter 2: hash_u8, print_bool, print_char, print_i16, print_i32, ..
+// examples/codegen/map.an:20:4	error: Multiple matching implicits found for type Print _ required by parameter 2: hash_u8, print_bool, print_char, print_f32, print_f64, ..
 //     print map
 // 
 // Found 12 errors and 0 warnings

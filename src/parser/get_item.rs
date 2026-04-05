@@ -27,8 +27,10 @@ pub fn get_item_impl(context: &GetItem, db: &DbHandle) -> (Arc<TopLevelItem>, Ar
         TopLevelItemKind::TraitImpl(trait_impl) => {
             // TODO: Reduce cloning costs for context, comments
             let mut new_context = context.as_ref().clone();
-            let new_kind = desugar_impl(trait_impl, &mut new_context);
-            let new_item = Arc::new(TopLevelItem { comments: item.comments.clone(), kind: new_kind, id: item.id });
+            let new_definition = desugar_impl(trait_impl, &mut new_context);
+            desugar_expression(new_definition.rhs, &mut new_context);
+            let kind = TopLevelItemKind::Definition(new_definition);
+            let new_item = Arc::new(TopLevelItem { comments: item.comments.clone(), kind, id: item.id });
             (new_item, Arc::new(new_context))
         },
         TopLevelItemKind::Definition(definition) => {
@@ -71,7 +73,7 @@ fn add_env_to_trait_type(typ: &Type, env_var: crate::parser::ids::NameId, locati
 ///     method2 = ...
 /// ```
 /// Note that this assumes the returned trait will capture each parameter used.
-fn desugar_impl(impl_: &TraitImpl, context: &mut TopLevelContext) -> TopLevelItemKind {
+fn desugar_impl(impl_: &TraitImpl, context: &mut TopLevelContext) -> Definition {
     let variable = context.patterns.push(Pattern::Variable(impl_.name));
     let location = context.name_locations[impl_.name].clone();
     assert_eq!(variable, context.pattern_locations.push(location.clone()));
@@ -149,7 +151,7 @@ fn desugar_impl(impl_: &TraitImpl, context: &mut TopLevelContext) -> TopLevelIte
         lambda
     };
 
-    TopLevelItemKind::Definition(Definition { implicit: true, mutable: false, pattern, rhs })
+    Definition { implicit: true, mutable: false, pattern, rhs }
 }
 
 fn make_tuple_type(location: &Location, types: impl ExactSizeIterator<Item = Type>) -> Type {

@@ -25,7 +25,7 @@ type MyRef a = ref a
 // type Struct1_c1m929_4067_0 =
 //     a_?: I32
 //     b_?: F64
-//     c_?: String_bString
+//     c_?: String_c0m703_9662_0
 // 
 // // id = c1m929_1425
 // type Thingy_c1m929_1425_0 = Struct1_c1m929_4067_0

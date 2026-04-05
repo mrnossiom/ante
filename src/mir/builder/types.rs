@@ -152,7 +152,6 @@ where
             Builtin::Unit => Type::UNIT,
             Builtin::Char => Type::CHAR,
             Builtin::Bool => Type::BOOL,
-            Builtin::String => Type::string(),
             Builtin::Ptr => Type::POINTER,
             Builtin::Intrinsic => unreachable!("Builtin::Intrinsic is not a type"),
         }
@@ -165,7 +164,6 @@ where
             crate::type_inference::types::PrimitiveType::Bool => Type::BOOL,
             crate::type_inference::types::PrimitiveType::Pointer => Type::POINTER,
             crate::type_inference::types::PrimitiveType::Char => Type::CHAR,
-            crate::type_inference::types::PrimitiveType::String => Type::string(),
             crate::type_inference::types::PrimitiveType::Int(kind) => Type::int(kind),
             crate::type_inference::types::PrimitiveType::Float(kind) => Type::float(kind),
             crate::type_inference::types::PrimitiveType::Reference(..) => Type::POINTER,

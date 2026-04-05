@@ -90,8 +90,6 @@ pub enum PrimitiveType {
     // * -> *
     Pointer,
     Char,
-    /// TODO: This should be a struct type
-    String,
     Int(IntegerKind),
     Float(FloatKind),
     Reference(ReferenceKind),
@@ -112,7 +110,6 @@ impl Type {
     pub const BOOL: Type = Type::Primitive(PrimitiveType::Bool);
     pub const POINTER: Type = Type::Primitive(PrimitiveType::Pointer);
     pub const CHAR: Type = Type::Primitive(PrimitiveType::Char);
-    pub const STRING: Type = Type::Primitive(PrimitiveType::String);
 
     pub const I8: Type = Type::Primitive(PrimitiveType::Int(IntegerKind::I8));
     pub const I16: Type = Type::Primitive(PrimitiveType::Int(IntegerKind::I16));
@@ -418,7 +415,6 @@ impl Type {
                 FloatKind::F32 => (Type::F32, Kind::Type),
                 FloatKind::F64 => (Type::F64, Kind::Type),
             },
-            crate::parser::cst::TypeKind::String => (Type::STRING, Kind::Type),
             crate::parser::cst::TypeKind::Char => (Type::CHAR, Kind::Type),
             crate::parser::cst::TypeKind::Named(path) => {
                 let origin = resolve.path_origins.get(path).copied();
@@ -494,7 +490,6 @@ impl Type {
                 Builtin::Unit => (Type::UNIT, Kind::Type),
                 Builtin::Char => (Type::CHAR, Kind::Type),
                 Builtin::Bool => (Type::BOOL, Kind::Type),
-                Builtin::String => (Type::STRING, Kind::Type),
                 Builtin::Ptr => (Type::POINTER, Kind::TypeConstructorSimple(NonZeroUsize::new(1).unwrap())),
                 Builtin::Intrinsic => (Type::ERROR, Kind::Error),
             },
@@ -758,7 +753,6 @@ impl std::fmt::Display for PrimitiveType {
             PrimitiveType::Pointer => write!(f, "Ptr"),
             PrimitiveType::Int(kind) => write!(f, "{kind}"),
             PrimitiveType::Float(kind) => write!(f, "{kind}"),
-            PrimitiveType::String => write!(f, "String"),
             PrimitiveType::Char => write!(f, "Char"),
             PrimitiveType::Reference(kind) => write!(f, "{kind}"),
             PrimitiveType::NoClosureEnv => write!(f, "{NO_CLOSURE_ENV_STRING}"),

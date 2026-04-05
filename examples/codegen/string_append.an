@@ -3,10 +3,4 @@ main () =
     print (a ++ "，世界")
 
 // args: --delete-binary
-// expected exit status: 1
-// expected stderr:
-// examples/codegen/string_append.an:3:13	error: No implicit found for type Append String required by parameter 3
-//     print (a ++ "，世界")
-// 
-// Found 1 error and 0 warnings
-
+// expected stdout: 你好，世界

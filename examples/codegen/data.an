@@ -3,13 +3,11 @@ type T = a: I32, b: String
 main () =
     t = T 1 "one"
     print "t = "
-    print (t.a)
+    print t.a
     print ", "
-
-    println t.b.c_string
+    println t.b
 
     s = Maybe.Some 2
-
     match s
     | Some x -> 
         print "s = "
@@ -21,7 +19,7 @@ main () =
 // args: --delete-binary
 // expected exit status: 1
 // expected stderr:
-// examples/codegen/data.an:18:8	error: Multiple matching implicits found for type Print _ required by parameter 2: print_bool, print_char, print_f32, print_f64, print_i16, ..
+// examples/codegen/data.an:16:8	error: Multiple matching implicits found for type Print _ required by parameter 2: print_bool, print_char, print_f32, print_f64, print_i16, ..
 //         println x
 // 
 // Found 1 error and 0 warnings

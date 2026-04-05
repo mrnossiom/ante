@@ -5,7 +5,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     diagnostics::Diagnostic,
-    incremental::{self, DbHandle, GetItem, Resolve, TargetPointerSize, TypeCheckSCC},
+    incremental::{self, DbHandle, ExportedTypes, GetItem, Resolve, TargetPointerSize, TypeCheckSCC},
+    name_resolution::namespace::SourceFileId,
     iterator_extensions::mapvec,
     lexer::token::IntegerKind,
     name_resolution::{Origin, ResolutionResult},
@@ -160,6 +161,9 @@ struct TypeChecker<'local, 'inner> {
     /// wrapper. For these, `check_for_closure` is deferred until after `pop_implicits_scope` of
     /// the enclosing lambda resolves the delayed implicits that fill in the wrapper's free vars.
     coercion_wrapper_exprs: FxHashSet<ExprId>,
+
+    /// Cached type for the Prelude's `String` struct, lazily resolved on first use.
+    string_type: Option<Type>,
 }
 
 /// Map from each TopLevelId to a tuple of (the item, parse context, resolution context)
@@ -187,6 +191,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             id_contexts,
             implicits: Vec::new(),
             coercion_wrapper_exprs: Default::default(),
+            string_type: None,
         };
 
         let mut item_types = FxHashMap::default();
@@ -252,6 +257,20 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     fn path_origin(&self, path: PathId) -> Option<Origin> {
         let origin = self.current_resolve().path_origins.get(&path).copied();
         origin.or_else(|| self.current_extended_context().path_origin(path))
+    }
+
+    /// Returns the `String` type defined in the Prelude, caching it for subsequent calls.
+    fn get_string_type(&mut self) -> Type {
+        if let Some(typ) = &self.string_type {
+            return typ.clone();
+        }
+        let exported_types = ExportedTypes(SourceFileId::prelude()).get(self.compiler);
+        let (top_level_name, _kind) = exported_types
+            .get(&Arc::new("String".to_string()))
+            .expect("String type not found in Prelude");
+        let typ = Type::UserDefined(Origin::TopLevelDefinition(*top_level_name));
+        self.string_type = Some(typ.clone());
+        typ
     }
 
     fn finish(mut self, items: Vec<(TopLevelId, TypeMaps)>) -> TypeCheckSCCResult {
@@ -568,16 +587,6 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                     }
                 }
                 BTreeMap::default()
-            },
-            Type::Primitive(types::PrimitiveType::String) => {
-                let mut fields = BTreeMap::default();
-
-                let c_string_type = Type::Application(Arc::new(Type::POINTER), Arc::new(vec![Type::CHAR]));
-
-                // TODO: Hide these and only expose them as unsafe builtins
-                fields.insert(Arc::new("c_string".into()), (c_string_type, 0));
-                fields.insert(Arc::new("length".into()), (Type::U32, 1));
-                fields
             },
             _ => BTreeMap::default(),
         }

@@ -512,7 +512,6 @@ impl<'a> CstDisplay<'a> {
             TypeKind::Float(kind) => write!(f, "{kind}"),
             TypeKind::Function(function_type) => self.fmt_function_type(function_type, context, f),
             TypeKind::Application(constructor, args) => self.fmt_type_application(constructor, args, context, f),
-            TypeKind::String => write!(f, "String"),
             TypeKind::Char => write!(f, "Char"),
             TypeKind::Reference(kind) => self.fmt_reference_type(*kind, f),
             TypeKind::NoClosureEnv => write!(f, "{}", NO_CLOSURE_ENV_STRING),

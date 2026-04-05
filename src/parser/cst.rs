@@ -105,7 +105,6 @@ pub enum TypeKind {
     Error,
     Unit,
     Char,
-    String,
     Named(PathId),
     Variable(NameId),
     Integer(IntegerKind),

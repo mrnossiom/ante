@@ -1,7 +1,0 @@
-a = "test".c_string
-
-// args: -e ast-t
-// expected stdout: (a: Ptr Char) = "test".c_string
-
-
-

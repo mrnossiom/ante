@@ -79,7 +79,7 @@ impl Origin {
         match self {
             Origin::TopLevelDefinition(..) | Origin::Local(_) => true,
             Origin::TypeResolution => false,
-            Origin::Builtin(builtin) => matches!(builtin, Builtin::Unit | Builtin::Char | Builtin::String),
+            Origin::Builtin(builtin) => matches!(builtin, Builtin::Unit | Builtin::Char),
         }
     }
 
@@ -670,7 +670,6 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
             | TypeKind::Unit
             | TypeKind::Integer(_)
             | TypeKind::Float(_)
-            | TypeKind::String
             | TypeKind::Char
             | TypeKind::NoClosureEnv
             | TypeKind::Reference(..) => (),

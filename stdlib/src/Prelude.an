@@ -5,6 +5,17 @@
 */
 import Std.C.putchar, exit
 
+// TODO: This should be reference counted
+// Representation of this type cannot be changed without also changing the
+// lowering of string literals in the compiler itself
+type String =
+    data: Ptr Char
+    length: U32
+
+// Construct a fresh, unaliased string from an owned pointer to characters and a length
+String.from_parts (pointer: Ptr Char) (length: U32): String =
+    String pointer length
+
 type Maybe t =
    | None
    | Some t
@@ -595,8 +606,13 @@ print_float (f: F64): Unit =
         // Show up to 5 decimal places
         print_unsigned (cast (f2 * 10_000.0))
 
-impl print_string: Print String with print s = _print_string s 0u32
-impl print_ptr_char: Print (Ptr Char) with print s = print_c_string s
+impl print_string: Print String with
+    print s = loop (i = 0) ->
+        if i < s.length then
+            off = offset_bytes (s.data) (cast i)
+            c = deref_ptr off
+            putchar c
+            recur (i + 1)
 
 impl print_maybe {Print a}: Print (Maybe a) with
     print m =
@@ -623,60 +639,10 @@ print_signed (x: I64) (min: I64) (min_string: String): Unit =
     else
         print_unsigned (unwrap (try_cast x))
 
-_print_string (s: String) (i: U32): Unit =
-    if i < s.length then
-        off = offset_bytes (s.c_string) (cast i)
-        c = deref_ptr off
-        putchar c
-        _print_string s (i + 1u32)
-
-print_c_string (s: Ptr Char): Unit =
-    c = deref_ptr s
-    if c != c"\0" then
-        putchar c
-        print_c_string (offset_bytes s 1usz)
-
 impl print_bool: Print Bool with
     print b =
         if b then print "true"
         else print "false"
-
-// TODO: This impl would conflict with others
-// impl Print t given Cast t String
-//     print t = print (t as String)
-// 
-// 
-// impl cast_string_ptr_char: Cast String (Ptr Char) with
-//     cast s = s.c_string
-// 
-// impl cast_int_string
-//     {Div (Int a)}
-//     {Mod (Int a)}
-//     {Cmp (Int a)}
-//     {Cast (Int a) Char}
-// : Cast (Int a) String with
-//     cast i =
-//       abs, sign_off = if i < 0 then (i * -1, 1) else (i, 0)
-//       len = loop abs (cmp = 10) ->
-//         // Need to check for overflow here
-//         next = cmp * 10
-//         if abs >= cmp and next > cmp
-//         then 1 + recur abs next
-//         else 1
-// 
-//       size = len + sign_off + 1
-//       buf = malloc size
-//       if sign_off == 1
-//       then ptr_to_ref <| offset buf 0 := c"-"
-//       ptr_to_ref <| offset buf (size - 1) := c"\0"
-// 
-//       loop (pos = len - 1) (buf = offset buf sign_off) abs ->
-//         char_offset = cast (abs % 10) : Char
-//         ptr_to_ref <| offset buf pos := c"0" + char_offset
-//         if pos > 0
-//         then recur (pos - 1) buf (abs / 10)
-// 
-//       String buf (size - 1)
 
 trait Iterator it elem with
     next: fn it -> Maybe (it, elem)
@@ -707,45 +673,25 @@ repeat (count: Usz) (f: fn Usz [env] -> Unit): Unit =
             f i
             recur (i + 1)
 
-// // Iterating through an InFile iterates through each line
-// impl iterator_infile: Iterator InFile String with
-//     next infile =
-//         if eof infile
-//         then None
-//         else Some (infile, next_line infile)
-// 
+impl eq_string: Eq String with
+    (==) l r =
+        l.length == r.length and
+            memcmp l.data r.data (cast l.length) == 0
 
-// string_len (s: ref String): U32 =
-//     intrinsic "StringLen" s
-// 
-// string_data (s: ref String): Ptr Char =
-//     intrinsic "StringData" s
-// 
-// string_from_parts (buffer: Ptr Char) (len: U32): String =
-//     intrinsic "StringFromParts" buffer len
+impl append_string: Append String with
+    (++) s1 s2 =
+        if s1.length == 0 then return s2
+        if s2.length == 0 then return s1
 
-// impl eq_string: Eq String with
-//     (==) l r =
-//         if string_len l != string_len r then
-//             false
-//         else
-//             memcmp (string_data l) (string_data r) (string_len l) == 0
+        len = s1.length + s2.length
+        buf = malloc (cast len + 1usz)
 
-// impl append_string: Append String with
-//     (++) s1 s2 =
-//         if s1.length == 0u32 then return s2
-//         if s2.length == 0u32 then return s1
-// 
-//         len = s1.length + s2.length
-//         buf = malloc (cast len + 1usz)
-// 
-//         memcpy buf (s1.c_string) (cast s1.length)
-// 
-//         buf_offset = cast (cast buf : Usz + s1.length)
-// 
-//         //copy terminating null too
-//         memcpy buf_offset (s2.c_string) (cast s2.length + 1usz)
-//         String.from_parts buf len
+        memcpy buf (s1.data) (cast s1.length)
+
+        buf_offset = cast (cast buf: Usz + cast s1.length: Usz)
+
+        memcpy buf_offset (s2.data) (cast s2.length)
+        String.from_parts buf len
 
 panic (msg: t) {Print t} =
     print msg
@@ -756,70 +702,6 @@ panic (msg: t) {Print t} =
 // impl extract_string: Extract String Usz Char with
 //     (.[) s index = s.c_string.[index]
 // 
-// // impl Insert String int Char
-// //     insert str index Char =
-// //         str.c_string#index := Char
-// 
-// open_infile (path: String): InFile =
-//     InFile (fopen path.c_string "r".c_string)
-// 
-// open_outfile (path: String): OutFile =
-//     OutFile (fopen path.c_string "w".c_string)
-// 
-// //Convenience function for using feof with better types
-// eof (f: InFile): Bool =
-//     feof f != 0
-// 
-// next_char (f: InFile): Char =
-//     cast (fgetc f)
-// 
-// // TODO: Why is this being monomorphised twice?
-// next_line (f: InFile): String =
-//     if eof f then return ""
-// 
-//     var capacity = 32
-//     var cstr = malloc capacity.*
-// 
-//     len = loop (len = 0) ->
-//         next = next_char f
-//         if next < 0 then return len
-//         c: Char = cast next
-// 
-//         //Flag feof if eof occurs after terminating newline
-//         if c == c"\n" then
-//             peek = next_char f
-//             if peek >= 0 then ungetc (cast peek) f
-//             return len
-// 
-//         if len + 1 >= capacity.* then
-//             capacity := capacity.* * 2
-//             cstr := realloc cstr.* capacity.*
-// 
-//         array_insert cstr.* len c
-//         recur (len + 1)
-// 
-//     array_insert cstr.* len c"\0"
-//     String cstr.* len
-// 
-// // Read a line from stdin, ending with (and not including) a terminating c"\n"
-// read_line (): String =
-//     buffer, len = loop (buffer = null ()) (len = 0) ->
-//         c = getchar ()
-//         c_char = cast c : Char
-// 
-//         buffer2 = if len %% 32
-//             then realloc buffer (len + 32)
-//             else buffer
-// 
-//         array_insert buffer2 len c_char
-// 
-//         if c_char != c"\n" and c >= 0
-//         then recur buffer2 (len + 1)
-//         else buffer2, len
-// 
-//     array_insert buffer len c"\0"
-//     String buffer len
-// 
-// input msg =
-//     print msg
-//     read_line ()
+// impl Insert String int Char
+//     insert str index Char =
+//         str.c_string#index := Char

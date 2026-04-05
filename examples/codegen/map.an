@@ -1,4 +1,4 @@
-import Std.HashMap
+import Std.HashMap.empty, insert, print_map
 
 impl hash_u8: Hash U8 with
     hash x = cast x
@@ -17,46 +17,8 @@ main () =
     insert (mut map) 6 18
     insert (mut map) 7 21
 
-    print map
+    println map
 
 // args: --delete-binary
-// expected exit status: 1
-// expected stderr:
-// examples/codegen/map.an:1:8	error: Could not find crate `Std`
-// import Std.HashMap
-// 
-// examples/codegen/map.an:3:14	error: `Hash` not found in scope
-// impl hash_u8: Hash U8 with
-// 
-// examples/codegen/map.an:4:13	error: Multiple matching implicits found for type Cast _ _ required by parameter 2: cast_char_i32, cast_char_u64, cast_f32_f64, cast_f32_i16, cast_f32_i32, ..
-//     hash x = cast x
-// 
-// examples/codegen/map.an:7:14	error: `empty` not found in scope
-//     var map = empty ()
-// 
-// examples/codegen/map.an:12:4	error: `insert` not found in scope
-//     insert (mut map) 1u8 3u16
-// 
-// examples/codegen/map.an:13:4	error: `insert` not found in scope
-//     insert (mut map) 2 6
-// 
-// examples/codegen/map.an:14:4	error: `insert` not found in scope
-//     insert (mut map) 3 9
-// 
-// examples/codegen/map.an:15:4	error: `insert` not found in scope
-//     insert (mut map) 4 12
-// 
-// examples/codegen/map.an:16:4	error: `insert` not found in scope
-//     insert (mut map) 5 15
-// 
-// examples/codegen/map.an:17:4	error: `insert` not found in scope
-//     insert (mut map) 6 18
-// 
-// examples/codegen/map.an:18:4	error: `insert` not found in scope
-//     insert (mut map) 7 21
-// 
-// examples/codegen/map.an:20:4	error: Multiple matching implicits found for type Print _ required by parameter 2: hash_u8, print_bool, print_char, print_f32, print_f64, ..
-//     print map
-// 
-// Found 12 errors and 0 warnings
+// expected stdout: [1 -> 3, 2 -> 6, 3 -> 9, 4 -> 12, 5 -> 15, 6 -> 18, 7 -> 21]
 

@@ -84,7 +84,7 @@ where
 fn monomorphize_non_generic_definition(
     definition: Definition, definitions: &SharedDefinitions, initial_mir: &Mir,
 ) -> Mir {
-    let mut context = FunctionContext::new(definitions);
+    let mut context = FunctionContext::new(definitions, initial_mir);
     context.monomorphize_definition(definition);
 
     while let Some(item) = context.queue.pop() {
@@ -125,6 +125,10 @@ struct FunctionContext<'local> {
 
     /// This is shared between all concurrent monomorphize calls
     definitions: &'local SharedDefinitions,
+
+    /// The initial MIR before monomorphization, used to check whether a referenced
+    /// definition is generic (needed for same-SCC mutual recursion without Instantiate).
+    initial_mir: &'local Mir,
 }
 
 struct DefinitionToMonomorphize {
@@ -140,9 +144,10 @@ struct DefinitionToMonomorphize {
 type SharedDefinitions = DashMap<(DefinitionId, Arc<GenericBindings>), DefinitionId>;
 
 impl<'local> FunctionContext<'local> {
-    fn new(definitions: &'local SharedDefinitions) -> Self {
+    fn new(definitions: &'local SharedDefinitions, initial_mir: &'local Mir) -> Self {
         Self {
             definitions,
+            initial_mir,
             generic_mapping: Default::default(),
             queue: Default::default(),
             finished_definitions: Default::default(),
@@ -195,38 +200,55 @@ impl<'local> FunctionContext<'local> {
         }
     }
 
-    /// Remap any `Value::Definition(old_id)` inside `instruction` to the already-computed
-    /// monomorphized ID when `(old_id, generic_mapping)` is already present in `self.definitions`.
-    /// This handles direct calls to generic functions (e.g. recursive self-calls) that bypass
-    /// the `Instantiate` instruction path.
-    fn remap_definition_values_in_instruction(&self, instruction: &mut Instruction) {
-        let remap = |v: &mut Value| {
-            if let Value::Definition(id) = v {
-                if let Some(new_id) = self.definitions.get(&(*id, self.generic_mapping.clone())) {
-                    *id = *new_id;
+    /// Remap a `Value::Definition(old_id)` to its monomorphized version.
+    ///
+    /// If `(old_id, generic_mapping)` is already in `self.definitions`, use that mapping.
+    /// Otherwise, if the definition is generic in the initial MIR (e.g. a mutual recursion
+    /// partner in the same SCC that was never referenced via `Instantiate`), create a new
+    /// monomorphized copy on demand using the current `generic_mapping` as bindings.
+    fn remap_value(&mut self, v: &mut Value) {
+        if let Value::Definition(id) = v {
+            if let Some(new_id) = self.definitions.get(&(*id, self.generic_mapping.clone())) {
+                *id = *new_id;
+            } else if let Some(def) = self.initial_mir.get(*id) {
+                if !def.is_monomorphic() {
+                    let bindings = self.generic_mapping.clone();
+                    let new_id = *self.definitions.entry((*id, bindings.clone())).or_insert_with(|| {
+                        let new_id = next_definition_id();
+                        self.queue.push(DefinitionToMonomorphize { old_id: *id, new_id, bindings });
+                        new_id
+                    });
+                    *id = new_id;
                 }
             }
-        };
+        }
+    }
 
+    /// Remap any `Value::Definition(old_id)` inside `instruction` to its monomorphized version.
+    /// This handles direct references to generic functions (e.g. recursive self-calls or
+    /// mutual recursion partners in the same SCC) that bypass the `Instantiate` instruction path.
+    fn remap_definition_values_in_instruction(&mut self, instruction: &mut Instruction) {
         match instruction {
             Instruction::Call { function, arguments } => {
-                remap(function);
-                arguments.iter_mut().for_each(remap);
+                self.remap_value(function);
+                for arg in arguments.iter_mut() { self.remap_value(arg); }
             },
             Instruction::CallClosure { closure: function, arguments } => {
-                remap(function);
-                arguments.iter_mut().for_each(remap);
+                self.remap_value(function);
+                for arg in arguments.iter_mut() { self.remap_value(arg); }
             },
             Instruction::PackClosure { function, environment } => {
-                remap(function);
-                remap(environment);
+                self.remap_value(function);
+                self.remap_value(environment);
             },
-            Instruction::IndexTuple { tuple, .. } => remap(tuple),
-            Instruction::MakeTuple(elements) => elements.iter_mut().for_each(remap),
-            Instruction::StackAlloc(v) | Instruction::Transmute(v) | Instruction::Id(v) => remap(v),
+            Instruction::IndexTuple { tuple, .. } => self.remap_value(tuple),
+            Instruction::MakeTuple(elements) => {
+                for e in elements.iter_mut() { self.remap_value(e); }
+            },
+            Instruction::StackAlloc(v) | Instruction::Transmute(v) | Instruction::Id(v) => self.remap_value(v),
             Instruction::Store { pointer, value } => {
-                remap(pointer);
-                remap(value);
+                self.remap_value(pointer);
+                self.remap_value(value);
             },
             Instruction::AddInt(a, b)
             | Instruction::AddFloat(a, b)
@@ -248,8 +270,8 @@ impl<'local> FunctionContext<'local> {
             | Instruction::BitwiseAnd(a, b)
             | Instruction::BitwiseOr(a, b)
             | Instruction::BitwiseXor(a, b) => {
-                remap(a);
-                remap(b);
+                self.remap_value(a);
+                self.remap_value(b);
             },
             Instruction::BitwiseNot(v)
             | Instruction::SignExtend(v)
@@ -261,11 +283,11 @@ impl<'local> FunctionContext<'local> {
             | Instruction::FloatPromote(v)
             | Instruction::FloatDemote(v)
             | Instruction::Truncate(v)
-            | Instruction::Deref(v) => remap(v),
+            | Instruction::Deref(v) => self.remap_value(v),
             Instruction::SizeOf(typ) => self.specialize_type(typ),
             Instruction::MakeString(_) | Instruction::Instantiate(..) | Instruction::Extern(_) => {},
             Instruction::GetFieldPtr { struct_ptr, struct_type, .. } => {
-                remap(struct_ptr);
+                self.remap_value(struct_ptr);
                 if !self.generic_mapping.is_empty() {
                     self.specialize_type(struct_type);
                 }

@@ -1,73 +1,65 @@
-import C.File
+import Std.C.File, fclose, fopen, fgetc, ungetc, feof, malloc, realloc, getchar
 
-// // Iterating through an InFile iterates through each line
-// impl iterator_infile: Iterator InFile String with
-//     next infile =
-//         if eof infile
-//         then None
-//         else Some (infile, next_line infile)
-// 
+open (path: String) (mode: String): File =
+    fopen path.data mode.data
 
-// 
-// open_infile (path: String): InFile =
-//     InFile (fopen path.c_string "r".c_string)
-// 
-// open_outfile (path: String): OutFile =
-//     OutFile (fopen path.c_string "w".c_string)
-// 
-// //Convenience function for using feof with better types
-// eof (f: InFile): Bool =
-//     feof f != 0
-// 
-// next_char (f: InFile): Char =
-//     cast (fgetc f)
-// 
-// next_line (f: InFile): String =
-//     if eof f then return ""
-// 
-//     var capacity = 32
-//     var cstr = malloc capacity.*
-// 
-//     len = loop (len = 0) ->
-//         next = next_char f
-//         if next < 0 then return len
-//         c: Char = cast next
-// 
-//         //Flag feof if eof occurs after terminating newline
-//         if c == c"\n" then
-//             peek = next_char f
-//             if peek >= 0 then ungetc (cast peek) f
-//             return len
-// 
-//         if len + 1 >= capacity.* then
-//             capacity := capacity.* * 2
-//             cstr := realloc cstr.* capacity.*
-// 
-//         array_insert cstr.* len c
-//         recur (len + 1)
-// 
-//     array_insert cstr.* len c"\0"
-//     String cstr.* len
-// 
-// // Read a line from stdin, ending with (and not including) a terminating c"\n"
-// read_line (): String =
-//     buffer, len = loop (buffer = null ()) (len = 0) ->
-//         c = getchar ()
-//         c_char = cast c : Char
-// 
-//         buffer2 = if len %% 32
-//             then realloc buffer (len + 32)
-//             else buffer
-// 
-//         array_insert buffer2 len c_char
-// 
-//         if c_char != c"\n" and c >= 0
-//         then recur buffer2 (len + 1)
-//         else buffer2, len
-// 
-//     array_insert buffer len c"\0"
-//     String buffer len
-// 
-// input msg =
-//     print msg
-//     read_line ()
+close (file: File): Unit =
+    fclose file
+
+//Convenience function for using feof with better types
+eof (f: File): Bool =
+    feof f != 0
+
+next_char (f: File): Char =
+    cast (fgetc f)
+
+next_line (f: File): String =
+    if eof f then return ""
+
+    len, cstr = loop (len = 0) (capacity = 32) (cstr = malloc 32) ->
+        next = fgetc f
+        if next < 0 then return (len, cstr)
+        c: Char = cast next
+
+        //Flag feof if eof occurs after terminating newline
+        if c == c"\n" then
+            peek = fgetc f
+            if peek >= 0 then ungetc peek f
+            return (len, cstr)
+
+        new_capacity, new_cstr = if len + 1 >= capacity then
+            new_cap = capacity * 2
+            (new_cap, realloc cstr new_cap)
+        else (capacity, cstr)
+
+        array_insert new_cstr len c
+        recur (len + 1) new_capacity new_cstr
+
+    array_insert cstr len c"\0"
+    String cstr (cast len)
+
+// Iterating through a File iterates through each line
+impl iterator_file: Iterator File String with
+    next file =
+        if eof file
+        then None
+        else Some (file, next_line file)
+
+// Read a line from stdin, ending with (and not including) a terminating c"\n"
+read_line (): String =
+    buffer, len = loop (buffer = null ()) (len = 0) ->
+        c = getchar ()
+        c_char = cast c : Char
+
+        buffer2 = if len %% 32
+            then realloc buffer (len + 32)
+            else buffer
+
+        array_insert buffer2 len c_char
+
+        if c_char != c"\n" and c >= 0
+        then recur buffer2 (len + 1)
+        else buffer2, len
+
+    array_insert buffer len c"\0"
+    String buffer (cast len)

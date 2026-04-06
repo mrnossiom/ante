@@ -153,6 +153,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         match pattern.as_ref() {
             Pattern::Error => (),
             Pattern::Variable(name) | Pattern::MethodName { item_name: name, .. } => {
+                self.current_lambda_locals.insert(*name);
                 self.check_name(*name, expected);
             },
             Pattern::Literal(literal) => self.check_literal(literal, id, expected),
@@ -353,6 +354,10 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         // Remember the return type so that it can be checked by `return` statements
         let old_return_type =
             std::mem::replace(&mut self.function_return_type, Some(function_type.return_type.clone()));
+        let old_lambda_locals = std::mem::take(&mut self.current_lambda_locals);
+        if let Some(name) = self_name {
+            self.current_lambda_locals.insert(name);
+        }
 
         self.push_implicits_scope();
         self.check_function_parameter_count(&function_type.parameters, lambda.parameters.len(), expr);
@@ -385,6 +390,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         self.check_expr(lambda.body, &return_type);
 
         self.function_return_type = old_return_type;
+        self.current_lambda_locals = old_lambda_locals;
         self.pop_implicits_scope();
 
         // pop_implicits_scope modifies the function by inserting implicit arguments, we need
@@ -567,22 +573,54 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     fn check_assignment(&mut self, assignment: &cst::Assignment, expected: &Type, id: ExprId) {
         let lhs_type = self.next_type_variable();
         self.check_expr(assignment.lhs, &lhs_type);
+
+        // Check if this assignment mutates a captured variable. Captures are by value,
+        // so mutating a capture won't affect the original. Allow if the LHS is a reference
+        // type since the assignment stores through the reference.
+        let lhs_followed = self.follow_type(&lhs_type);
+        let lhs_is_ref = matches!(&lhs_followed, Type::Application(c, _)
+            if matches!(self.follow_type(c), Type::Primitive(types::PrimitiveType::Reference(_))));
+
+        if !lhs_is_ref {
+            if let Some(root_name) = self.find_lvalue_root_variable(assignment.lhs) {
+                if !self.current_lambda_locals.contains(&root_name) {
+                    let location = id.locate(self);
+                    self.compiler.accumulate(Diagnostic::MutatedCapturedVariable { location });
+                }
+            }
+        }
+
         // If the LHS is a reference type (e.g. `p.x` where `p: mut Point` yields `mut I32`),
         // the RHS should match the inner (pointee) type rather than the reference wrapper.
-        let rhs_type = match self.follow_type(&lhs_type) {
-            Type::Application(constructor, args) => {
-                let constructor = constructor.clone();
-                let args = args.clone();
-                if matches!(self.follow_type(&constructor), Type::Primitive(types::PrimitiveType::Reference(_))) {
-                    args[0].clone()
-                } else {
-                    lhs_type.clone()
-                }
-            },
-            _ => lhs_type.clone(),
+        let rhs_type = if lhs_is_ref {
+            match self.follow_type(&lhs_type) {
+                Type::Application(_, args) => args[0].clone(),
+                _ => unreachable!(),
+            }
+        } else {
+            lhs_type.clone()
         };
         self.check_expr(assignment.rhs, &rhs_type);
         self.unify(&Type::UNIT, expected, TypeErrorKind::General, id);
+    }
+
+    /// Walk through member accesses to find the root local variable of an lvalue expression.
+    fn find_lvalue_root_variable(&self, expr: ExprId) -> Option<NameId> {
+        let e = match self.current_extended_context().extended_expr(expr) {
+            Some(e) => Cow::Owned(e.clone()),
+            None => Cow::Borrowed(&self.current_context().exprs[expr]),
+        };
+        match e.as_ref() {
+            Expr::Variable(path) => {
+                if let Some(Origin::Local(name)) = self.path_origin(*path) {
+                    Some(name)
+                } else {
+                    None
+                }
+            },
+            Expr::MemberAccess(access) => self.find_lvalue_root_variable(access.object),
+            _ => None,
+        }
     }
 
     /// Return can unify with any type locally so we don't need the expected type here

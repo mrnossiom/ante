@@ -1,0 +1,50 @@
+import Std.IO.open, eof, next_char, next_line, iterator_file
+import Std.C.fputs, fclose
+
+write_test_file (path: String): Unit =
+    f = open path "w\0"
+    fputs "line1\nline2\nline3\n\0".data f
+    fclose f
+
+main () =
+    path = "/tmp/ante_io_test.txt\0"
+    write_test_file path
+
+    // Test next_char reads the first character
+    f1 = open path "r\0"
+    c1 = next_char f1
+    c2 = next_char f1
+    print c1
+    println c2
+    fclose f1
+
+    // Test next_line reads complete lines
+    f2 = open path "r\0"
+    println (next_line f2)
+    println (next_line f2)
+    println (eof f2)
+    println (next_line f2)
+    // Iterating past the end should yield an empty string
+    println (next_line f2)
+    println (next_line f2)
+    println (eof f2)
+    fclose f2
+
+    // Test iterating over file lines using the File Iterator impl
+    f3 = open path "r\0"
+    iter f3 println
+    fclose f3
+
+// args: --delete-binary
+// expected stdout:
+// li
+// line1
+// line2
+// false
+// line3
+// 
+// 
+// true
+// line1
+// line2
+// line3

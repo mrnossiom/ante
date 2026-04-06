@@ -1,0 +1,25 @@
+main () =
+    var x = 0
+
+    closure () =
+        x := 5
+
+    closure ()
+
+// Found 1 error and 0 warnings
+
+// args: -e ast-t
+// expected exit status: 1
+// expected stdout:
+// (main: fn Unit -> Unit can _) () =
+//     mut (x: I32) = 0
+//     (closure: fn Unit [I32] -> Unit can _) () [(x: I32)] =
+//         (x: I32) := 5
+//     (closure: fn Unit [I32] -> Unit can _) ()
+
+// expected stderr:
+// examples/typechecking/mutate_capture.an:5:8	error: Cannot mutate a captured variable because closures capture by value. Consider capturing a mutable reference instead
+//         x := 5
+// 
+// Found 1 error and 0 warnings
+

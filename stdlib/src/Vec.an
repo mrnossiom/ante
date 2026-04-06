@@ -76,23 +76,24 @@ remove_first (v: mut Vec t) (elem: t) {Eq t} : Maybe Usz =
 //Expects the indices to be in sorted order.
 //Will error if any index is out of bounds.
 remove_indices (v: mut Vec t) (idxs: Vec Usz) : Unit =
-    var moved = 0
+    var moved: Usz = 0
+    moved_ref = mut moved
     repeat idxs.len fn i ->
         cur = idxs.data.[i]
 
         if cur < 0 or cur >= v.len.* then
             panic "Vec.remove: index out of bounds" // TODO: string interpolation
 
-        moved := moved + 1
+        moved_ref := moved_ref.* + 1
         if i != idxs.len - 1 then
             nxt = idxs.data.[i + 1]
             repeat (nxt - cur - 1) fn j ->
                 j = j + cur + 1
-                array_insert v.data.* (j - moved) (v.data.*.[j])
+                array_insert v.data.* (j - moved_ref.*) (v.data.*.[j])
         else
             repeat (v.len.* - cur - 1) fn j ->
                 j = j + cur + 1
-                array_insert v.data.* (j - moved) (v.data.*.[j])
+                array_insert v.data.* (j - moved_ref.*) (v.data.*.[j])
 
     v.len.* := v.len.* - moved
 

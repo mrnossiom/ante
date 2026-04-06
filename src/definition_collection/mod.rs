@@ -41,6 +41,10 @@ pub fn visible_definitions_impl(context: &VisibleDefinitions, db: &DbHandle) -> 
         let exported = ExportedDefinitions(import_file_id).get(db);
 
         for (exported_name, exported_id) in &exported.definitions {
+            // Check if this matches the name of any imported item
+            if !import.items.iter().any(|(item, _)| item.as_str() == exported_name.as_str()) {
+                continue;
+            }
             if let Some(existing) = visible.definitions.get(exported_name) {
                 // This reports the location the item was defined in, not the location it was imported at.
                 // I could improve this but instead I'll leave it as an exercise for the reader!
@@ -50,6 +54,21 @@ pub fn visible_definitions_impl(context: &VisibleDefinitions, db: &DbHandle) -> 
                 db.accumulate(Diagnostic::ImportedNameAlreadyInScope { name, first_location, second_location });
             } else {
                 visible.definitions.insert(exported_name.clone(), *exported_id);
+            }
+        }
+
+        // Report errors for any explicitly requested items not found in the module
+        let exported_types = ExportedTypes(import_file_id).get(db);
+        for (item_name, item_location) in &import.items {
+            let item_arc = Arc::new(item_name.clone());
+            let in_definitions = exported.definitions.contains_key(&item_arc);
+            let in_types = exported_types.contains_key(&item_arc);
+            if !in_definitions && !in_types {
+                db.accumulate(Diagnostic::UnknownImportItem {
+                    name: item_arc,
+                    module: import.module_path.clone(),
+                    location: item_location.clone(),
+                });
             }
         }
     }
@@ -109,6 +128,9 @@ pub fn visible_types_impl(context: &VisibleTypes, db: &DbHandle) -> TypeDefiniti
         let exports = ExportedTypes(import_file_id).get(db);
 
         for (exported_name, (exported_id, kind)) in exports {
+            if !import.items.iter().any(|(item, _)| item.as_str() == exported_name.as_str()) {
+                continue;
+            }
             if let Some((existing, _)) = definitions.get(&exported_name) {
                 // This reports the location the item was defined in, not the location it was imported at.
                 // I could improve this but instead I'll leave it as an exercise for the reader!
@@ -119,6 +141,9 @@ pub fn visible_types_impl(context: &VisibleTypes, db: &DbHandle) -> TypeDefiniti
             } else {
                 definitions.insert(exported_name, (exported_id, kind));
             }
+
+            // NOTE: VisibleDefinitions should error if there was an import with a type name that
+            // was not imported / does not exist.
         }
     }
 

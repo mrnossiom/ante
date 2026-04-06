@@ -1,4 +1,4 @@
-import Std.HashMap.empty, insert, print_map
+import Std.HashMap.empty, insert, Hash, print_hashmap
 
 impl hash_u8: Hash U8 with
     hash x = cast x

@@ -168,6 +168,10 @@ struct TypeChecker<'local, 'inner> {
 
     /// Cached TopLevelName for the Prelude's `(.*)` (deref/Copy) function, lazily resolved on first use.
     deref_name: Option<TopLevelName>,
+
+    /// Names defined within the current (innermost) lambda scope.
+    /// Used to detect mutations of captured variables.
+    current_lambda_locals: FxHashSet<NameId>,
 }
 
 /// Map from each TopLevelId to a tuple of (the item, parse context, resolution context)
@@ -197,6 +201,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             coercion_wrapper_exprs: Default::default(),
             string_type: None,
             deref_name: None,
+            current_lambda_locals: Default::default(),
         };
 
         let mut item_types = FxHashMap::default();

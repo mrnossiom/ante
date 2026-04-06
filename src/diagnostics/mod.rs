@@ -45,6 +45,11 @@ pub enum Diagnostic {
         module_name: Arc<PathBuf>,
         location: Location,
     },
+    UnknownImportItem {
+        name: Arc<String>,
+        module: Arc<PathBuf>,
+        location: Location,
+    },
     NameNotInScope {
         name: Arc<String>,
         location: Location,
@@ -188,6 +193,9 @@ pub enum Diagnostic {
         name: String,
         location: Location,
     },
+    MutatedCapturedVariable {
+        location: Location,
+    },
 }
 
 impl Ord for Diagnostic {
@@ -246,6 +254,9 @@ impl Diagnostic {
                 } else {
                     format!("Could not find module `{}` in crate `{crate_name}`", module_name.display())
                 }
+            },
+            Diagnostic::UnknownImportItem { name, module, location: _ } => {
+                format!("`{name}` not found in module `{}`", module.display())
             },
             Diagnostic::NameNotInScope { name, location: _ } => {
                 format!("`{name}` not found in scope")
@@ -414,6 +425,9 @@ impl Diagnostic {
             Diagnostic::NotAType { name, location: _ } => {
                 format!("{} is not a type", name.purple())
             },
+            Diagnostic::MutatedCapturedVariable { location: _ } => {
+                "Cannot mutate a captured variable because closures capture by value. Consider capturing a mutable reference instead".to_string()
+            },
         }
     }
 
@@ -426,6 +440,7 @@ impl Diagnostic {
             | Diagnostic::NameAlreadyInScope { second_location: location, .. }
             | Diagnostic::ImportedNameAlreadyInScope { second_location: location, .. }
             | Diagnostic::UnknownImportFile { location, .. }
+            | Diagnostic::UnknownImportItem { location, .. }
             | Diagnostic::NameNotInScope { location, .. }
             | Diagnostic::ExpectedType { location, .. }
             | Diagnostic::RecursiveType { location, .. }
@@ -458,6 +473,7 @@ impl Diagnostic {
             | Diagnostic::Unimplemented { location, .. }
             | Diagnostic::TypeAnnotationNeeded { location, .. }
             | Diagnostic::NotAType { location, .. }
+            | Diagnostic::MutatedCapturedVariable { location }
             | Diagnostic::NoMainFunction { location } => location,
         }
     }

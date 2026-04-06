@@ -3,7 +3,7 @@
     Standard functions and datatypes pre-imported
     into every Ante source file.
 */
-import Std.C.putchar, exit
+import Std.C.putchar, exit, memcmp, malloc, memcpy
 
 // TODO: This should be reference counted
 // Representation of this type cannot be changed without also changing the

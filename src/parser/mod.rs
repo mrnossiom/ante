@@ -424,11 +424,21 @@ impl<'tokens> Parser<'tokens> {
                     items.push(item);
                 }
 
-                // Parse any extra items `, b, c, d`
+                // Parse any extra items `, b, c, d` — accepts both lowercase identifiers
+                // and uppercase type/trait names (e.g. `import Std.HashMap.empty, Hash`).
                 while self.accept(Token::Comma) {
-                    match self.parse_ident() {
-                        Ok(name) => items.push((name, self.previous_token_location())),
-                        Err(error) => self.diagnostics.push(error),
+                    match self.current_token() {
+                        Token::Identifier(name) | Token::TypeName(name) => {
+                            let name = name.clone();
+                            let location = self.current_token_location();
+                            self.advance();
+                            items.push((name, location));
+                        },
+                        _ => {
+                            let error = self.expected::<()>("an identifier or type name").unwrap_err();
+                            self.diagnostics.push(error);
+                            self.advance();
+                        },
                     }
                 }
 

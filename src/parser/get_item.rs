@@ -7,7 +7,7 @@ use crate::{
     parser::{
         context::TopLevelContext,
         cst::{
-            self, Argument, Constructor, Definition, Expr, If, Lambda, Literal, Loop, Parameter, Pattern, SequenceItem,
+            self, Argument, Constructor, Definition, Expr, If, Lambda, Literal, Parameter, Pattern, SequenceItem,
             TopLevelItem, TopLevelItemKind, TraitDefinition, TraitImpl, Type, TypeDefinitionBody, TypeKind,
         },
         ids::ExprId,
@@ -218,71 +218,77 @@ fn desugar_trait(trait_: &TraitDefinition, context: &mut TopLevelContext) -> Top
 /// - `foo _ x _`: Function calls with `_` as arguments are automatically converted into lambdas
 ///                with the `_` parameters as the remaining lambda parameters in source order.
 fn desugar_expression(expr: ExprId, context: &mut TopLevelContext) {
+    let mut desugars = Vec::new();
+    collect_expressions_to_desugar(expr, context, &mut desugars);
+
+    for desugar in desugars {
+        desugar.apply(context);
+    }
+}
+
+fn collect_expressions_to_desugar(expr: ExprId, context: &TopLevelContext, to_desugar: &mut Vec<ExprDesugar>) {
     match &context.exprs[expr] {
         Expr::Error => (),
         Expr::Literal(_) => (),
         Expr::Variable(_) => (),
         Expr::Quoted(_) => (),
-        Expr::Definition(definition) => desugar_expression(definition.rhs, context),
-        Expr::MemberAccess(access) => desugar_expression(access.object, context),
-        Expr::Lambda(lambda) => desugar_expression(lambda.body, context),
-        Expr::Reference(reference) => desugar_expression(reference.rhs, context),
-        Expr::TypeAnnotation(annotation) => desugar_expression(annotation.lhs, context),
-        Expr::Return(return_) => desugar_expression(return_.expression, context),
+        Expr::Definition(definition) => collect_expressions_to_desugar(definition.rhs, context, to_desugar),
+        Expr::MemberAccess(access) => collect_expressions_to_desugar(access.object, context, to_desugar),
+        Expr::Lambda(lambda) => collect_expressions_to_desugar(lambda.body, context, to_desugar),
+        Expr::Reference(reference) => collect_expressions_to_desugar(reference.rhs, context, to_desugar),
+        Expr::TypeAnnotation(annotation) => collect_expressions_to_desugar(annotation.lhs, context, to_desugar),
+        Expr::Return(return_) => collect_expressions_to_desugar(return_.expression, context, to_desugar),
         Expr::Sequence(sequence) => {
-            // TODO: Refactor to avoid the need for clones
-            for item in sequence.clone() {
-                desugar_expression(item.expr, context);
+            for item in sequence {
+                collect_expressions_to_desugar(item.expr, context, to_desugar);
             }
         },
         Expr::Call(call) => {
-            let call = call.clone();
-            desugar_expression(call.function, context);
+            collect_expressions_to_desugar(call.function, context, to_desugar);
             for arg in call.arguments.iter() {
-                desugar_expression(arg.expr, context);
+                collect_expressions_to_desugar(arg.expr, context, to_desugar);
             }
-            desugar_call_wildcards(&call, expr, context);
 
-            if let Some(desugar) = classify_call(&call, context) {
-                desugar.apply(&call, expr, context);
+            if call.arguments.iter().any(|arg| is_wildcard(arg.expr, context)) {
+                to_desugar.push(ExprDesugar::CallWildcards(expr));
+            }
+
+            if let Some(desugar) = classify_call(&call, expr, context) {
+                to_desugar.push(desugar);
             }
         },
         Expr::If(if_) => {
-            let if_ = if_.clone();
-            desugar_expression(if_.condition, context);
-            desugar_expression(if_.then, context);
+            collect_expressions_to_desugar(if_.condition, context, to_desugar);
+            collect_expressions_to_desugar(if_.then, context, to_desugar);
             if let Some(else_) = if_.else_ {
-                desugar_expression(else_, context);
+                collect_expressions_to_desugar(else_, context, to_desugar);
             }
         },
         Expr::Match(match_) => {
-            let cases = match_.cases.clone();
-            desugar_expression(match_.expression, context);
-            for case in cases {
-                desugar_expression(case.1, context);
+            collect_expressions_to_desugar(match_.expression, context, to_desugar);
+            for case in match_.cases.iter() {
+                collect_expressions_to_desugar(case.1, context, to_desugar);
             }
         },
         Expr::Handle(handle) => {
-            let cases = handle.cases.clone();
-            desugar_expression(handle.expression, context);
-            for case in cases {
-                desugar_expression(case.1, context);
+            collect_expressions_to_desugar(handle.expression, context, to_desugar);
+            for case in handle.cases.iter() {
+                collect_expressions_to_desugar(case.1, context, to_desugar);
             }
         },
         Expr::Constructor(constructor) => {
-            for field in constructor.fields.clone() {
-                desugar_expression(field.1, context);
+            for field in constructor.fields.iter() {
+                collect_expressions_to_desugar(field.1, context, to_desugar);
             }
         },
         Expr::Loop(loop_) => {
-            let loop_ = loop_.clone();
-            desugar_expression(loop_.body, context);
-            desugar_loop(loop_.clone(), expr, context)
-        }
+            collect_expressions_to_desugar(loop_.body, context, to_desugar);
+            to_desugar.push(ExprDesugar::Loop(expr));
+        },
         Expr::Assignment(assignment) => {
             let rhs = assignment.rhs;
-            desugar_expression(assignment.lhs, context);
-            desugar_expression(rhs, context);
+            collect_expressions_to_desugar(assignment.lhs, context, to_desugar);
+            collect_expressions_to_desugar(rhs, context, to_desugar);
         },
         Expr::Extern(_) => (),
     }
@@ -291,10 +297,12 @@ fn desugar_expression(expr: ExprId, context: &mut TopLevelContext) {
 /// `loop (p1 = e1) ... -> body`
 /// gets desugared to
 /// `{ recur p1 ... = body; recur e1 ... }`
-fn desugar_loop(loop_: Loop, expr: ExprId, context: &mut TopLevelContext) {
+fn desugar_loop(expr: ExprId, context: &mut TopLevelContext) {
+    let Expr::Loop(loop_) = context.exprs[expr].clone() else { unreachable!() };
+
     let location = context.expr_locations[expr].clone();
     let body = loop_.body;
-    let parameters = loop_.parameters.clone().into_iter();
+    let parameters = loop_.parameters.into_iter();
 
     // parameters and arg list
     let (parameters, arguments) = parameters
@@ -356,10 +364,8 @@ fn is_wildcard(expr_id: ExprId, context: &TopLevelContext) -> bool {
 }
 
 /// Desugars `foo _ x _` into `fn _1 _2 -> foo _1 x _2`
-fn desugar_call_wildcards(call: &cst::Call, expr: ExprId, context: &mut TopLevelContext) {
-    if !call.arguments.iter().any(|arg| is_wildcard(arg.expr, context)) {
-        return;
-    }
+fn desugar_call_wildcards(expr: ExprId, context: &mut TopLevelContext) {
+    let Expr::Call(call) = context.exprs[expr].clone() else { unreachable!() };
 
     let location = context.expr_locations[expr].clone();
     let mut parameters = Vec::new();
@@ -392,16 +398,27 @@ fn desugar_call_wildcards(call: &cst::Call, expr: ExprId, context: &mut TopLevel
     context.exprs[expr] = Expr::Lambda(Lambda { parameters, return_type: None, effects: None, body: new_call_id });
 }
 
-enum CallDesugar {
+enum ExprDesugar {
+    CallWildcards(ExprId),
+
     /// true = `|>`, false = `<|`
-    Pipe { pipe_right: bool },
+    Pipe {
+        call: ExprId,
+        pipe_right: bool,
+    },
 
     /// true = `and`, false = `or`
-    LogicalOperator { is_or: bool },
+    LogicalOperator {
+        call: ExprId,
+        is_or: bool,
+    },
+
+    Loop(ExprId),
 }
 
+/// Classifies this call based on the called function.
 /// Returns the desugaring to perform on this call, or `None` if there is nothing to do.
-fn classify_call(call: &cst::Call, context: &TopLevelContext) -> Option<CallDesugar> {
+fn classify_call(call: &cst::Call, expr: ExprId, context: &TopLevelContext) -> Option<ExprDesugar> {
     if let Expr::Variable(path_id) = &context.exprs[call.function] {
         let path = &context.paths[*path_id];
         // All desugarings apply to operators with 2 arguments currently
@@ -410,10 +427,10 @@ fn classify_call(call: &cst::Call, context: &TopLevelContext) -> Option<CallDesu
         }
 
         match path.last_ident() {
-            "|>" => Some(CallDesugar::Pipe { pipe_right: true }),
-            "<|" => Some(CallDesugar::Pipe { pipe_right: false }),
-            "or" => Some(CallDesugar::LogicalOperator { is_or: true }),
-            "and" => Some(CallDesugar::LogicalOperator { is_or: false }),
+            "|>" => Some(ExprDesugar::Pipe { call: expr, pipe_right: true }),
+            "<|" => Some(ExprDesugar::Pipe { call: expr, pipe_right: false }),
+            "or" => Some(ExprDesugar::LogicalOperator { call: expr, is_or: true }),
+            "and" => Some(ExprDesugar::LogicalOperator { call: expr, is_or: false }),
             _ => None,
         }
     } else {
@@ -421,12 +438,14 @@ fn classify_call(call: &cst::Call, context: &TopLevelContext) -> Option<CallDesu
     }
 }
 
-impl CallDesugar {
+impl ExprDesugar {
     /// Apply the desugaring, mutating the TopLevelContext with new expressions
-    fn apply(self, call: &cst::Call, expr: ExprId, context: &mut TopLevelContext) {
+    fn apply(self, context: &mut TopLevelContext) {
         match self {
-            Self::Pipe { pipe_right } => desugar_pipeline(call, expr, context, pipe_right),
-            Self::LogicalOperator { is_or } => desugar_logical_operators(call, expr, context, is_or),
+            ExprDesugar::CallWildcards(expr) => desugar_call_wildcards(expr, context),
+            ExprDesugar::Pipe { call, pipe_right } => desugar_pipeline(call, context, pipe_right),
+            ExprDesugar::LogicalOperator { call, is_or } => desugar_logical_operators(call, context, is_or),
+            ExprDesugar::Loop(expr) => desugar_loop(expr, context),
         }
     }
 }
@@ -436,7 +455,9 @@ impl CallDesugar {
 /// Although `|>` and `<|` always slot into the first argument, this can be combined with
 /// explicit currying via `_` to slot into the underscore's position:
 /// `x |> foo a _ b` => `x |> (fn _1 -> foo a _1 b)` => `(fn _1 -> foo a _1 b) x`
-fn desugar_pipeline(call: &cst::Call, expr: ExprId, context: &mut TopLevelContext, is_pipe_right: bool) {
+fn desugar_pipeline(expr: ExprId, context: &mut TopLevelContext, is_pipe_right: bool) {
+    let Expr::Call(call) = &context.exprs[expr] else { unreachable!() };
+
     // TODO: This check bypasses name resolution of these operators. If the user shadows
     // the prelude's definitions of the pipeline operators they'll still get this behavior.
     // `x |> f`, `f <| x`
@@ -457,7 +478,9 @@ fn desugar_pipeline(call: &cst::Call, expr: ExprId, context: &mut TopLevelContex
 /// Desugars:
 /// - `a and b` into `if a then b else false`
 /// - `a or b` into `if a then true else b`
-fn desugar_logical_operators(call: &cst::Call, expr: ExprId, context: &mut TopLevelContext, is_or: bool) {
+fn desugar_logical_operators(expr: ExprId, context: &mut TopLevelContext, is_or: bool) {
+    let Expr::Call(call) = &context.exprs[expr] else { unreachable!() };
+
     let a = call.arguments[0].expr;
     let b = call.arguments[1].expr;
     let location = context.expr_locations[expr].clone();

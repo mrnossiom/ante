@@ -1,12 +1,13 @@
 main () = 3_2_fdsa
 
 // args: -e ast
+// expected exit status: 1
 // expected stdout: main () = (error)
 
 
 
 // expected stderr:
-// examples/parser/invalid_integer_literal_suffix.an:1:11	error: Expected an expression but found `InvalidIntegerSuffx`
+// examples/parser/invalid_integer_literal_suffix.an:1:11	error: Expected an expression but found Invalid suffix after integer literal. Expected an integer type like i32 or a space to separate the two tokens
 // main () = 3_2_fdsa
 // 
 // Found 1 error and 0 warnings

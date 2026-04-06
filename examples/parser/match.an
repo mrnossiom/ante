@@ -17,26 +17,27 @@ main () =
     "done"
 
 // args: -e ast
+// expected exit status: 1
 // expected stdout:
 // main () =
 //     "before"
 //     match test "foo" "bar"
+//     "after"
+//     match "empty"
+//     "done"
 
 // expected stderr:
-// examples/parser/match.an:4:4	error: Expected an unindent but found `|`
+// examples/parser/match.an:4:4	error: Expected an expression but found `|`
 //     | 2 3 -> "foo"
 // 
-// examples/parser/match.an:10:4	error: Expected a top-level item but found `|`
+// examples/parser/match.an:6:4	error: Expected an expression but found `|`
+//     | "bar" -> "bar"
+// 
+// examples/parser/match.an:7:4	error: Expected an expression but found `|`
+//     | "block" ->
+// 
+// examples/parser/match.an:10:4	error: Expected an expression but found `|`
 //     | "last branch" ->
 // 
-// examples/parser/match.an:14:4	error: Expected a top-level item but found `"after"`
-//     "after"
-// 
-// examples/parser/match.an:16:4	error: Expected a top-level item but found `match`
-//     match "empty"
-// 
-// examples/parser/match.an:17:4	error: Expected a top-level item but found `"done"`
-//     "done"
-// 
-// Found 5 errors and 0 warnings
+// Found 4 errors and 0 warnings
 

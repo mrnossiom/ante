@@ -373,7 +373,7 @@ impl Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Token::EndOfInput => write!(f, "end of input"),
-            Token::Error(error) => write!(f, "{:?}", error),
+            Token::Error(error) => write!(f, "{}", error),
             Token::Newline => write!(f, "a newline"),
             Token::Indent => write!(f, "an indent"),
             Token::Unindent => write!(f, "an unindent"),

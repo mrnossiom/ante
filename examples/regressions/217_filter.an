@@ -36,7 +36,7 @@ for filtered print
 // examples/regressions/217_filter.an:1:1	error: This program has no `main` function
 // effect Emit a with
 // 
-// examples/regressions/217_filter.an:2:12	error: Expected an unindent but found `->`
+// examples/regressions/217_filter.an:2:12	error: Expected the end of this block but found `->`
 //     emit: a -> Unit
 // 
 // examples/regressions/217_filter.an:6:8	error: `emit` not found in scope

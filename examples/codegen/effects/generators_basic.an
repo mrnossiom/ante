@@ -20,7 +20,7 @@ for (fn () -> iota 10) print
 // examples/codegen/effects/generators_basic.an:1:1	error: This program has no `main` function
 // effect Emit a with
 // 
-// examples/codegen/effects/generators_basic.an:2:12	error: Expected an unindent but found `->`
+// examples/codegen/effects/generators_basic.an:2:12	error: Expected the end of this block but found `->`
 //     emit: a -> Unit
 // 
 // examples/codegen/effects/generators_basic.an:6:8	error: `emit` not found in scope

@@ -28,7 +28,7 @@ use_state 20_u64 with state 2
 // examples/codegen/effects/state.an:1:1	error: This program has no `main` function
 // effect Use a with
 // 
-// examples/codegen/effects/state.an:2:14	error: Expected an unindent but found `->`
+// examples/codegen/effects/state.an:2:14	error: Expected the end of this block but found `->`
 //     get: Unit -> a
 // 
 // examples/codegen/effects/state.an:6:8	error: `get` not found in scope
@@ -40,7 +40,7 @@ use_state 20_u64 with state 2
 // examples/codegen/effects/state.an:8:12	error: `get` not found in scope
 //     state = get () : I32
 // 
-// examples/codegen/effects/state.an:9:26	error: Expected an unindent but found `${`
+// examples/codegen/effects/state.an:9:26	error: Expected the end of this block but found `${`
 //     print "Ending state = ${state}"
 // 
 // examples/codegen/effects/state.an:12:6	error: Expected `=` to begin the function body but found `(`

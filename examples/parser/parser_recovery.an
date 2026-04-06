@@ -39,6 +39,7 @@ main () =
         true
 
 // args: -e ast
+// expected exit status: 1
 // expected stdout:
 // type IntBinTreeNode =
 //     value: I32
@@ -71,7 +72,7 @@ main () =
 //         true
 
 // expected stderr:
-// examples/parser/parser_recovery.an:20:16	error: Expected an unindent but found `(`
+// examples/parser/parser_recovery.an:20:16	error: Expected the end of this block but found `(`
 //                 (append 
 // 
 // Found 1 error and 0 warnings

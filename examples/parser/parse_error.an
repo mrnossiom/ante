@@ -4,13 +4,26 @@ main () =
     bar a b = if then else
 
 // args: -e ast
-// expected stdout: main () =
-
-
+// expected exit status: 1
+// expected stdout:
+// main () =
+//     bar a b = (error)
 
 // expected stderr:
-// examples/parser/parse_error.an:2:4	error: Expected an unindent but found `if`
+// examples/parser/parse_error.an:2:12	error: Expected a `then` to end this if condition but found `else`
 //     if true else
 // 
-// Found 1 error and 0 warnings
+// examples/parser/parse_error.an:4:17	error: Expected an expression but found `then`
+//     bar a b = if then else
+// 
+// examples/parser/parse_error.an:4:22	error: Expected an expression but found `else`
+//     bar a b = if then else
+// 
+// examples/parser/parse_error.an:17:0	error: Expected an expression but found an unindent
+// 
+// 
+// examples/parser/parse_error.an:17:0	error: Expected the end of this block but found end of input
+// 
+// 
+// Found 5 errors and 0 warnings
 

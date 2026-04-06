@@ -31,7 +31,7 @@ sum_all () |> print
 // examples/codegen/effects/add_effect.an:1:1	error: This program has no `main` function
 // effect Add with
 // 
-// examples/codegen/effects/add_effect.an:2:13	error: Expected an unindent but found `->`
+// examples/codegen/effects/add_effect.an:2:13	error: Expected the end of this block but found `->`
 //     add: U32 -> Unit
 // 
 // examples/codegen/effects/add_effect.an:6:4	error: `add` not found in scope

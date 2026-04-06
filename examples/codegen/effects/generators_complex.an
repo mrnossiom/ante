@@ -53,7 +53,7 @@ iota 10
 // examples/codegen/effects/generators_complex.an:1:1	error: This program has no `main` function
 // effect Emit a with
 // 
-// examples/codegen/effects/generators_complex.an:2:12	error: Expected an unindent but found `->`
+// examples/codegen/effects/generators_complex.an:2:12	error: Expected the end of this block but found `->`
 //     emit: a -> Unit
 // 
 // examples/codegen/effects/generators_complex.an:6:8	error: `emit` not found in scope
@@ -77,7 +77,7 @@ iota 10
 // examples/codegen/effects/generators_complex.an:40:8	error: Expected an expression but found `@`
 //     x = @first x1
 // 
-// examples/codegen/effects/generators_complex.an:42:11	error: Expected an unindent but found `${`
+// examples/codegen/effects/generators_complex.an:42:11	error: Expected the end of this block but found `${`
 //     print "${x}, ${y}"
 // 
 // examples/codegen/effects/generators_complex.an:44:5	error: Expected `=` to begin the function body but found `10`

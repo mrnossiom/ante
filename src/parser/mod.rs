@@ -90,6 +90,10 @@ impl<'tokens> Parser<'tokens> {
         &self.tokens[self.token_index + 1].0
     }
 
+    fn try_peek_next_token(&self) -> Option<&'tokens Token> {
+        self.tokens.get(self.token_index + 1).map(|(token, _span)| token)
+    }
+
     fn current_token_span(&self) -> Span {
         self.tokens[self.token_index].1
     }
@@ -275,7 +279,7 @@ impl<'tokens> Parser<'tokens> {
     /// Skip all tokens up to the next newline (or unindent) token.
     /// If an Indent token is encountered we'll try to match indents and unindents
     /// so that any newlines in between are skipped.
-    fn recover_to_next_newline(&mut self) {
+    fn recover_to_next_newline_or_unindent(&mut self) {
         let mut indents = 0;
 
         loop {
@@ -302,7 +306,9 @@ impl<'tokens> Parser<'tokens> {
             self.advance();
         }
 
-        while !self.at_end_of_input() && *self.current_token() != Token::Newline {
+        while !self.at_end_of_input()
+            && *self.current_token() != Token::Newline
+        {
             self.advance();
         }
     }
@@ -337,7 +343,7 @@ impl<'tokens> Parser<'tokens> {
             Ok(item) => Some(item),
             Err(error) => {
                 self.diagnostics.push(error);
-                self.recover_to_next_newline();
+                self.recover_to_next_newline_or_unindent();
                 None
             },
         }
@@ -414,7 +420,7 @@ impl<'tokens> Parser<'tokens> {
                     assert_eq!(path.components.len(), 1);
                     let location = path.components[0].1.clone();
                     self.diagnostics.push(Diagnostic::ExpectedPathForImport { location });
-                    self.recover_to_next_newline();
+                    self.recover_to_next_newline_or_unindent();
                     continue;
                 }
 
@@ -768,7 +774,7 @@ impl<'tokens> Parser<'tokens> {
         };
 
         if expect_unindent {
-            if let Err(error) = self.expect(Token::Unindent, "an unindent") {
+            if let Err(error) = self.expect(Token::Unindent, "the end of this block") {
                 // If we stopped short of the unindent, skip everything until the unindent
                 self.diagnostics.push(error);
                 if self.recover_to(Token::Unindent, &[]) {
@@ -1518,6 +1524,19 @@ impl<'tokens> Parser<'tokens> {
                 Ok(self.push_expr(Expr::Literal(Literal::Unit), location))
             },
             Token::Fn => self.parse_lambda(),
+            Token::Error(_) => {
+                // Report the lexer error and return Error to treat this as an expression value
+                let location = self.current_token_location();
+                let actual = self.current_token().clone();
+                let error = Diagnostic::ParserExpected {
+                    message: "an expression".to_string(),
+                    actual,
+                    location: location.clone(),
+                };
+                self.diagnostics.push(error);
+                self.advance();
+                Ok(self.push_expr(Expr::Error, location))
+            },
             _ => self.expected("an expression"),
         }
     }
@@ -1673,7 +1692,7 @@ impl<'tokens> Parser<'tokens> {
 
             // If we allow an optional newline without an else, a lone `if a then b` could
             // eat the newline meant to separate two statements.
-            if *this.peek_next_token() == Token::Else {
+            if this.try_peek_next_token() == Some(&Token::Else) {
                 this.accept(Token::Newline);
             }
 
@@ -1785,7 +1804,18 @@ impl<'tokens> Parser<'tokens> {
     fn parse_block(&mut self) -> Result<ExprId> {
         let (expr, location) = self.with_location(|this| {
             this.parse_indented(|this| {
-                let statements = this.delimited(Self::parse_sequence_item, Token::Newline, true);
+                let mut statements = Vec::new();
+                loop {
+                    if *this.current_token() == Token::Unindent || this.at_end_of_input() {
+                        break;
+                    }
+                    if let Some(item) = this.try_parse_or_recover_to_newline(Self::parse_sequence_item) {
+                        statements.push(item);
+                    }
+                    if !this.accept(Token::Newline) {
+                        break;
+                    }
+                }
                 Ok(Expr::Sequence(statements))
             })
         })?;

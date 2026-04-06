@@ -10,7 +10,7 @@ main () =
 // args: --delete-binary
 // expected exit status: 1
 // expected stderr:
-// examples/codegen/bitwise.an:8:18	error: Expected an unindent but found `)`
+// examples/codegen/bitwise.an:8:18	error: Expected the end of this block but found `)`
 //     println (not x)
 // 
 // Found 1 error and 0 warnings

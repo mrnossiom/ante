@@ -5,17 +5,15 @@ main () =
         recur a b c d
 
 // args: -e ast
+// expected exit status: 1
 // expected stdout:
 // main () =
 //     a = 0
 //     b = 1
 
 // expected stderr:
-// examples/parser/loop.an:4:4	error: Expected an unindent but found `loop`
+// examples/parser/loop.an:4:11	error: Expected `->` to separate the loop parameters from its body but found `(`
 //     loop a (b: I32) (c: I32 = 2) (d = 3) ->
 // 
-// examples/parser/loop.an:22:0	error: Expected a top-level item but found an unindent
-// 
-// 
-// Found 2 errors and 0 warnings
+// Found 1 error and 0 warnings
 

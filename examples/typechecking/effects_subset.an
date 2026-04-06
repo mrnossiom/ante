@@ -64,7 +64,7 @@ main () =
 // examples/typechecking/effects_subset.an:18:4	error: Effects and handle expressions are currently unimplemented
 //     handle stream ()
 // 
-// examples/typechecking/effects_subset.an:25:8	error: Expected an unindent but found `with`
+// examples/typechecking/effects_subset.an:25:8	error: Expected the end of this block but found `with`
 //         with filter (fn x -> x % 2 == 0)
 // 
 // Found 4 errors and 0 warnings

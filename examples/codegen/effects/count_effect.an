@@ -19,7 +19,7 @@ handle_count foo |> print
 // examples/codegen/effects/count_effect.an:1:1	error: This program has no `main` function
 // effect Count with
 // 
-// examples/codegen/effects/count_effect.an:2:16	error: Expected an unindent but found `->`
+// examples/codegen/effects/count_effect.an:2:16	error: Expected the end of this block but found `->`
 //     count: Unit -> Unit
 // 
 // examples/codegen/effects/count_effect.an:5:4	error: `count` not found in scope

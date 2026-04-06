@@ -18,7 +18,7 @@ one ()
 // examples/regressions/159_two_trait_functions.an:3:9	error: Expected 0 arguments but found 1
 //     one: Unit -> Unit
 // 
-// examples/regressions/159_two_trait_functions.an:3:14	error: Expected an unindent but found `->`
+// examples/regressions/159_two_trait_functions.an:3:14	error: Expected the end of this block but found `->`
 //     one: Unit -> Unit
 // 
 // examples/regressions/159_two_trait_functions.an:6:5	error: Expected an identifier but found `MultiTrait`

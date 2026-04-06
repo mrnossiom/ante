@@ -38,12 +38,13 @@ main () =
         bar = "bar"
 
 // args: -e ast
+// expected exit status: 1
 // expected stdout:
 // main () =
 //     T
 
 // expected stderr:
-// examples/parser/named_constructor.an:3:6	error: Expected an unindent but found `with`
+// examples/parser/named_constructor.an:3:6	error: Expected the end of this block but found `with`
 //     T with b = "one", a = 1
 // 
 // examples/parser/named_constructor.an:10:6	error: Expected `=` to begin the function body but found `with`

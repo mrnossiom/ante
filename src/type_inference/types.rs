@@ -501,7 +501,7 @@ impl Type {
             Some(origin @ Origin::TopLevelDefinition(type_name)) => {
                 let (item, ctx) = GetItem(type_name.top_level_item).get(db);
                 let cst::TopLevelItemKind::TypeDefinition(definition) = &item.kind else {
-                    let name = item.kind.name().to_string(&ctx);
+                    let name = item.kind.name().to_string(ctx.as_ref());
                     db.accumulate(Diagnostic::NotAType { name, location: location.clone() });
                     return (Type::ERROR, Kind::Type);
                 };
@@ -662,7 +662,7 @@ where
                 let is_pair = if let Type::UserDefined(Origin::TopLevelDefinition(name)) = constructor {
                     let (item, context) = GetItem(name.top_level_item).get(self.db);
                     if let cst::ItemName::Single(name) = item.kind.name() {
-                        context.names[name].as_str() == ","
+                        context[name].as_str() == ","
                     } else {
                         unreachable!()
                     }
@@ -724,7 +724,7 @@ where
             Origin::TopLevelDefinition(id) => {
                 let (item, context) = GetItem(id.top_level_item).get(self.db);
                 if let cst::ItemName::Single(name) = item.kind.name() {
-                    write!(f, "{}", context.names[name])
+                    write!(f, "{}", context[name])
                 } else {
                     unreachable!()
                 }

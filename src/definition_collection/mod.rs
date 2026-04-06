@@ -200,11 +200,11 @@ pub fn exported_types_impl(context: &ExportedTypes, db: &DbHandle) -> TypeDefini
         let (item, context) = GetItem(item.id).get(db);
 
         if let TopLevelItemKind::TypeDefinition(definition) = &item.kind {
-            let name = &context.names[definition.name];
+            let name = &context[definition.name];
 
             if let Some((existing, _)) = definitions.get(name) {
                 let first_location = existing.location(db);
-                let second_location = context.name_locations[definition.name].clone();
+                let second_location = context.name_location(definition.name).clone();
                 let name = name.clone();
                 db.accumulate(Diagnostic::NameAlreadyInScope { name, first_location, second_location });
             } else {

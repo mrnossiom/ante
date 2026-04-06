@@ -58,6 +58,12 @@ impl TopLevelContext {
         self.pattern_locations.push_existing(id, location);
         id
     }
+
+    pub fn push_name(&mut self, name: Name, location: Location) -> NameId {
+        let id = self.names.push(name);
+        self.name_locations.push_existing(id, location);
+        id
+    }
 }
 
 impl IdStore for TopLevelContext {

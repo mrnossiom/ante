@@ -43,7 +43,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         let rhs = definition.rhs;
         let rhs_expr = match self.current_extended_context().extended_expr(rhs) {
             Some(e) => Cow::Owned(e.clone()),
-            None => Cow::Borrowed(&self.current_context().exprs[rhs]),
+            None => Cow::Borrowed(&self.current_context()[rhs]),
         };
 
         match rhs_expr.as_ref() {
@@ -66,7 +66,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
 
         let expr = match self.current_extended_context().extended_expr(id) {
             Some(expr) => Cow::Owned(expr.clone()),
-            None => Cow::Borrowed(&self.current_context().exprs[id]),
+            None => Cow::Borrowed(&self.current_context()[id]),
         };
 
         match expr.as_ref() {
@@ -147,7 +147,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
 
         let pattern = match self.current_extended_context().extended_pattern(id) {
             Some(pattern) => Cow::Owned(pattern.clone()),
-            None => Cow::Borrowed(&self.current_context().patterns[id]),
+            None => Cow::Borrowed(&self.current_context()[id]),
         };
 
         match pattern.as_ref() {
@@ -251,7 +251,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     }
 
     fn resolve_type_resolution(&mut self, path: PathId, expected: &Type) -> Type {
-        let path_value = &self.current_context().paths[path];
+        let path_value = &self.current_context()[path];
         assert_eq!(path_value.components.len(), 1, "Only single-component paths should have Origin::TypeResolution");
         let name = path_value.last_ident();
 
@@ -266,8 +266,8 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
 
     /// Issue a NameNotInScope error and return Type::Error
     fn issue_name_not_in_scope_error(&self, path: PathId) -> Type {
-        let name = Arc::new(self.current_context().paths[path].last_ident().to_owned());
-        let location = self.current_context().path_locations[path].clone();
+        let name = Arc::new(self.current_context()[path].last_ident().to_owned());
+        let location = self.current_context().path_location(path).clone();
         self.compiler.accumulate(Diagnostic::NameNotInScope { name, location });
         Type::ERROR
     }
@@ -416,7 +416,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             self.compiler.accumulate(Diagnostic::FunctionArgCountMismatch {
                 actual: actual_count,
                 expected: parameters.len(),
-                location: self.current_context().expr_locations[expr].clone(),
+                location: self.current_context().expr_location(expr).clone(),
             });
         }
     }
@@ -435,11 +435,11 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 self.unify(field, expected, TypeErrorKind::General, expr);
             }
         } else if matches!(self.follow_type(&struct_type), Type::Variable(_)) {
-            let location = self.current_context().expr_locations[expr].clone();
+            let location = self.current_context().expr_location(expr).clone();
             self.compiler.accumulate(Diagnostic::TypeMustBeKnownMemberAccess { location });
         } else {
             let typ = self.type_to_string(&struct_type);
-            let location = self.current_context().expr_locations[expr].clone();
+            let location = self.current_context().expr_location(expr).clone();
             let name = Arc::new(member_access.member.clone());
             self.compiler.accumulate(Diagnostic::NoSuchFieldForType { typ, location, name });
         }
@@ -490,7 +490,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
 
         // Now compile the match into a decision tree. The `match expr | ...` expression will be
         // replaced with `<fresh> = expr; <decision tree>`
-        let location = self.current_context().expr_locations[match_.expression].clone();
+        let location = self.current_context().expr_location(match_.expression).clone();
         let (match_var, match_var_name) = self.fresh_variable("match_var", expr_type.clone(), location.clone());
 
         // `<match_var> = <expression being matched>`
@@ -553,7 +553,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         let field_types = self.get_field_types(&typ, None);
 
         for (name, expr) in &constructor.fields {
-            let name_string = &self.current_context().names[*name];
+            let name_string = &self.current_context()[*name];
             let (expected_field_type, field_index) = field_types.get(name_string).cloned().unwrap_or((Type::ERROR, 0));
 
             self.check_expr(*expr, &expected_field_type);
@@ -566,7 +566,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     }
 
     fn check_handle(&mut self, _handle: &cst::Handle, _expected: &Type, expr: ExprId) {
-        let location = self.current_context().expr_locations[expr].clone();
+        let location = self.current_context().expr_location(expr).clone();
         UnimplementedItem::Effects.issue(self.compiler, location);
     }
 
@@ -608,7 +608,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     fn find_lvalue_root_variable(&self, expr: ExprId) -> Option<NameId> {
         let e = match self.current_extended_context().extended_expr(expr) {
             Some(e) => Cow::Owned(e.clone()),
-            None => Cow::Borrowed(&self.current_context().exprs[expr]),
+            None => Cow::Borrowed(&self.current_context()[expr]),
         };
         match e.as_ref() {
             Expr::Variable(path) => {
@@ -637,7 +637,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     }
 
     pub(super) fn check_comptime(&self, _comptime: &cst::Comptime) {
-        let location = self.current_context().location.clone();
+        let location = self.current_context().location().clone();
         UnimplementedItem::Comptime.issue(self.compiler, location);
     }
 }

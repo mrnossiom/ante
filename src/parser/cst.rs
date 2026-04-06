@@ -5,10 +5,9 @@ use serde::{Deserialize, Serialize};
 use crate::{
     diagnostics::{ErrorDefault, Location},
     lexer::token::{F64, FloatKind, IntegerKind, Token},
-    parser::context::TopLevelContext,
 };
 
-use super::ids::{ExprId, NameId, PathId, PatternId, TopLevelId};
+use super::ids::{ExprId, IdStore, NameId, NameStore, PathId, PatternId, TopLevelId};
 
 /// The Concrete Syntax Tree (CST) is the output of parsing a source file.
 /// This is expected to mirror the source file without removing too much information.
@@ -63,9 +62,9 @@ pub enum ItemName {
 
 impl ItemName {
     /// Give an approximate name for this item for debugging.
-    pub fn to_string(&self, context: &TopLevelContext) -> String {
+    pub fn to_string(&self, context: &(impl IdStore + NameStore)) -> String {
         match self {
-            ItemName::Single(name) => context.names[*name].to_string(),
+            ItemName::Single(name) => context.get_name(*name).to_string(),
             ItemName::Pattern(pattern) => pattern.name(context),
             ItemName::None => "no-name".to_string(),
         }
@@ -73,15 +72,15 @@ impl ItemName {
 }
 
 impl PatternId {
-    pub fn name(self, context: &TopLevelContext) -> String {
-        match &context.patterns[self] {
+    pub fn name(self, context: &(impl IdStore + NameStore)) -> String {
+        match context.get_pattern(self) {
             Pattern::Error => "#error".to_string(),
-            Pattern::Variable(name) => context.names[*name].to_string(),
+            Pattern::Variable(name) => context.get_name(*name).to_string(),
             Pattern::Literal(_) => "#literal".to_string(),
             Pattern::Constructor(..) => "#constructor".to_string(),
             Pattern::TypeAnnotation(pattern, _) => pattern.name(context),
             Pattern::MethodName { type_name, item_name } => {
-                format!("{}.{}", context.names[*type_name], context.names[*item_name])
+                format!("{}.{}", context.get_name(*type_name), context.get_name(*item_name))
             },
         }
     }

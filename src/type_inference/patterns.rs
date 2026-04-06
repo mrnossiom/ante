@@ -162,7 +162,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         &mut self, variable_to_match: PathId, rules: &[(PatternId, ExprId)], pattern_type: Type, location: Location,
     ) -> Option<DecisionTree> {
         let rows = opt_mapvec(rules, |(pattern, branch)| {
-            let pattern_location = self.current_context().pattern_locations[*pattern].clone();
+            let pattern_location = self.current_context().pattern_location(*pattern).clone();
             let pattern = self.convert_pattern(*pattern)?;
             let columns = vec![Column::new(variable_to_match, pattern)];
             let guard = None;
@@ -176,7 +176,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     ///
     /// If the given pattern is unable to be converted, an error is issued and None is returned.
     fn convert_pattern(&mut self, pattern: PatternId) -> Option<Pattern> {
-        Some(match &self.current_context().patterns[pattern] {
+        Some(match &self.current_context()[pattern] {
             cst::Pattern::Error => Pattern::Error,
             cst::Pattern::Variable(name_id) => Pattern::Variable(*name_id),
             cst::Pattern::Literal(Literal::Unit) => Pattern::Constructor(Constructor::Unit, Vec::new()),
@@ -188,7 +188,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 Pattern::Constructor(Constructor::Int(*value), Vec::new())
             },
             cst::Pattern::Literal(_) => {
-                let location = self.current_context().pattern_locations[pattern].clone();
+                let location = self.current_context().pattern_location(pattern).clone();
                 self.compiler.accumulate(Diagnostic::InvalidPattern { location });
                 return None;
             },
@@ -199,7 +199,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             },
             cst::Pattern::TypeAnnotation(pattern, _) => return self.convert_pattern(*pattern),
             cst::Pattern::MethodName { .. } => {
-                let location = self.current_context().pattern_locations[pattern].clone();
+                let location = self.current_context().pattern_location(pattern).clone();
                 self.compiler.accumulate(Diagnostic::InvalidPattern { location });
                 return None;
             },
@@ -226,7 +226,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                     origin = self.current_extended_context().path_origin(path)?;
                 },
                 Origin::Builtin(_) => {
-                    let location = self.current_context().path_locations[path].clone();
+                    let location = self.current_context().path_location(path).clone();
                     self.compiler.accumulate(Diagnostic::InvalidPattern { location });
                     return None;
                 },
@@ -259,7 +259,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 result?
             },
             cst::TypeDefinitionBody::Alias(_) => {
-                let location = self.item_contexts[&item.id].1.name_locations[name].clone();
+                let location = self.item_contexts[&item.id].1.name_location(name).clone();
                 UnimplementedItem::TypeAlias.issue(self.compiler, location);
                 return None;
             },
@@ -282,7 +282,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
 
         let type_name = item_context.names[type_name].clone();
 
-        let location = self.current_context().path_locations[path].clone();
+        let location = self.current_context().path_location(path).clone();
         self.compiler.accumulate(Diagnostic::ConstructorExpectedFoundType { type_name, constructor_names, location });
     }
 

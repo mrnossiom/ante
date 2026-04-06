@@ -17,7 +17,7 @@ use crate::{
     },
     name_resolution::{builtin::Builtin, namespace::CrateId},
     parser::{
-        context::TopLevelContext,
+        desugar_context::DesugarContext,
         cst::{
             Comptime, Constructor, Declaration, Definition, EffectDefinition, EffectType, Expr, Generics, ItemName,
             Path, Pattern, TopLevelItemKind, TraitDefinition, TraitImpl, Type, TypeDefinition, TypeDefinitionBody,
@@ -51,7 +51,7 @@ struct Resolver<'local, 'inner> {
     name_links: BTreeMap<NameId, Origin>,
     names_in_global_scope: Arc<VisibleDefinitionsResult>,
     names_in_local_scope: Vec<BTreeMap<Arc<String>, NameId>>,
-    context: &'local TopLevelContext,
+    context: &'local DesugarContext,
     compiler: &'local DbHandle<'inner>,
     referenced_items: BTreeSet<TopLevelId>,
     top_level_names: Vec<NameId>,
@@ -94,7 +94,7 @@ impl Origin {
                         TypeDefinitionBody::Enum(_) => FieldsResult::NotAStruct,
                         TypeDefinitionBody::Alias(_) => todo!("get_fields_of_type: handle type aliases"),
                         TypeDefinitionBody::Struct(fields) => {
-                            let names = fields.iter().map(|(name, _)| item_context.names[*name].clone());
+                            let names = fields.iter().map(|(name, _)| item_context[*name].clone());
                             FieldsResult::Fields(names.collect())
                         },
                     },
@@ -115,7 +115,7 @@ pub fn resolve_impl(context: &Resolve, compiler: &DbHandle) -> ResolutionResult 
     // resolving just one statement in it. This does mean that `CompileFile` will later need to
     // manually query `VisibleDefinition` to pick these errors back up.
     let visible = VisibleDefinitions(context.0.source_file).get(compiler);
-    let mut resolver = Resolver::new(compiler, context, visible, &statement_ctx);
+    let mut resolver = Resolver::new(compiler, context, visible, statement_ctx.as_ref());
 
     match statement.kind.name() {
         ItemName::Single(name_id) => resolver.link_existing_global(name_id),
@@ -139,7 +139,7 @@ pub fn resolve_impl(context: &Resolve, compiler: &DbHandle) -> ResolutionResult 
 impl<'local, 'inner> Resolver<'local, 'inner> {
     fn new(
         compiler: &'local DbHandle<'inner>, resolve: &Resolve, visible_definitions: Arc<VisibleDefinitionsResult>,
-        context: &'local TopLevelContext,
+        context: &'local DesugarContext,
     ) -> Self {
         Self {
             compiler,
@@ -180,7 +180,7 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
     /// Declares a name in local scope.
     fn declare_name(&mut self, id: NameId) {
         let scope = self.names_in_local_scope.last_mut().unwrap();
-        let name = self.context.names[id].clone();
+        let name = self.context[id].clone();
         scope.insert(name, id);
         self.name_links.insert(id, Origin::Local(id));
     }
@@ -360,11 +360,11 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
 
     /// Links a path to its definition or errors if it does not exist
     fn link(&mut self, path: PathId, allow_type_based_resolution: bool, is_type: bool) {
-        match self.lookup(&self.context.paths[path], allow_type_based_resolution) {
+        match self.lookup(&self.context[path], allow_type_based_resolution) {
             Ok(origin) => {
                 if !self.is_valid_for_position(origin, is_type) {
-                    let last = self.context.paths[path].components.last().unwrap();
-                    let location = self.context.path_locations[path].clone();
+                    let last = self.context[path].components.last().unwrap();
+                    let location = self.context.path_location(path).clone();
                     if is_type {
                         let name = Arc::new(last.0.clone());
                         self.emit_diagnostic(Diagnostic::TypeExpected { name, location });
@@ -381,7 +381,7 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
 
     /// Link a global whose name is expected to be in `self.names_in_global_scope`
     fn link_existing_global(&mut self, name_id: NameId) {
-        let name = &self.context.names[name_id];
+        let name = &self.context[name_id];
         // panic safety: `name` should already be declared in global scope
         let id = self.names_in_global_scope.definitions[name];
         let origin = Origin::TopLevelDefinition(id);
@@ -391,8 +391,8 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
 
     /// Link a method whose name is expected to be in `self.names_in_global_scope`
     fn link_existing_union_variant(&mut self, type_name: NameId, item_name: NameId) {
-        let type_name_string = &self.context.names[type_name];
-        let item_name_string = &self.context.names[item_name];
+        let type_name_string = &self.context[type_name];
+        let item_name_string = &self.context[item_name];
 
         let Some(&type_id) = self.names_in_global_scope.definitions.get(type_name_string) else {
             // Definition collection / parse error
@@ -412,7 +412,7 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
     }
 
     fn link_existing_pattern(&mut self, pattern: PatternId) {
-        match &self.context.patterns[pattern] {
+        match &self.context[pattern] {
             Pattern::Error => (),
             // The only literal pattern allowed in a global's name is `()` which has nothing to link
             Pattern::Literal(_) => (),
@@ -468,7 +468,7 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
     }
 
     fn resolve_expr(&mut self, expr: ExprId) {
-        match &self.context.exprs[expr] {
+        match &self.context[expr] {
             Expr::Literal(_literal) => (),
             Expr::Variable(path) => self.link(*path, true, false),
             Expr::Call(call) => {
@@ -545,7 +545,7 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
     }
 
     fn resolve_definition(&mut self, definition: &Definition) {
-        let is_lambda = matches!(&self.context.exprs[definition.rhs], Expr::Lambda(_));
+        let is_lambda = matches!(&self.context[definition.rhs], Expr::Lambda(_));
         if is_lambda {
             // Lambda definitions can call themselves recursively, so the name must be in scope
             // before resolving the body.
@@ -569,8 +569,8 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
                 let mut already_defined = FxHashMap::default();
 
                 for (name_id, _) in &constructor.fields {
-                    let name = self.context.names[*name_id].clone();
-                    let location = self.context.name_locations[*name_id].clone();
+                    let name = self.context[*name_id].clone();
+                    let location = self.context.name_location(*name_id).clone();
 
                     if let Some(first_location) = already_defined.get(&name).cloned() {
                         let second_location = location;
@@ -585,7 +585,7 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
                     already_defined.insert(name.clone(), location.clone());
 
                     if !names.contains(&name) {
-                        let typ = constructor.typ.display(self.context).to_string();
+                        let typ = constructor.typ.display(self.context.as_top_level_context()).to_string();
                         self.emit_diagnostic(Diagnostic::NoSuchFieldForType { name, typ, location });
                     } else {
                         given_fields.insert(name);
@@ -594,7 +594,7 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
 
                 let missing_fields = names.difference(&given_fields).map(ToString::to_string).collect::<Vec<_>>();
                 if !missing_fields.is_empty() {
-                    let location = self.context.expr_locations[id].clone();
+                    let location = self.context.expr_location(id).clone();
                     self.emit_diagnostic(Diagnostic::ConstructorMissingFields { missing_fields, location });
                 }
             },
@@ -602,8 +602,8 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
             // of this type, avoid issuing another.
             FieldsResult::PriorError => (),
             FieldsResult::NotAStruct => {
-                let typ = constructor.typ.display(self.context).to_string();
-                let location = self.context.expr_locations[id].clone();
+                let typ = constructor.typ.display(self.context.as_top_level_context()).to_string();
+                let location = self.context.expr_location(id).clone();
                 self.emit_diagnostic(Diagnostic::ConstructorNotAStruct { typ, location });
             },
         }
@@ -635,7 +635,7 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
     fn declare_names_in_pattern(
         &mut self, pattern: PatternId, declare_type_vars: bool, allow_type_based_resolution: bool,
     ) {
-        match &self.context.patterns[pattern] {
+        match &self.context[pattern] {
             Pattern::Variable(name) => {
                 self.declare_name(*name);
             },
@@ -722,15 +722,15 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
     /// If `auto_declare` is true, automatically declare the name if not found instead of issuing
     /// an error.
     fn resolve_variable(&mut self, name_id: NameId, auto_declare: bool) {
-        let name = &self.context.names[name_id];
+        let name = &self.context[name_id];
 
         if let Some(origin) = self.lookup_local_name(name) {
             self.name_links.insert(name_id, origin);
         } else if auto_declare {
             self.declare_name(name_id);
         } else {
-            let location = self.context.name_locations[name_id].clone();
-            let name = self.context.names[name_id].clone();
+            let location = self.context.name_location(name_id).clone();
+            let name = self.context[name_id].clone();
             //panic!("`{name}` is unresolved");
             self.emit_diagnostic(Diagnostic::NameNotInScope { name, location });
         }
@@ -790,7 +790,7 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
         }
 
         for (name, rhs) in &trait_impl.body {
-            let is_let_rec = matches!(&self.context.exprs[*rhs], Expr::Lambda(_));
+            let is_let_rec = matches!(&self.context[*rhs], Expr::Lambda(_));
             if is_let_rec {
                 self.declare_name(*name);
             }

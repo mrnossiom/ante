@@ -110,7 +110,7 @@ impl Locateable for ExprId {
 
 impl Locateable for PatternId {
     fn locate(&self, context: &TypeChecker) -> Location {
-        context.current_context().pattern_locations[*self].clone()
+        context.current_context().pattern_location(*self).clone()
     }
 }
 
@@ -122,13 +122,13 @@ impl Locateable for PathId {
 
 impl Locateable for NameId {
     fn locate(&self, context: &TypeChecker) -> Location {
-        context.current_context().name_locations[*self].clone()
+        context.current_context().name_location(*self).clone()
     }
 }
 
 impl Locateable for TopLevelId {
     fn locate(&self, context: &TypeChecker) -> Location {
         let (_, context, _) = &context.item_contexts[self];
-        context.location.clone()
+        context.location().clone()
     }
 }

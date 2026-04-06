@@ -15,7 +15,7 @@ use crate::{
     diagnostics::Location,
     name_resolution::{Origin, ResolutionResult},
     parser::{
-        context::TopLevelContext,
+        desugar_context::DesugarContext,
         cst::{Expr, Name, Path, Pattern},
         ids::{ExprId, IdStore, NameId, NameStore, PathId, PatternId},
     },
@@ -26,7 +26,7 @@ use crate::{
 /// from the [TypeChecker] after performing type-checking and match compilation.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExtendedTopLevelContext {
-    original: Arc<TopLevelContext>,
+    original: Arc<DesugarContext>,
 
     /// The TypeChecker may insert new variables into the code, most commonly
     /// during match compilation where each step is broken into a new variable.
@@ -105,7 +105,7 @@ impl<'local, 'innter> TypeChecker<'local, 'innter> {
 }
 
 impl ExtendedTopLevelContext {
-    pub(crate) fn new(original: Arc<TopLevelContext>) -> Self {
+    pub(crate) fn new(original: Arc<DesugarContext>) -> Self {
         Self {
             original,
             name_origins: Default::default(),
@@ -146,7 +146,7 @@ impl ExtendedTopLevelContext {
     /// Push a new expression to the context
     pub fn push_expr(&mut self, expr: Expr, location: Location) -> ExprId {
         // We assume all expressions are dense and thus no id is skipped
-        let new_id = self.original.exprs.len() + self.more_exprs.len();
+        let new_id = self.original.exprs_len() + self.more_exprs.len();
         let new_id = ExprId::new(new_id as u32);
 
         self.more_exprs.insert(new_id, expr);
@@ -156,7 +156,7 @@ impl ExtendedTopLevelContext {
 
     /// Push a new path to the context
     pub fn push_path(&mut self, path: Path, location: Location) -> PathId {
-        let new_id = self.original.paths.len() + self.more_paths.len();
+        let new_id = self.original.paths_len() + self.more_paths.len();
         let new_id = PathId::new(new_id as u32);
 
         self.more_paths.insert(new_id, path);
@@ -166,7 +166,7 @@ impl ExtendedTopLevelContext {
 
     /// Push a new path to the context with the given id
     pub fn push_path_with_id(&mut self, location: Location, make_path: impl FnOnce(PathId) -> Path) -> PathId {
-        let new_id = self.original.paths.len() + self.more_paths.len();
+        let new_id = self.original.paths_len() + self.more_paths.len();
         let new_id = PathId::new(new_id as u32);
 
         self.more_paths.insert(new_id, make_path(new_id));
@@ -176,7 +176,7 @@ impl ExtendedTopLevelContext {
 
     pub fn push_pattern(&mut self, pattern: Pattern, location: Location) -> PatternId {
         // We assume all nameessions are dense and thus no id is skipped
-        let new_id = self.original.patterns.len() + self.more_patterns.len();
+        let new_id = self.original.patterns_len() + self.more_patterns.len();
         let new_id = PatternId::new(new_id as u32);
 
         self.more_patterns.insert(new_id, pattern);
@@ -186,7 +186,7 @@ impl ExtendedTopLevelContext {
 
     /// Push a new name to the context
     pub fn push_name(&mut self, name: Name, location: Location) -> NameId {
-        let new_id = self.original.names.len() + self.more_names.len();
+        let new_id = self.original.names_len() + self.more_names.len();
         let new_id = NameId::new(new_id as u32);
 
         self.more_names.insert(new_id, name);
@@ -196,17 +196,17 @@ impl ExtendedTopLevelContext {
 
     /// Retrieve the location of the corresponding [Path] of the given [PathId]
     pub fn path_location(&self, path: PathId) -> Location {
-        match self.original.path_locations.get(path) {
+        match self.more_path_locations.get(&path) {
             Some(location) => location.clone(),
-            None => self.more_path_locations[&path].clone(),
+            None => self.original.path_location(path).clone(),
         }
     }
 
     /// Retrieve the location of the corresponding [Expr] of the given [ExprId]
     pub(crate) fn expr_location(&self, expr: ExprId) -> Location {
-        match self.original.expr_locations.get(expr) {
+        match self.more_expr_locations.get(&expr) {
             Some(location) => location.clone(),
-            None => self.more_expr_locations[&expr].clone(),
+            None => self.original.expr_location(expr).clone(),
         }
     }
 
@@ -301,7 +301,7 @@ impl Index<ExprId> for ExtendedTopLevelContext {
     fn index(&self, index: ExprId) -> &Self::Output {
         match self.more_exprs.get(&index) {
             Some(expr) => expr,
-            None => &self.original.exprs[index],
+            None => &self.original[index],
         }
     }
 }
@@ -312,7 +312,7 @@ impl Index<PathId> for ExtendedTopLevelContext {
     fn index(&self, index: PathId) -> &Self::Output {
         match self.more_paths.get(&index) {
             Some(path) => path,
-            None => &self.original.paths[index],
+            None => &self.original[index],
         }
     }
 }
@@ -323,7 +323,7 @@ impl Index<NameId> for ExtendedTopLevelContext {
     fn index(&self, index: NameId) -> &Self::Output {
         match self.more_names.get(&index) {
             Some(name) => name,
-            None => &self.original.names[index],
+            None => &self.original[index],
         }
     }
 }
@@ -334,7 +334,7 @@ impl Index<PatternId> for ExtendedTopLevelContext {
     fn index(&self, index: PatternId) -> &Self::Output {
         match self.more_patterns.get(&index) {
             Some(pattern) => pattern,
-            None => &self.original.patterns[index],
+            None => &self.original[index],
         }
     }
 }

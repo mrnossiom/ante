@@ -12,7 +12,7 @@ use crate::{
     lexer::token::IntegerKind,
     name_resolution::{Origin, ResolutionResult, namespace::SourceFileId},
     parser::{
-        context::TopLevelContext,
+        desugar_context::DesugarContext,
         cst::{self, ReferenceKind, TopLevelItem, TopLevelItemKind},
         ids::{ExprId, NameId, PathId, PatternId, TopLevelId, TopLevelName},
     },
@@ -175,7 +175,7 @@ struct TypeChecker<'local, 'inner> {
 }
 
 /// Map from each TopLevelId to a tuple of (the item, parse context, resolution context)
-type ItemContexts = FxHashMap<TopLevelId, (Arc<TopLevelItem>, Arc<TopLevelContext>, ResolutionResult)>;
+type ItemContexts = FxHashMap<TopLevelId, (Arc<TopLevelItem>, Arc<DesugarContext>, ResolutionResult)>;
 
 impl<'local, 'inner> TypeChecker<'local, 'inner> {
     fn new(item_contexts: &'local ItemContexts, compiler: &'local DbHandle<'inner>) -> Self {
@@ -210,7 +210,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 let typ = if let TopLevelItemKind::Definition(definition) = &item.kind {
                     get_type::try_get_partial_type(
                         definition,
-                        context,
+                        context.as_ref(),
                         resolution,
                         compiler,
                         &mut this.next_type_variable_id,
@@ -245,9 +245,9 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     /// This will not contain any new IDs added by this type checking pass - for that use
     /// [Self::current_extended_context_mut]. This method is still useful since the returned
     /// context refers to a separate lifetime, so self may still be used mutably.
-    fn current_context(&self) -> &'local TopLevelContext {
+    fn current_context(&self) -> &'local DesugarContext {
         let item = self.current_item.expect("TypeChecker: Expected current_item to be set");
-        &self.item_contexts[&item].1
+        self.item_contexts[&item].1.as_ref()
     }
 
     fn current_resolve(&self) -> &'local ResolutionResult {
@@ -480,7 +480,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     }
 
     fn type_to_string(&self, typ: &Type) -> String {
-        typ.to_string(&self.bindings, &self.current_context().names, self.compiler)
+        typ.to_string(&self.bindings, self.current_context(), self.compiler)
     }
 
     /// Try to unify the given types, returning `Err(())` on error without pushing a Diagnostic.

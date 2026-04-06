@@ -19,6 +19,7 @@ use crate::{
     parser::{
         self, ParseResult,
         context::TopLevelContext,
+        desugar_context::DesugarContext,
         cst::TopLevelItem,
         get_item,
         ids::{TopLevelId, TopLevelName},
@@ -299,7 +300,7 @@ define_intermediate!(1200, GetItemRaw -> (Arc<TopLevelItem>, Arc<TopLevelContext
 /// from parsing.
 #[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GetItem(pub TopLevelId);
-define_intermediate!(1300, GetItem -> (Arc<TopLevelItem>, Arc<TopLevelContext>), DbStorage, get_item::get_item_impl);
+define_intermediate!(1300, GetItem -> (Arc<TopLevelItem>, Arc<DesugarContext>), DbStorage, get_item::get_item_impl);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 /// Retrieves the type of a top-level item. Like `Resolve`, this is done per-item.
@@ -340,7 +341,7 @@ impl DebugWithDb<DbStorage> for TypeCheckSCC {
                 write!(f, ", ")?;
             }
             let (item, ctx) = GetItemRaw(*item).get(db);
-            write!(f, "`{}`", item.kind.name().to_string(&ctx))?;
+            write!(f, "`{}`", item.kind.name().to_string(ctx.as_ref()))?;
         }
         write!(f, ")")
     }
@@ -356,7 +357,7 @@ define_intermediate!(1600, assume_changed TypeCheck -> Arc<TypeCheckResult>, DbS
 impl DebugWithDb<DbStorage> for TypeCheck {
     fn fmt_with_db(&self, db: &inc_complete::Db<DbStorage>, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let (item, ctx) = GetItemRaw(self.0).get(db);
-        write!(f, "TypeCheck(`{}`)", item.kind.name().to_string(&ctx))
+        write!(f, "TypeCheck(`{}`)", item.kind.name().to_string(ctx.as_ref()))
     }
 }
 

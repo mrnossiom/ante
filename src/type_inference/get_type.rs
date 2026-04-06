@@ -2,7 +2,7 @@ use crate::{
     incremental::{self, DbHandle, GetItem, GetType, Resolve, TypeCheck},
     name_resolution::ResolutionResult,
     parser::{
-        context::TopLevelContext,
+        desugar_context::DesugarContext,
         cst::{self, Definition, Expr, Pattern, TopLevelItemKind, TypeKind},
     },
     type_inference::types::{Type, TypeBindings},
@@ -24,7 +24,7 @@ pub fn get_type_impl(context: &GetType, compiler: &DbHandle) -> Type {
     let typ = match &item.kind {
         TopLevelItemKind::Definition(definition) => {
             let resolve = Resolve(context.0.top_level_item).get(compiler);
-            try_get_type(definition, &item_context, &resolve, compiler)
+            try_get_type(definition, item_context.as_ref(), &resolve, compiler)
                 .map(|t| t.generalize(&TypeBindings::default()))
                 .unwrap_or_else(|| {
                     let check = TypeCheck(context.0.top_level_item).get(compiler);
@@ -52,22 +52,22 @@ pub fn get_type_impl(context: &GetType, compiler: &DbHandle) -> Type {
 /// want instead to succeed with partial types, filling in holes as needed for better type
 /// errors.
 pub(super) fn try_get_type(
-    definition: &Definition, context: &TopLevelContext, resolve: &ResolutionResult, compiler: &DbHandle,
+    definition: &Definition, context: &DesugarContext, resolve: &ResolutionResult, compiler: &DbHandle,
 ) -> Option<Type> {
-    if let Pattern::TypeAnnotation(_, typ) = &context.patterns[definition.pattern] {
+    if let Pattern::TypeAnnotation(_, typ) = &context[definition.pattern] {
         return Type::from_cst_type_no_type_variables(typ, resolve, compiler);
     }
 
-    if let Expr::Lambda(lambda) = &context.exprs[definition.rhs] {
+    if let Expr::Lambda(lambda) = &context[definition.rhs] {
         let return_type = Box::new(lambda.return_type.as_ref()?.clone());
 
         let parameters = lambda
             .parameters
             .iter()
-            .map(|parameter| match &context.patterns[parameter.pattern] {
+            .map(|parameter| match &context[parameter.pattern] {
                 Pattern::TypeAnnotation(_, typ) => Some(cst::ParameterType::new(typ.clone(), parameter.is_implicit)),
                 Pattern::Literal(cst::Literal::Unit) => {
-                    let location = context.pattern_locations[parameter.pattern].clone();
+                    let location = context.pattern_location(parameter.pattern).clone();
                     Some(cst::ParameterType::explicit(cst::Type::new(TypeKind::Unit, location)))
                 },
                 _ => None,
@@ -82,12 +82,12 @@ pub(super) fn try_get_type(
 
         // We construct a function type to convert wholesale instead of converting as we go
         // to avoid repeating logic in [Type::from_cst_type], namely handling of effect types.
-        let lambda_location = context.expr_locations[definition.rhs].clone();
+        let lambda_location = context.expr_location(definition.rhs).clone();
         let cst_fn_type = cst::Type::new(TypeKind::Function(cst_function_type), lambda_location);
         Type::from_cst_type_no_type_variables(&cst_fn_type, resolve, compiler)
 
     // The body being a type annotation is common for `extern` declarations: `puts = extern "puts": fn ...`
-    } else if let Expr::TypeAnnotation(annotation) = &context.exprs[definition.rhs] {
+    } else if let Expr::TypeAnnotation(annotation) = &context[definition.rhs] {
         Type::from_cst_type_no_type_variables(&annotation.rhs, resolve, compiler)
     } else {
         None
@@ -98,30 +98,30 @@ pub(super) fn try_get_type(
 /// for trait closure environments. The caller passes a `next_id` counter so that
 /// fresh IDs don't collide with other type variables.
 pub(super) fn try_get_partial_type(
-    definition: &Definition, context: &TopLevelContext, resolve: &ResolutionResult, compiler: &DbHandle,
+    definition: &Definition, context: &DesugarContext, resolve: &ResolutionResult, compiler: &DbHandle,
     next_id: &mut u32,
 ) -> Option<Type> {
-    if let Pattern::TypeAnnotation(_, typ) = &context.patterns[definition.pattern] {
+    if let Pattern::TypeAnnotation(_, typ) = &context[definition.pattern] {
         return Some(Type::from_cst_type(typ, resolve, compiler, next_id));
     }
 
-    if let Expr::Lambda(lambda) = &context.exprs[definition.rhs] {
+    if let Expr::Lambda(lambda) = &context[definition.rhs] {
         let return_type = Box::new(lambda.return_type.as_ref()?.clone());
 
         let parameters = lambda
             .parameters
             .iter()
-            .map(|parameter| match &context.patterns[parameter.pattern] {
+            .map(|parameter| match &context[parameter.pattern] {
                 Pattern::TypeAnnotation(_, typ) => Some(cst::ParameterType::new(typ.clone(), parameter.is_implicit)),
                 Pattern::Literal(cst::Literal::Unit) => {
-                    let location = context.pattern_locations[parameter.pattern].clone();
+                    let location = context.pattern_location(parameter.pattern).clone();
                     Some(cst::ParameterType::explicit(cst::Type::new(TypeKind::Unit, location)))
                 },
                 _ => None,
             })
             .collect::<Option<Vec<_>>>()?;
 
-        let lambda_location = context.expr_locations[definition.rhs].clone();
+        let lambda_location = context.expr_location(definition.rhs).clone();
 
         let environment = Some(Box::new(cst::Type::new(cst::TypeKind::Hole, lambda_location.clone())));
         let cst_function_type =
@@ -129,7 +129,7 @@ pub(super) fn try_get_partial_type(
 
         let cst_fn_type = cst::Type::new(TypeKind::Function(cst_function_type), lambda_location);
         Some(Type::from_cst_type(&cst_fn_type, resolve, compiler, next_id))
-    } else if let Expr::TypeAnnotation(annotation) = &context.exprs[definition.rhs] {
+    } else if let Expr::TypeAnnotation(annotation) = &context[definition.rhs] {
         Some(Type::from_cst_type(&annotation.rhs, resolve, compiler, next_id))
     } else {
         None

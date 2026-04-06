@@ -56,10 +56,10 @@ impl TopLevelId {
 
                 assert_eq!(fields.len(), field_types.len());
                 let fields = mapvec(fields.iter().zip(field_types), |((field_name, _), typ)| {
-                    (item_context.names[*field_name].clone(), typ)
+                    (item_context[*field_name].clone(), typ)
                 });
 
-                let type_name = item_context.names[type_definition.name].clone();
+                let type_name = item_context[type_definition.name].clone();
                 TypeBody::Product { type_name, fields }
             },
             cst::TypeDefinitionBody::Enum(variants) => {
@@ -67,7 +67,7 @@ impl TopLevelId {
                     let constructor_type = result.get_generalized(*name);
                     let constructor = apply_type_constructor(constructor_type, arguments, &result);
                     let fields: Vec<_> = constructor.function_parameter_types().collect();
-                    (item_context.names[*name].clone(), fields)
+                    (item_context[*name].clone(), fields)
                 });
                 if variants.len() == 1 {
                     let (type_name, fields) = variants.pop().unwrap();
@@ -82,7 +82,7 @@ impl TopLevelId {
             cst::TypeDefinitionBody::Alias(_) | cst::TypeDefinitionBody::Error => {
                 // Just make some filler value - ideally we should return an error flag here
                 // to prevent future errors
-                let type_name = item_context.names[type_definition.name].clone();
+                let type_name = item_context[type_definition.name].clone();
                 TypeBody::Product { type_name, fields: Vec::new() }
             },
         }

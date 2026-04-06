@@ -23,7 +23,7 @@ pub fn definition_at(compiler: &Db, file_id: SourceFileId, byte_offset: usize) -
         // Use desugared context: Resolve also operates on the desugared form,
         // so PathIds must come from the same source.
         let (_, ctx) = GetItem(item.id).get(compiler);
-        for (path_id, loc) in ctx.path_locations.iter() {
+        for (path_id, loc) in ctx.path_locations() {
             let start = loc.span.start.byte_index;
             let end = loc.span.end.byte_index;
             if start <= byte_offset && byte_offset < end && (end - start) < best_span_len {

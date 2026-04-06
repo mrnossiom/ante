@@ -25,6 +25,7 @@ use self::cst::{
 pub mod context;
 pub mod cst;
 pub mod cst_printer;
+pub mod desugar_context;
 pub mod get_item;
 pub mod ids;
 

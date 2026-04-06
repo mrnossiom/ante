@@ -1,5 +1,6 @@
 use ante::incremental::{Db, GetItem, Parse, TypeCheck};
 use ante::name_resolution::namespace::SourceFileId;
+use ante::parser::ids::{IdStore, NameStore};
 
 /// Find the innermost node (path, name, or pattern) at `byte_offset` in
 /// `file_id` and return a hover string of the form `name : Type`.
@@ -36,13 +37,13 @@ pub fn hover_at(compiler: &Db, file_id: SourceFileId, byte_offset: usize) -> Opt
             }
         };
 
-        for (path_id, loc) in ctx.path_locations.iter() {
+        for (path_id, loc) in ctx.path_locations() {
             check(loc.span.start.byte_index, loc.span.end.byte_index, Id::Path(path_id, item.id));
         }
-        for (name_id, loc) in ctx.name_locations.iter() {
+        for (name_id, loc) in ctx.name_locations() {
             check(loc.span.start.byte_index, loc.span.end.byte_index, Id::Name(name_id, item.id));
         }
-        for (pattern_id, loc) in ctx.pattern_locations.iter() {
+        for (pattern_id, loc) in ctx.pattern_locations() {
             check(loc.span.start.byte_index, loc.span.end.byte_index, Id::Pattern(pattern_id, item.id));
         }
     }
@@ -55,7 +56,7 @@ pub fn hover_at(compiler: &Db, file_id: SourceFileId, byte_offset: usize) -> Opt
             if is_sentinel(typ) {
                 return None;
             }
-            let name = ctx.paths.get(path_id)?.last_ident().to_owned();
+            let name = ctx.get_path(path_id).last_ident().to_owned();
             let type_str = typ.to_string(&tc.bindings, &tc.result.context, compiler);
             Some(format!("{name} : {type_str}"))
         },
@@ -66,7 +67,7 @@ pub fn hover_at(compiler: &Db, file_id: SourceFileId, byte_offset: usize) -> Opt
             if is_sentinel(typ) {
                 return None;
             }
-            let name = ctx.names.get(name_id).map(|n| n.as_str()).unwrap_or("_");
+            let name = ctx.get_name(name_id).as_str();
             let type_str = typ.to_string(&tc.bindings, &tc.result.context, compiler);
             Some(format!("{name} : {type_str}"))
         },
@@ -78,8 +79,8 @@ pub fn hover_at(compiler: &Db, file_id: SourceFileId, byte_offset: usize) -> Opt
                 return None;
             }
             // Extract the variable name from Pattern::Variable; skip other pattern kinds.
-            let name = match ctx.patterns.get(pattern_id)? {
-                Pattern::Variable(name_id) => ctx.names.get(*name_id)?.as_str().to_owned(),
+            let name = match ctx.get_pattern(pattern_id) {
+                Pattern::Variable(name_id) => ctx.get_name(*name_id).as_str().to_owned(),
                 _ => return None,
             };
             let type_str = typ.to_string(&tc.bindings, &tc.result.context, compiler);

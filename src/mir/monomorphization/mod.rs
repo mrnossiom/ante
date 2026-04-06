@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use dashmap::DashMap;
 use inc_complete::DbGet;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use rustc_hash::FxHashMap;
 
 mod select_largest_variant;
@@ -38,12 +39,11 @@ where
         + Sync,
 {
     let initial_mir = collect_all_items(compiler)
-        .into_iter()
-        //.into_par_iter()
+        .into_par_iter()
         .flat_map(|item| build_initial_mir_with_shared_map(compiler, item))
-        .fold(Mir::default(), Mir::extend)
+        .fold(Mir::default, Mir::extend)
+        .reduce(Mir::default, Mir::extend)
         .remove_internal_externs();
-    //.reduce(Mir::default, Mir::extend);
 
     let shared = SharedDefinitions::default();
 
@@ -60,18 +60,16 @@ where
         })
         .collect::<Vec<_>>();
 
-    // TODO: Switch to a concurrent queue to better utilize each thread instead of having each
-    // thread compile each function reachable from each monomorphic function.
+    // TODO: More concrete perf testing, but this is fine for smaller programs.
     monomorphic_definitions
-        //.into_par_iter()
-        .into_iter()
-        .fold(Mir::default(), |acc, definition| {
-            let monomorphized = monomorphize_non_generic_definition(definition, &shared, &initial_mir);
+        .into_par_iter()
+        .fold(Mir::default, |acc, definition| {
+            let monomorphized = monomorphize_non_generic_definition(definition, &shared, &initial_mir)
+                .select_largest_variants(compiler)
+                .closure_deconvert();
             acc.extend(monomorphized)
         })
-        //.reduce(Mir::default, Mir::extend)
-        .select_largest_variants(compiler)
-        .closure_deconvert()
+        .reduce(Mir::default, Mir::extend)
         .assert_fully_linked()
         .assert_type_checks()
         .assert_no_unions_or_generics()
@@ -231,11 +229,15 @@ impl<'local> FunctionContext<'local> {
         match instruction {
             Instruction::Call { function, arguments } => {
                 self.remap_value(function);
-                for arg in arguments.iter_mut() { self.remap_value(arg); }
+                for arg in arguments.iter_mut() {
+                    self.remap_value(arg);
+                }
             },
             Instruction::CallClosure { closure: function, arguments } => {
                 self.remap_value(function);
-                for arg in arguments.iter_mut() { self.remap_value(arg); }
+                for arg in arguments.iter_mut() {
+                    self.remap_value(arg);
+                }
             },
             Instruction::PackClosure { function, environment } => {
                 self.remap_value(function);
@@ -243,7 +245,9 @@ impl<'local> FunctionContext<'local> {
             },
             Instruction::IndexTuple { tuple, .. } => self.remap_value(tuple),
             Instruction::MakeTuple(elements) => {
-                for e in elements.iter_mut() { self.remap_value(e); }
+                for e in elements.iter_mut() {
+                    self.remap_value(e);
+                }
             },
             Instruction::StackAlloc(v) | Instruction::Transmute(v) | Instruction::Id(v) => self.remap_value(v),
             Instruction::Store { pointer, value } => {

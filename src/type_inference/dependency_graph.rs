@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     incremental::{
-        DbHandle, GetCrateGraph, GetItem, GetTypeCheckSCC, Parse, Resolve, TypeCheck, TypeCheckDependencyGraph,
-        TypeCheckSCC,
+        DbHandle, ExportedDefinitions, GetCrateGraph, GetItem, GetTypeCheckSCC, Parse, Resolve, TypeCheck,
+        TypeCheckDependencyGraph, TypeCheckSCC,
     },
     iterator_extensions::mapvec,
     parser::{
@@ -17,7 +17,7 @@ use crate::{
     type_inference::{
         IndividualTypeCheckResult, TypeMaps,
         fresh_expr::ExtendedTopLevelContext,
-        get_type::try_get_type,
+        get_type::try_get_generalized_type,
         types::{Type, TypeBindings},
     },
 };
@@ -80,6 +80,34 @@ pub fn get_type_check_graph_impl(_: &TypeCheckDependencyGraph, db: &DbHandle) ->
         }
     }
 
+    // Methods are resolved during type checking, not name resolution, so mutually recursive
+    // methods (e.g. HashMap.insert <-> HashMap.resize) won't appear in each other's
+    // referenced_items. Conservatively link all methods of the same object type that lack
+    // known types so they end up in the same SCC.
+    let crates = GetCrateGraph.get(db);
+    for crate_ in crates.values() {
+        for file in crate_.source_files.values() {
+            let exported = ExportedDefinitions(*file).get(db);
+            for (_type_id, methods) in &exported.methods {
+                let method_ids: Vec<_> = methods
+                    .values()
+                    .map(|name| name.top_level_item)
+                    .filter(|&id| item_lacks_known_type(id, db))
+                    .collect();
+
+                // Add edges between all pairs to form a clique
+                for (i, &a) in method_ids.iter().enumerate() {
+                    let a_index = add_node(&mut graph, a);
+                    for &b in &method_ids[i + 1..] {
+                        let b_index = add_node(&mut graph, b);
+                        graph.update_edge(a_index, b_index, ());
+                        graph.update_edge(b_index, a_index, ());
+                    }
+                }
+            }
+        }
+    }
+
     // tarjan_scc returns SCCs in post_order, which is the order we want to analyze in.
     let sccs = petgraph::algo::tarjan_scc(&graph);
     let mut id_to_scc = BTreeMap::new();
@@ -120,7 +148,7 @@ fn item_lacks_known_type(dependency_id: TopLevelId, db: &DbHandle) -> bool {
     match &item.kind {
         TopLevelItemKind::Definition(definition) => {
             let resolve = Resolve(dependency_id).get(db);
-            try_get_type(definition, &context, &resolve, db).is_none()
+            try_get_generalized_type(definition, &context, &resolve, db).is_none()
         },
         TopLevelItemKind::TypeDefinition(_) => false,
         TopLevelItemKind::TraitDefinition(_) => false,

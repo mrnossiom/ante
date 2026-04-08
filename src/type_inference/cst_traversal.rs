@@ -7,7 +7,7 @@ use crate::{
     name_resolution::{Origin, builtin::Builtin},
     parser::{
         cst::{self, Definition, Expr, Literal, Pattern},
-        ids::{ExprId, NameId, PathId, PatternId, TopLevelName},
+        ids::{ExprId, NameId, PathId, PatternId, TopLevelId, TopLevelName},
     },
     type_inference::{
         Locateable, TypeChecker,
@@ -20,7 +20,10 @@ use crate::{
 impl<'local, 'inner> TypeChecker<'local, 'inner> {
     pub(super) fn check_definition(&mut self, definition: &Definition) {
         let expected_type = try_get_partial_type(
-            definition, self.current_context(), &self.current_resolve(), self.compiler,
+            definition,
+            self.current_context(),
+            &self.current_resolve(),
+            self.compiler,
             &mut self.next_type_variable_id,
         );
         let expected_type = match expected_type {
@@ -127,7 +130,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 let type_variable = self.next_type_variable_id();
                 self.push_inferred_float(type_variable, locator.locate(self));
                 Type::Variable(type_variable)
-            }
+            },
             Literal::String(_) => self.get_string_type(),
             Literal::Char(_) => Type::CHAR,
         };
@@ -317,7 +320,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
 
     fn check_call(&mut self, call: &cst::Call, expected: &Type, call_expr: ExprId) {
         // If the function is a MemberAccess, try to resolve it as a method call.
-        // `v.push 3` is rewritten to `push (mut v) 3` in the extended context.
+        // E.g. `vec.push 3` is rewritten to `push (mut vec) 3`.
         if self.try_rewrite_method_call(call, expected, call_expr) {
             return;
         }
@@ -342,6 +345,8 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     /// If `call` is `v.push 3` (MemberAccess + args), try to resolve `push` as a function
     /// in the module where `v`'s type is defined. If found, rewrite the Call expression to
     /// `push (mut v) 3` in the extended context and type-check that instead.
+    ///
+    /// TODO: Clean this up
     fn try_rewrite_method_call(&mut self, call: &cst::Call, expected: &Type, call_expr: ExprId) -> bool {
         let func_expr = match self.current_extended_context().extended_expr(call.function) {
             Some(expr) => expr.clone(),
@@ -359,14 +364,24 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         let struct_type = self.next_type_variable();
         self.check_expr(object, &struct_type);
 
-        // Find the source file of the type definition
-        let Some(source_file) = self.find_type_source_file(&struct_type) else {
+        // Find the source file and type definition id
+        let Some((source_file, type_top_level_id)) = self.find_type_info(&struct_type) else {
             return false;
         };
 
+        // Only resolve methods on actual type definitions (structs/enums),
+        // not on traits or effects (whose declarations also live in `methods`).
+        let (item, _) = GetItemRaw(type_top_level_id).get(self.compiler);
+        if !matches!(item.kind, cst::TopLevelItemKind::TypeDefinition(_)) {
+            return false;
+        }
+
         let exported = ExportedDefinitions(source_file).get(self.compiler);
         let member_name = Arc::new(member.clone());
-        let Some(name) = exported.definitions.get(&member_name) else {
+        let Some(methods_for_type) = exported.methods.get(&type_top_level_id) else {
+            return false;
+        };
+        let Some(name) = methods_for_type.get(&member_name) else {
             return false;
         };
         let name = *name;
@@ -385,34 +400,60 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         let location = self.current_context().expr_location(call.function).clone();
 
         // Build the object argument, auto-ref'ing if the first parameter is a reference type.
-        let object_arg = if let Type::Application(constructor, args) = self.follow_type(first_param) {
-            if matches!(self.follow_type(constructor), Type::Primitive(types::PrimitiveType::Reference(..))) {
-                let ref_kind = match self.follow_type(constructor) {
-                    Type::Primitive(types::PrimitiveType::Reference(k)) => *k,
-                    _ => unreachable!(),
-                };
-                let inner_type = args[0].clone();
-                if self.try_unify(&inner_type, &struct_type).is_err() {
-                    return false;
-                }
-                self.unify(&inner_type, &struct_type, TypeErrorKind::General, call_expr);
+        let object_arg =
+            if let Type::Application(constructor, args) = self.follow_type(first_param) {
+                if matches!(self.follow_type(constructor), Type::Primitive(types::PrimitiveType::Reference(..))) {
+                    let ref_kind = match self.follow_type(constructor) {
+                        Type::Primitive(types::PrimitiveType::Reference(k)) => *k,
+                        _ => unreachable!(),
+                    };
+                    let inner_type = args[0].clone();
 
-                let ref_expr = Expr::Reference(cst::Reference { kind: ref_kind, rhs: object });
-                self.push_expr(ref_expr, first_param.clone(), location.clone())
+                    // Unwrap struct_type if it's also a reference, to get the base type
+                    let is_ref = matches!(self.follow_type(&struct_type),
+                        Type::Application(s_ctor, s_args)
+                            if matches!(
+                                self.follow_type(s_ctor),
+                                Type::Primitive(types::PrimitiveType::Reference(_))
+                            ) && !s_args.is_empty()
+                    );
+
+                    let struct_base_type = if is_ref {
+                        match self.follow_type(&struct_type) {
+                            Type::Application(_, s_args) => s_args[0].clone(),
+                            _ => unreachable!(),
+                        }
+                    } else {
+                        struct_type.clone()
+                    };
+
+                    if self.try_unify(&inner_type, &struct_base_type).is_err() {
+                        return false;
+                    }
+                    self.unify(&inner_type, &struct_base_type, TypeErrorKind::General, call_expr);
+
+                    if is_ref {
+                        // Object is already a reference, pass as-is
+                        object
+                    } else {
+                        // Object is not a reference; auto-ref it
+                        let ref_expr = Expr::Reference(cst::Reference { kind: ref_kind, rhs: object });
+                        self.push_expr(ref_expr, first_param.clone(), location.clone())
+                    }
+                } else {
+                    if self.try_unify(first_param, &struct_type).is_err() {
+                        return false;
+                    }
+                    self.unify(first_param, &struct_type, TypeErrorKind::General, call_expr);
+                    object
+                }
             } else {
                 if self.try_unify(first_param, &struct_type).is_err() {
                     return false;
                 }
                 self.unify(first_param, &struct_type, TypeErrorKind::General, call_expr);
                 object
-            }
-        } else {
-            if self.try_unify(first_param, &struct_type).is_err() {
-                return false;
-            }
-            self.unify(first_param, &struct_type, TypeErrorKind::General, call_expr);
-            object
-        };
+            };
 
         // Create a Variable expression for the method, with a fresh path
         let method_path = self.push_path(
@@ -432,13 +473,21 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         let method_var = self.push_expr(Expr::Variable(method_path), method_type.clone(), location);
 
         // Build the new Call: `push (mut v) 3`
+        // If the call has a single `()` argument and the method only takes 1 parameter (self),
+        // strip the `()` — it's just syntactic sugar for invoking a no-extra-arg method.
+        let call_args_are_unit_sugar = call.arguments.len() == 1
+            && func_type.parameters.len() == 1
+            && matches!(self.current_context()[call.arguments[0].expr], Expr::Literal(Literal::Unit));
+
         let mut new_arguments = vec![cst::Argument::explicit(object_arg)];
-        new_arguments.extend_from_slice(&call.arguments);
+        if !call_args_are_unit_sugar {
+            new_arguments.extend_from_slice(&call.arguments);
+        }
 
         let new_call = Expr::Call(cst::Call { function: method_var, arguments: new_arguments });
         self.current_extended_context_mut().insert_expr(call_expr, new_call);
 
-        // Now type-check the rewritten expression
+        // Type-check the rewritten expression (handles implicit parameter resolution too)
         self.check_expr(call_expr, expected);
         true
     }
@@ -555,18 +604,19 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         }
     }
 
-    /// Find the source file where a type is defined, unwrapping references and type applications.
-    fn find_type_source_file(&self, typ: &Type) -> Option<crate::name_resolution::namespace::SourceFileId> {
+    /// Find the source file and TopLevelId where a type is defined, unwrapping references and type applications.
+    fn find_type_info(&self, typ: &Type) -> Option<(crate::name_resolution::namespace::SourceFileId, TopLevelId)> {
         match self.follow_type(typ) {
-            Type::UserDefined(Origin::TopLevelDefinition(id)) => Some(id.top_level_item.source_file),
+            Type::UserDefined(Origin::TopLevelDefinition(id)) => {
+                Some((id.top_level_item.source_file, id.top_level_item))
+            },
             Type::Application(constructor, args) => {
-                if matches!(
-                    self.follow_type(constructor),
-                    Type::Primitive(types::PrimitiveType::Reference(_))
-                ) {
-                    self.find_type_source_file(&args[0])
+                if matches!(self.follow_type(constructor), Type::Primitive(types::PrimitiveType::Reference(_)))
+                    && !args.is_empty()
+                {
+                    self.find_type_info(&args[0])
                 } else {
-                    self.find_type_source_file(constructor)
+                    self.find_type_info(constructor)
                 }
             },
             _ => None,

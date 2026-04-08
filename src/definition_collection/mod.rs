@@ -61,13 +61,26 @@ pub fn visible_definitions_impl(context: &VisibleDefinitions, db: &DbHandle) -> 
             }
         }
 
+        // Import methods as if they were defined in their parent module as free functions
+        for methods in exported.methods.values() {
+            for (exported_name, exported_id) in methods {
+                if !import.items.iter().any(|(item, _)| item.as_str() == exported_name.as_str()) {
+                    continue;
+                }
+                if !visible.definitions.contains_key(exported_name) {
+                    visible.definitions.insert(exported_name.clone(), *exported_id);
+                }
+            }
+        }
+
         // Report errors for any explicitly requested items not found in the module
         let exported_types = ExportedTypes(import_file_id).get(db);
         for (item_name, item_location) in &import.items {
             let item_arc = Arc::new(item_name.clone());
             let in_definitions = exported.definitions.contains_key(&item_arc);
             let in_types = exported_types.contains_key(&item_arc);
-            if !in_definitions && !in_types {
+            let in_methods = exported.methods.values().any(|m| m.contains_key(&item_arc));
+            if !in_definitions && !in_types && !in_methods {
                 db.accumulate(Diagnostic::UnknownImportItem {
                     name: item_arc,
                     module: import.module_path.clone(),

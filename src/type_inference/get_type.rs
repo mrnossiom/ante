@@ -24,7 +24,7 @@ pub fn get_type_impl(context: &GetType, compiler: &DbHandle) -> Type {
     let typ = match &item.kind {
         TopLevelItemKind::Definition(definition) => {
             let resolve = Resolve(context.0.top_level_item).get(compiler);
-            try_get_type(definition, item_context.as_ref(), &resolve, compiler)
+            try_get_generalized_type(definition, item_context.as_ref(), &resolve, compiler)
                 .map(|t| t.generalize(&TypeBindings::default()))
                 .unwrap_or_else(|| {
                     let check = TypeCheck(context.0.top_level_item).get(compiler);
@@ -51,11 +51,11 @@ pub fn get_type_impl(context: &GetType, compiler: &DbHandle) -> Type {
 /// GetType because this fails if it cannot retrieve an entire type. For definitions we
 /// want instead to succeed with partial types, filling in holes as needed for better type
 /// errors.
-pub(super) fn try_get_type(
+pub(super) fn try_get_generalized_type(
     definition: &Definition, context: &DesugarContext, resolve: &ResolutionResult, compiler: &DbHandle,
 ) -> Option<Type> {
     if let Pattern::TypeAnnotation(_, typ) = &context[definition.pattern] {
-        return Type::from_cst_type_no_type_variables(typ, resolve, compiler);
+        return Some(Type::from_cst_type_generalized(typ, resolve, compiler));
     }
 
     if let Expr::Lambda(lambda) = &context[definition.rhs] {
@@ -84,11 +84,12 @@ pub(super) fn try_get_type(
         // to avoid repeating logic in [Type::from_cst_type], namely handling of effect types.
         let lambda_location = context.expr_location(definition.rhs).clone();
         let cst_fn_type = cst::Type::new(TypeKind::Function(cst_function_type), lambda_location);
-        Type::from_cst_type_no_type_variables(&cst_fn_type, resolve, compiler)
+
+        Some(Type::from_cst_type_generalized(&cst_fn_type, resolve, compiler))
 
     // The body being a type annotation is common for `extern` declarations: `puts = extern "puts": fn ...`
     } else if let Expr::TypeAnnotation(annotation) = &context[definition.rhs] {
-        Type::from_cst_type_no_type_variables(&annotation.rhs, resolve, compiler)
+        Some(Type::from_cst_type_generalized(&annotation.rhs, resolve, compiler))
     } else {
         None
     }

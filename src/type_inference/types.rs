@@ -350,6 +350,15 @@ impl Type {
         }
     }
 
+    /// If this type is `Type::Forall(_, typ)`, return `typ` while avoiding cloning if possible.
+    /// Otherwise, return the non-forall type as is.
+    fn remove_forall(self) -> Type {
+        match self {
+            Type::Forall(_, typ) => Arc::unwrap_or_clone(typ),
+            other => other,
+        }
+    }
+
     /// Convert an ast type to a Type as closely as possible.
     ///
     /// Issues error(s) if:
@@ -362,15 +371,21 @@ impl Type {
         Self::from_cst_type_with_kind(typ, Kind::Type, resolve, db, next_id)
     }
 
-    /// Converts a [cst::Type] into a [Type], returning [None] if any type variables are required.
-    ///
-    /// Note that this will emit any errors from constructing the type even if [None] is returned.
-    pub(crate) fn from_cst_type_no_type_variables(
+    /// Converts an ast type to a generalized Type, with any free type variables
+    /// replaced with a `Type::Generic(Generic::Inferred(id))` - although the type will
+    /// will not be wrapped in a `forall`.
+    pub(crate) fn from_cst_type_generalized(
         typ: &cst::Type, resolve: &crate::name_resolution::ResolutionResult, db: &DbHandle,
-    ) -> Option<Type> {
+    ) -> Type {
         let mut next_id = 0;
         let typ = Self::from_cst_type_with_kind(typ, Kind::Type, resolve, db, &mut next_id);
-        (next_id == 0).then_some(typ)
+
+        if next_id == 0 {
+            // fast track - if no type variables were created, we have nothing to replace
+            typ
+        } else {
+            typ.generalize(&BTreeMap::new()).remove_forall()
+        }
     }
 
     /// Convert this [cst::Type] into a [Type] with the expected [Kind].

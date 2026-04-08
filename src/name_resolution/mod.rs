@@ -252,9 +252,19 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
             Namespace::Local => self.lookup_local_name(name),
             Namespace::Module(file_id) => {
                 let visible = &VisibleDefinitions(file_id).get(self.compiler);
-                let id = *visible.definitions.get(name)?;
-                self.referenced_items.insert(id.top_level_item);
-                Some(Origin::TopLevelDefinition(id))
+                if let Some(&id) = visible.definitions.get(name) {
+                    self.referenced_items.insert(id.top_level_item);
+                    return Some(Origin::TopLevelDefinition(id));
+                }
+                // Also check methods defined on types in this module.
+                // This just removes the need to type `Std.Vec.Vec.push` over `Std.Vec.push`
+                for methods in visible.methods.values() {
+                    if let Some(&id) = methods.get(name) {
+                        self.referenced_items.insert(id.top_level_item);
+                        return Some(Origin::TopLevelDefinition(id));
+                    }
+                }
+                None
             },
             Namespace::Type(top_level_id) => {
                 let visible = &VisibleDefinitions(top_level_id.source_file).get(self.compiler);

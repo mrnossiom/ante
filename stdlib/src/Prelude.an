@@ -20,7 +20,7 @@ type Maybe t =
    | None
    | Some t
 
-unwrap (m: Maybe t): t =
+Maybe.unwrap (m: Maybe t): t =
     match m
     | Some x -> x
     | None -> panic "Tried to unwrap a None value"
@@ -518,6 +518,12 @@ ptr_to_ref: fn (Ptr a) -> mut a = transmute
 trait Copy t with
     (.*): fn (ref t) -> t
 
+trait Clone t with
+    clone: fn (ref t) -> t
+
+trait Drop t with
+    drop: fn (mut t) -> Unit
+
 (.*) = Copy.(.*)
 
 impl copy_i8: Copy I8 with (.*) = deref
@@ -564,20 +570,20 @@ println (x: t) {Print t} =
     Print.print x
     putchar c"\n"
 
-impl print_u8:  Print U8  with print x = print_unsigned (cast x)
-impl print_u16: Print U16 with print x = print_unsigned (cast x)
-impl print_u32: Print U32 with print x = print_unsigned (cast x)
+impl print_u8:  Print U8  with print x = print_unsigned (U64 x)
+impl print_u16: Print U16 with print x = print_unsigned (U64 x)
+impl print_u32: Print U32 with print x = print_unsigned (U64 x)
 impl print_u64: Print U64 with print x = print_unsigned x
-impl print_usz: Print Usz with print x = print_unsigned (cast x)
+impl print_usz: Print Usz with print x = print_unsigned (U64 x)
 
 impl print_i8: Print I8 with
-    print x = print_signed (cast x) -128i64 "-128"
+    print x = print_signed (I64 x) -128i64 "-128"
 
 impl print_i16: Print I16 with
-    print x = print_signed (cast x) -32_768i64 "-32_768"
+    print x = print_signed (I64 x) -32_768i64 "-32_768"
 
 impl print_i32: Print I32 with
-    print x = print_signed (cast x) -2_147_483_648i64 "-2_147_483_648"
+    print x = print_signed (I64 x) -2_147_483_648i64 "-2_147_483_648"
 
 impl print_i64: Print I64 with
     print x = print_signed x -9_223_372_036_854_775_808i64 "-9_223_372_036_854_775_808"
@@ -585,13 +591,13 @@ impl print_i64: Print I64 with
 // TODO: This is broken for non-64-bit platforms.
 impl print_isz: Print Isz with
     print x =
-        print_signed (cast x) -9_223_372_036_854_775_808i64 "-9_223_372_036_854_775_808"
+        print_signed (I64 x) -9_223_372_036_854_775_808i64 "-9_223_372_036_854_775_808"
 
 
 impl print_char: Print Char with print x = putchar x
 
 impl print_f64: Print F64 with print = print_float
-impl print_f32: Print F32 with print x = print_float (cast x)
+impl print_f32: Print F32 with print x = print_float (F64 x)
 
 // TODO: temporary, very inaccurate
 print_float (f: F64): Unit =
@@ -599,17 +605,17 @@ print_float (f: F64): Unit =
         putchar c"-"
         print_float (0.0-f)
     else
-        uint = cast f
+        uint = U64 f
         print_unsigned uint
         putchar c"."
-        f2 = f - cast uint
+        f2 = f - F64 uint
         // Show up to 5 decimal places
-        print_unsigned (cast (f2 * 10_000.0))
+        print_unsigned (U64 (f2 * 10_000.0))
 
 impl print_string: Print String with
     print s = loop (i = 0) ->
         if i < s.length then
-            off = offset_bytes (s.data) (cast i)
+            off = offset_bytes (s.data) (Usz i)
             c = deref_ptr off
             putchar c
             recur (i + 1)
@@ -629,8 +635,8 @@ impl print_ref {Print a} {Copy a}: Print (ref a) with
 // Naive replacement for printf which isn't supported by the cranelift backend
 print_unsigned (x: U64): Unit =
     if x >= 10u64 then print_unsigned (x / 10u64)
-    digit = x % 10u64 + cast c"0"
-    putchar (cast digit)
+    digit = x % 10u64 + U64 c"0"
+    putchar (Char digit)
 
 print_signed (x: I64) (min: I64) (min_string: String): Unit =
     if x < 0i64 then
@@ -638,9 +644,9 @@ print_signed (x: I64) (min: I64) (min_string: String): Unit =
             print min_string
         else
             putchar c"-"
-            print_unsigned (unwrap (try_cast (0i64 - x)))
+            print_unsigned (Maybe.unwrap (try_cast (0i64 - x)))
     else
-        print_unsigned (unwrap (try_cast x))
+        print_unsigned (Maybe.unwrap (try_cast x))
 
 impl print_bool: Print Bool with
     print b =
@@ -679,7 +685,7 @@ repeat (count: Usz) (f: fn Usz [env] -> Unit): Unit =
 impl eq_string: Eq String with
     (==) l r =
         l.length == r.length and
-            memcmp l.data r.data (cast l.length) == 0
+            memcmp l.data r.data (Usz l.length) == 0
 
 impl append_string: Append String with
     (++) s1 s2 =
@@ -687,13 +693,13 @@ impl append_string: Append String with
         if s2.length == 0 then return s1
 
         len = s1.length + s2.length
-        buf = malloc (cast len + 1usz)
+        buf = malloc (Usz len + 1usz)
 
-        memcpy buf (s1.data) (cast s1.length)
+        memcpy buf (s1.data) (Usz s1.length)
 
-        buf_offset = cast (cast buf: Usz + cast s1.length: Usz)
+        buf_offset = cast (Usz buf + Usz s1.length)
 
-        memcpy buf_offset (s2.data) (cast s2.length)
+        memcpy buf_offset (s2.data) (Usz s2.length)
         String.from_parts buf len
 
 panic (msg: t) {Print t} =

@@ -4,13 +4,14 @@ use crate::{
     diagnostics::Location,
     incremental::{DbHandle, GetItem, GetItemRaw},
     iterator_extensions::mapvec,
+    lexer::token::{FloatKind, IntegerKind},
     parser::{
         cst::{
-            self, Argument, Constructor, Definition, Expr, If, Lambda, Literal, Parameter, Pattern, SequenceItem,
+            self, Argument, Constructor, Definition, Expr, If, Lambda, Literal, Parameter, Path, Pattern, SequenceItem,
             TopLevelItem, TopLevelItemKind, TraitDefinition, TraitImpl, Type, TypeDefinitionBody, TypeKind,
         },
         desugar_context::DesugarContext,
-        ids::ExprId,
+        ids::{ExprId, PathId},
     },
 };
 
@@ -396,29 +397,66 @@ enum ExprDesugar {
         is_or: bool,
     },
 
+    /// `U8 x` desugars to `cast x : U8`
+    TypeCast {
+        call: ExprId,
+        target_type: Type,
+    },
+
     Loop(ExprId),
 }
 
 /// Classifies this call based on the called function.
 /// Returns the desugaring to perform on this call, or `None` if there is nothing to do.
 fn classify_call(call: &cst::Call, expr: ExprId, context: &DesugarContext) -> Option<ExprDesugar> {
-    if let Expr::Variable(path_id) = &context[call.function] {
-        let path = &context[*path_id];
-        // All desugarings apply to operators with 2 arguments currently
-        if path.components.len() > 1 || call.arguments.len() != 2 {
-            return None;
-        }
+    let Expr::Variable(path_id) = &context[call.function] else { return None };
 
-        match path.last_ident() {
-            "|>" => Some(ExprDesugar::Pipe { call: expr, pipe_right: true }),
-            "<|" => Some(ExprDesugar::Pipe { call: expr, pipe_right: false }),
-            "or" => Some(ExprDesugar::LogicalOperator { call: expr, is_or: true }),
-            "and" => Some(ExprDesugar::LogicalOperator { call: expr, is_or: false }),
-            _ => None,
-        }
-    } else {
-        None
+    let path = &context[*path_id];
+    if path.components.len() > 1 {
+        return None;
     }
+
+    let name = path.last_ident();
+
+    if call.arguments.len() == 1 {
+        let location = context.expr_location(call.function);
+        if let Some(target_type) = type_name_to_type(name, location, *path_id) {
+            return Some(ExprDesugar::TypeCast { call: expr, target_type });
+        }
+    }
+
+    if call.arguments.len() != 2 {
+        return None;
+    }
+
+    match name {
+        "|>" => Some(ExprDesugar::Pipe { call: expr, pipe_right: true }),
+        "<|" => Some(ExprDesugar::Pipe { call: expr, pipe_right: false }),
+        "or" => Some(ExprDesugar::LogicalOperator { call: expr, is_or: true }),
+        "and" => Some(ExprDesugar::LogicalOperator { call: expr, is_or: false }),
+        _ => None,
+    }
+}
+
+fn type_name_to_type(name: &str, location: &Location, path_id: PathId) -> Option<Type> {
+    let kind = match name {
+        "I8" => TypeKind::Integer(IntegerKind::I8),
+        "I16" => TypeKind::Integer(IntegerKind::I16),
+        "I32" => TypeKind::Integer(IntegerKind::I32),
+        "I64" => TypeKind::Integer(IntegerKind::I64),
+        "Isz" => TypeKind::Integer(IntegerKind::Isz),
+        "U8" => TypeKind::Integer(IntegerKind::U8),
+        "U16" => TypeKind::Integer(IntegerKind::U16),
+        "U32" => TypeKind::Integer(IntegerKind::U32),
+        "U64" => TypeKind::Integer(IntegerKind::U64),
+        "Usz" => TypeKind::Integer(IntegerKind::Usz),
+        "F32" => TypeKind::Float(FloatKind::F32),
+        "F64" => TypeKind::Float(FloatKind::F64),
+        "Char" => TypeKind::Char,
+        "Bool" => TypeKind::Named(path_id),
+        _ => return None,
+    };
+    Some(Type::new(kind, location.clone()))
 }
 
 impl ExprDesugar {
@@ -428,9 +466,32 @@ impl ExprDesugar {
             ExprDesugar::CallWildcards(expr) => desugar_call_wildcards(expr, context),
             ExprDesugar::Pipe { call, pipe_right } => desugar_pipeline(call, context, pipe_right),
             ExprDesugar::LogicalOperator { call, is_or } => desugar_logical_operators(call, context, is_or),
+            ExprDesugar::TypeCast { call, target_type } => desugar_type_cast(call, target_type, context),
             ExprDesugar::Loop(expr) => desugar_loop(expr, context),
         }
     }
+}
+
+/// Desugars `U8 x` into `(Std.Prelude.Cast.cast x) : U8`
+fn desugar_type_cast(expr: ExprId, target_type: Type, context: &mut DesugarContext) {
+    let Expr::Call(call) = context[expr].clone() else { unreachable!() };
+    let location = context.expr_location(expr).clone();
+
+    let cast_path = Path {
+        components: vec![
+            ("Std".to_string(), location.clone()),
+            ("Prelude".to_string(), location.clone()),
+            ("Cast".to_string(), location.clone()),
+            ("cast".to_string(), location.clone()),
+        ],
+    };
+    let cast_path = context.push_path(cast_path, location.clone());
+    let cast_var = context.push_expr(Expr::Variable(cast_path), location.clone());
+
+    let cast_call = Expr::Call(cst::Call { function: cast_var, arguments: call.arguments });
+    let cast_call = context.push_expr(cast_call, location);
+
+    context.set_expr(expr, Expr::TypeAnnotation(cst::TypeAnnotation { lhs: cast_call, rhs: target_type }));
 }
 
 /// Desugars `x |> foo a b` into `foo x a b` and `foo a b <| x` into `foo x a b`

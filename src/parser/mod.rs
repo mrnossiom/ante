@@ -1504,6 +1504,22 @@ impl<'tokens> Parser<'tokens> {
                 Ok(self.push_expr(expr, location))
             },
             Token::Identifier(_) | Token::TypeName(_) => self.parse_variable(),
+            Token::IntegerType(kind) => {
+                let name = kind.to_string();
+                let location = self.current_token_location();
+                self.advance();
+                let path = Path::ident(name, location.clone());
+                let path = self.push_path(path, location.clone());
+                Ok(self.push_expr(Expr::Variable(path), location))
+            },
+            Token::FloatType(kind) => {
+                let name = kind.to_string();
+                let location = self.current_token_location();
+                self.advance();
+                let path = Path::ident(name, location.clone());
+                let path = self.push_path(path, location.clone());
+                Ok(self.push_expr(Expr::Variable(path), location))
+            },
             Token::ParenthesisLeft if self.peek_next_token().is_overloadable_operator() => self.parse_variable(),
             Token::ParenthesisLeft => {
                 self.advance();

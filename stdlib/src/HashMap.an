@@ -62,7 +62,7 @@ HashMap.insert (map: mut HashMap k v) (key: k) (value: v) {Hash k} : Unit =
                 entry := Entry key value true false
                 true
 
-    h = cast (Hash.hash key) : Usz % map.capacity.*
+    h = Usz (Hash.hash key) % map.capacity.*
 
     if not iter_until map key value h (map.capacity.*) then
         if not iter_until map key value 0 h then
@@ -92,7 +92,7 @@ HashMap.get_entry (map: ref HashMap k v) (key: k) {Hash k} {Eq k} : Maybe (Ptr (
             else
                 NotFound
 
-    h = cast (Hash.hash key) : Usz % map.capacity.*
+    h = Usz (Hash.hash key) % map.capacity.*
     match iter_until h map.capacity.*
     | Found value -> Some value
     | NotFound -> None

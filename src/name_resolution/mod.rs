@@ -3,7 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use namespace::{Namespace, SourceFileId, CRATE_ROOT_MODULE};
+use namespace::{CRATE_ROOT_MODULE, Namespace, SourceFileId};
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 
@@ -17,12 +17,12 @@ use crate::{
     },
     name_resolution::{builtin::Builtin, namespace::CrateId},
     parser::{
-        desugar_context::DesugarContext,
         cst::{
             Comptime, Constructor, Declaration, Definition, EffectDefinition, EffectType, Expr, Generics, ItemName,
             Path, Pattern, TopLevelItemKind, TraitDefinition, TraitImpl, Type, TypeDefinition, TypeDefinitionBody,
             TypeKind,
         },
+        desugar_context::DesugarContext,
         ids::{ExprId, NameId, PathId, PatternId, TopLevelId, TopLevelName},
     },
 };

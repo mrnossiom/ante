@@ -306,9 +306,7 @@ impl<'tokens> Parser<'tokens> {
             self.advance();
         }
 
-        while !self.at_end_of_input()
-            && *self.current_token() != Token::Newline
-        {
+        while !self.at_end_of_input() && *self.current_token() != Token::Newline {
             self.advance();
         }
     }

@@ -2,8 +2,8 @@ use crate::{
     incremental::{self, DbHandle, GetItem, GetType, Resolve, TypeCheck},
     name_resolution::ResolutionResult,
     parser::{
-        desugar_context::DesugarContext,
         cst::{self, Definition, Expr, Pattern, TopLevelItemKind, TypeKind},
+        desugar_context::DesugarContext,
     },
     type_inference::types::{Type, TypeBindings},
 };

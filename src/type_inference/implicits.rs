@@ -11,7 +11,9 @@ use crate::{
         ids::{ExprId, NameId, PatternId},
     },
     type_inference::{
-        errors::TypeErrorKind, types::{FunctionType, ParameterType, PrimitiveType, Type, TypeBindings, TypeVariableId}, Locateable, TypeChecker
+        Locateable, TypeChecker,
+        errors::TypeErrorKind,
+        types::{FunctionType, ParameterType, PrimitiveType, Type, TypeBindings, TypeVariableId},
     },
 };
 

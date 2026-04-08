@@ -19,8 +19,8 @@ use crate::{
     parser::{
         self, ParseResult,
         context::TopLevelContext,
-        desugar_context::DesugarContext,
         cst::TopLevelItem,
+        desugar_context::DesugarContext,
         get_item,
         ids::{TopLevelId, TopLevelName},
     },

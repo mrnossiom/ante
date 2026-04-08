@@ -141,18 +141,15 @@ impl DesugarContext {
     }
 
     pub fn path_locations(&self) -> impl Iterator<Item = (PathId, &Location)> {
-        self.original.path_locations.iter()
-            .chain(self.more_path_locations.iter().map(|(k, v)| (*k, v)))
+        self.original.path_locations.iter().chain(self.more_path_locations.iter().map(|(k, v)| (*k, v)))
     }
 
     pub fn name_locations(&self) -> impl Iterator<Item = (NameId, &Location)> {
-        self.original.name_locations.iter()
-            .chain(self.more_name_locations.iter().map(|(k, v)| (*k, v)))
+        self.original.name_locations.iter().chain(self.more_name_locations.iter().map(|(k, v)| (*k, v)))
     }
 
     pub fn pattern_locations(&self) -> impl Iterator<Item = (PatternId, &Location)> {
-        self.original.pattern_locations.iter()
-            .chain(self.more_pattern_locations.iter().map(|(k, v)| (*k, v)))
+        self.original.pattern_locations.iter().chain(self.more_pattern_locations.iter().map(|(k, v)| (*k, v)))
     }
 }
 

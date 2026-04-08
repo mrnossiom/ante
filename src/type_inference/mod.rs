@@ -12,8 +12,8 @@ use crate::{
     lexer::token::IntegerKind,
     name_resolution::{Origin, ResolutionResult, namespace::SourceFileId},
     parser::{
-        desugar_context::DesugarContext,
         cst::{self, ReferenceKind, TopLevelItem, TopLevelItemKind},
+        desugar_context::DesugarContext,
         ids::{ExprId, NameId, PathId, PatternId, TopLevelId, TopLevelName},
     },
     type_inference::{
@@ -691,6 +691,26 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             }
         }
         substitutions
+    }
+
+    /// If this is a `Type::Application(PrimitiveType::Reference(k), vec![e])`, return `k, e`
+    fn reference_element(&self, typ: &Type) -> Option<(ReferenceKind, Type)> {
+        match self.follow_type(typ) {
+            Type::Application(constructor, args) if !args.is_empty() => {
+                self.reference_constructor(constructor).map(|kind| (kind, args[0].clone()))
+            },
+            _ => None,
+        }
+    }
+
+    /// `Some(kind)` if the passed type is a reference type constructor.
+    /// Note that this returns `None` for `Application(Reference, _)`,
+    /// it is only `Some` for references directly.
+    fn reference_constructor(&self, typ: &Type) -> Option<ReferenceKind> {
+        match self.follow_type(typ) {
+            Type::Primitive(PrimitiveType::Reference(kind)) => Some(*kind),
+            _ => None,
+        }
     }
 }
 

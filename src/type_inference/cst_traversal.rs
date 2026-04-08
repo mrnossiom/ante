@@ -1,10 +1,10 @@
 use std::{borrow::Cow, collections::BTreeMap, sync::Arc};
 
 use crate::{
-    diagnostics::{Diagnostic, UnimplementedItem},
+    diagnostics::{Diagnostic, Location, UnimplementedItem},
     incremental::{ExportedDefinitions, GetItemRaw, GetType, Resolve},
     iterator_extensions::mapvec,
-    name_resolution::{Origin, builtin::Builtin},
+    name_resolution::{Origin, builtin::Builtin, namespace::SourceFileId},
     parser::{
         cst::{self, Definition, Expr, Literal, Pattern},
         ids::{ExprId, NameId, PathId, PatternId, TopLevelId, TopLevelName},
@@ -345,8 +345,6 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     /// If `call` is `v.push 3` (MemberAccess + args), try to resolve `push` as a function
     /// in the module where `v`'s type is defined. If found, rewrite the Call expression to
     /// `push (mut v) 3` in the extended context and type-check that instead.
-    ///
-    /// TODO: Clean this up
     fn try_rewrite_method_call(&mut self, call: &cst::Call, expected: &Type, call_expr: ExprId) -> bool {
         let func_expr = match self.current_extended_context().extended_expr(call.function) {
             Some(expr) => expr.clone(),
@@ -364,96 +362,23 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         let struct_type = self.next_type_variable();
         self.check_expr(object, &struct_type);
 
-        // Find the source file and type definition id
-        let Some((source_file, type_top_level_id)) = self.find_type_info(&struct_type) else {
+        // Resolve the method name to a top-level function
+        let Some((method_name, func_type, bindings)) = self.resolve_method_for_type(&struct_type, &member) else {
             return false;
         };
+        let method_type = Type::Function(func_type.clone());
 
-        // Only resolve methods on actual type definitions (structs/enums),
-        // not on traits or effects (whose declarations also live in `methods`).
-        let (item, _) = GetItemRaw(type_top_level_id).get(self.compiler);
-        if !matches!(item.kind, cst::TopLevelItemKind::TypeDefinition(_)) {
-            return false;
-        }
-
-        let exported = ExportedDefinitions(source_file).get(self.compiler);
-        let member_name = Arc::new(member.clone());
-        let Some(methods_for_type) = exported.methods.get(&type_top_level_id) else {
-            return false;
-        };
-        let Some(name) = methods_for_type.get(&member_name) else {
-            return false;
-        };
-        let name = *name;
-
-        let (method_type, bindings) = self.type_and_bindings_of_top_level_name(&name);
-
-        let Type::Function(func_type) = &method_type else {
-            return false;
-        };
-
-        if func_type.parameters.is_empty() {
-            return false;
-        }
-
-        let first_param = &func_type.parameters[0].typ;
+        // Build the object argument, auto-ref'ing if the first parameter is a reference type
         let location = self.current_context().expr_location(call.function).clone();
-
-        // Build the object argument, auto-ref'ing if the first parameter is a reference type.
-        let object_arg =
-            if let Type::Application(constructor, args) = self.follow_type(first_param) {
-                if matches!(self.follow_type(constructor), Type::Primitive(types::PrimitiveType::Reference(..))) {
-                    let ref_kind = match self.follow_type(constructor) {
-                        Type::Primitive(types::PrimitiveType::Reference(k)) => *k,
-                        _ => unreachable!(),
-                    };
-                    let inner_type = args[0].clone();
-
-                    // Unwrap struct_type if it's also a reference, to get the base type
-                    let is_ref = matches!(self.follow_type(&struct_type),
-                        Type::Application(s_ctor, s_args)
-                            if matches!(
-                                self.follow_type(s_ctor),
-                                Type::Primitive(types::PrimitiveType::Reference(_))
-                            ) && !s_args.is_empty()
-                    );
-
-                    let struct_base_type = if is_ref {
-                        match self.follow_type(&struct_type) {
-                            Type::Application(_, s_args) => s_args[0].clone(),
-                            _ => unreachable!(),
-                        }
-                    } else {
-                        struct_type.clone()
-                    };
-
-                    if self.try_unify(&inner_type, &struct_base_type).is_err() {
-                        return false;
-                    }
-                    self.unify(&inner_type, &struct_base_type, TypeErrorKind::General, call_expr);
-
-                    if is_ref {
-                        // Object is already a reference, pass as-is
-                        object
-                    } else {
-                        // Object is not a reference; auto-ref it
-                        let ref_expr = Expr::Reference(cst::Reference { kind: ref_kind, rhs: object });
-                        self.push_expr(ref_expr, first_param.clone(), location.clone())
-                    }
-                } else {
-                    if self.try_unify(first_param, &struct_type).is_err() {
-                        return false;
-                    }
-                    self.unify(first_param, &struct_type, TypeErrorKind::General, call_expr);
-                    object
-                }
-            } else {
-                if self.try_unify(first_param, &struct_type).is_err() {
-                    return false;
-                }
-                self.unify(first_param, &struct_type, TypeErrorKind::General, call_expr);
-                object
-            };
+        let Some(object_arg) = self.build_object_arg_with_auto_ref(
+            object,
+            &struct_type,
+            &func_type.parameters[0].typ,
+            &location,
+            call_expr,
+        ) else {
+            return false;
+        };
 
         // Create a Variable expression for the method, with a fresh path
         let method_path = self.push_path(
@@ -461,26 +386,24 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             method_type.clone(),
             location.clone(),
         );
-        self.path_types.insert(method_path, method_type.clone());
 
-        let origin = Origin::TopLevelDefinition(name);
-        self.current_extended_context_mut().insert_path_origin(method_path, origin);
+        self.current_extended_context_mut().insert_path_origin(method_path, Origin::TopLevelDefinition(method_name));
 
         if let Some(bindings) = bindings {
             self.current_extended_context_mut().insert_instantiation(method_path, bindings);
         }
 
-        let method_var = self.push_expr(Expr::Variable(method_path), method_type.clone(), location);
+        let method_var = self.push_expr(Expr::Variable(method_path), method_type, location);
 
         // Build the new Call: `push (mut v) 3`
-        // If the call has a single `()` argument and the method only takes 1 parameter (self),
-        // strip the `()` — it's just syntactic sugar for invoking a no-extra-arg method.
-        let call_args_are_unit_sugar = call.arguments.len() == 1
+        // If the call is in the form `obj.method ()` and the method only takes 1 parameter,
+        // strip the `()` — it's only there to make the expression a call.
+        let single_unit_arg = call.arguments.len() == 1
             && func_type.parameters.len() == 1
             && matches!(self.current_context()[call.arguments[0].expr], Expr::Literal(Literal::Unit));
 
         let mut new_arguments = vec![cst::Argument::explicit(object_arg)];
-        if !call_args_are_unit_sugar {
+        if !single_unit_arg {
             new_arguments.extend_from_slice(&call.arguments);
         }
 
@@ -604,23 +527,78 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         }
     }
 
+    /// Resolve a method name on a type to its top-level function definition.
+    /// Returns the method's name, function type, and optional generic bindings.
+    fn resolve_method_for_type(
+        &mut self, struct_type: &Type, member: &str,
+    ) -> Option<(TopLevelName, Arc<types::FunctionType>, Option<Vec<Type>>)> {
+        let (source_file, type_top_level_id) = self.find_type_info(struct_type)?;
+
+        // Only resolve methods on actual type definitions (structs/enums),
+        // not on traits or effects (whose declarations also live in `methods`).
+        let (item, _) = GetItemRaw(type_top_level_id).get(self.compiler);
+        if !matches!(item.kind, cst::TopLevelItemKind::TypeDefinition(_)) {
+            return None;
+        }
+
+        let exported = ExportedDefinitions(source_file).get(self.compiler);
+        let member_name = Arc::new(member.to_owned());
+        let name = *exported.methods.get(&type_top_level_id)?.get(&member_name)?;
+
+        let (method_type, bindings) = self.type_and_bindings_of_top_level_name(&name);
+
+        let Type::Function(func_type) = &method_type else {
+            return None;
+        };
+
+        if func_type.parameters.is_empty() {
+            return None;
+        }
+
+        Some((name, func_type.clone(), bindings))
+    }
+
     /// Find the source file and TopLevelId where a type is defined, unwrapping references and type applications.
-    fn find_type_info(&self, typ: &Type) -> Option<(crate::name_resolution::namespace::SourceFileId, TopLevelId)> {
+    fn find_type_info(&self, typ: &Type) -> Option<(SourceFileId, TopLevelId)> {
         match self.follow_type(typ) {
             Type::UserDefined(Origin::TopLevelDefinition(id)) => {
                 Some((id.top_level_item.source_file, id.top_level_item))
             },
-            Type::Application(constructor, args) => {
-                if matches!(self.follow_type(constructor), Type::Primitive(types::PrimitiveType::Reference(_)))
-                    && !args.is_empty()
-                {
-                    self.find_type_info(&args[0])
-                } else {
-                    self.find_type_info(constructor)
-                }
+            Type::Application(constructor, _) => match self.reference_element(typ) {
+                Some((_, element)) => self.find_type_info(&element),
+                _ => self.find_type_info(constructor),
             },
             _ => None,
         }
+    }
+
+    /// Build the object argument for a method call, automatically wrapping it
+    /// in a reference if the method's first parameter expects one.
+    fn build_object_arg_with_auto_ref(
+        &mut self, mut object: ExprId, struct_type: &Type, first_param: &Type, location: &Location, call_expr: ExprId,
+    ) -> Option<ExprId> {
+        // If the first parameter expects a reference type, unwrap both sides
+        // and auto-ref the object if needed.
+        let (param_type, struct_base, auto_ref) =
+            if let Some((ref_kind, inner_type)) = self.reference_element(first_param) {
+                let (struct_base_type, should_wrap_object_in_ref) = match self.reference_element(struct_type) {
+                    Some((_, element)) => (element, false),
+                    None => (struct_type.clone(), true),
+                };
+                let auto_ref = should_wrap_object_in_ref.then_some(ref_kind);
+                (inner_type, struct_base_type, auto_ref)
+            } else {
+                (first_param.clone(), struct_type.clone(), None)
+            };
+
+        self.unify(&param_type, &struct_base, TypeErrorKind::General, call_expr);
+
+        if let Some(ref_kind) = auto_ref {
+            let ref_expr = Expr::Reference(cst::Reference { kind: ref_kind, rhs: object });
+            object = self.push_expr(ref_expr, first_param.clone(), location.clone());
+        }
+
+        Some(object)
     }
 
     fn check_if(&mut self, if_: &cst::If, expected: &Type, expr: ExprId) {

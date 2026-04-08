@@ -110,9 +110,8 @@ fn add_source_files_of_crate(compiler: &mut Db, crates: &mut CrateGraph, crate_i
                 // can be reconstructed from only the module names. E.g. `Foo.Bar` = `foo_crate_root/src/bar.an`
                 let src_relative = path.strip_prefix(&src_folder).unwrap_or(&path);
                 let id = SourceFileId::new(crate_id, src_relative);
-                let abs_path = path.canonicalize().unwrap_or_else(|_| {
-                    std::env::current_dir().unwrap_or_default().join(&path)
-                });
+                let abs_path =
+                    path.canonicalize().unwrap_or_else(|_| std::env::current_dir().unwrap_or_default().join(&path));
                 let data = read_file_data(abs_path);
                 id.set(compiler, Arc::new(data));
                 source_files.insert(Arc::new(src_relative.to_path_buf()), id);

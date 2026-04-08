@@ -5,11 +5,11 @@ use crate::{
     incremental::{DbHandle, GetItem, GetItemRaw},
     iterator_extensions::mapvec,
     parser::{
-        desugar_context::DesugarContext,
         cst::{
             self, Argument, Constructor, Definition, Expr, If, Lambda, Literal, Parameter, Pattern, SequenceItem,
             TopLevelItem, TopLevelItemKind, TraitDefinition, TraitImpl, Type, TypeDefinitionBody, TypeKind,
         },
+        desugar_context::DesugarContext,
         ids::ExprId,
     },
 };
@@ -344,11 +344,7 @@ fn desugar_loop(expr: ExprId, context: &mut DesugarContext) {
 }
 
 fn is_wildcard(expr_id: ExprId, context: &DesugarContext) -> bool {
-    if let Expr::Variable(path_id) = &context[expr_id] {
-        context[*path_id].last_ident() == "_"
-    } else {
-        false
-    }
+    if let Expr::Variable(path_id) = &context[expr_id] { context[*path_id].last_ident() == "_" } else { false }
 }
 
 /// Desugars `foo _ x _` into `fn _1 _2 -> foo _1 x _2`
@@ -475,9 +471,12 @@ fn desugar_logical_operators(expr: ExprId, context: &mut DesugarContext, is_or: 
     let boolean = Expr::Literal(Literal::Bool(is_or));
     let boolean = context.push_expr(boolean, location);
 
-    context.set_expr(expr, if is_or {
-        Expr::If(If { condition: a, then: boolean, else_: Some(b) })
-    } else {
-        Expr::If(If { condition: a, then: b, else_: Some(boolean) })
-    });
+    context.set_expr(
+        expr,
+        if is_or {
+            Expr::If(If { condition: a, then: boolean, else_: Some(b) })
+        } else {
+            Expr::If(If { condition: a, then: b, else_: Some(boolean) })
+        },
+    );
 }

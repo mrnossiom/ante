@@ -96,7 +96,7 @@ fn compile(args: Cli) {
     };
 
     let (error_count, _) = classify_diagnostics(&diagnostics);
-    display_diagnostics(&diagnostics, &compiler);
+    display_diagnostics(&diagnostics, &compiler, args.no_color);
 
     if let Some(metadata_file) = metadata_file {
         if let Err(error) = write_metadata(&compiler, &metadata_file) {
@@ -123,28 +123,27 @@ fn classify_diagnostics(diagnostics: &BTreeSet<Diagnostic>) -> (usize, usize) {
     (error_count, warning_count)
 }
 
-fn display_diagnostics(diagnostics: &BTreeSet<Diagnostic>, compiler: &Db) {
+fn display_diagnostics(diagnostics: &BTreeSet<Diagnostic>, compiler: &Db, no_color: bool) {
     let (error_count, warning_count) = classify_diagnostics(&diagnostics);
     for diganostic in diagnostics {
-        eprintln!("{}", diganostic.display(true, &compiler));
+        eprintln!("{}", diganostic.display(!no_color, &compiler));
     }
 
     if error_count != 0 {
         let error_s = if error_count == 1 { "" } else { "s" };
-        let errors = format!("{error_count} error{error_s}").red();
+        let errors = format!("{error_count} error{error_s}");
+        let errors = if no_color { errors.into() } else { errors.red() };
 
         let warning_s = if warning_count == 1 { "" } else { "s" };
         let warnings = format!("{warning_count} warning{warning_s}");
+        let warnings = if no_color || warning_count == 0 { warnings.into() } else { warnings.yellow() };
 
-        if warning_count == 0 {
-            eprintln!("Found {errors} and {warnings}");
-        } else {
-            eprintln!("Found {errors} and {}", warnings.yellow());
-        }
+        eprintln!("Found {errors} and {warnings}");
     } else if warning_count != 0 {
         let warning_s = if warning_count == 1 { "" } else { "s" };
         let warnings = format!("{warning_count} warning{warning_s}");
-        eprintln!("Compiled with {}", warnings.yellow());
+        let warnings = if no_color { warnings.into() } else { warnings.yellow() };
+        eprintln!("Compiled with {warnings}");
     }
 }
 

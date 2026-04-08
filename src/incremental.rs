@@ -198,6 +198,7 @@ define_intermediate!(500, VisibleDefinitions -> Arc<VisibleDefinitionsResult>, D
 pub struct VisibleDefinitionsResult {
     pub definitions: Definitions,
     pub methods: BTreeMap<TopLevelId, Definitions>,
+    pub imported_modules: BTreeMap<Arc<String>, SourceFileId>,
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

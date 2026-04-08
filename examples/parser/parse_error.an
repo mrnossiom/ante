@@ -19,10 +19,10 @@ main () =
 // examples/parser/parse_error.an:4:22	error: Expected an expression but found `else`
 //     bar a b = if then else
 // 
-// examples/parser/parse_error.an:17:0	error: Expected an expression but found an unindent
+// examples/parser/parse_error.an:30:0	error: Expected an expression but found an unindent
 // 
 // 
-// examples/parser/parse_error.an:17:0	error: Expected the end of this block but found end of input
+// examples/parser/parse_error.an:30:0	error: Expected the end of this block but found end of input
 // 
 // 
 // Found 5 errors and 0 warnings

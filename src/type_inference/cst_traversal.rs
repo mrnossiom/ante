@@ -2,7 +2,7 @@ use std::{borrow::Cow, collections::BTreeMap, sync::Arc};
 
 use crate::{
     diagnostics::{Diagnostic, UnimplementedItem},
-    incremental::{GetItemRaw, GetType, Resolve},
+    incremental::{ExportedDefinitions, GetItemRaw, GetType, Resolve},
     iterator_extensions::mapvec,
     name_resolution::{Origin, builtin::Builtin},
     parser::{
@@ -72,7 +72,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         match expr.as_ref() {
             Expr::Literal(literal) => self.check_literal(literal, id, expected),
             Expr::Variable(path) => self.check_path(*path, expected, Some(id)),
-            Expr::Call(call) => self.check_call(call, expected),
+            Expr::Call(call) => self.check_call(call, expected, id),
             Expr::Lambda(lambda) => self.check_lambda(lambda, expected, id, None),
             Expr::Sequence(items) => {
                 self.push_implicits_scope();
@@ -315,7 +315,13 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         }
     }
 
-    fn check_call(&mut self, call: &cst::Call, expected: &Type) {
+    fn check_call(&mut self, call: &cst::Call, expected: &Type, call_expr: ExprId) {
+        // If the function is a MemberAccess, try to resolve it as a method call.
+        // `v.push 3` is rewritten to `push (mut v) 3` in the extended context.
+        if self.try_rewrite_method_call(call, expected, call_expr) {
+            return;
+        }
+
         let expected_parameter_types =
             mapvec(&call.arguments, |arg| types::ParameterType::new(self.next_type_variable(), arg.is_implicit));
 
@@ -331,6 +337,110 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         for (arg, expected_arg_type) in call.arguments.iter().zip(expected_parameter_types) {
             self.check_expr(arg.expr, &expected_arg_type.typ);
         }
+    }
+
+    /// If `call` is `v.push 3` (MemberAccess + args), try to resolve `push` as a function
+    /// in the module where `v`'s type is defined. If found, rewrite the Call expression to
+    /// `push (mut v) 3` in the extended context and type-check that instead.
+    fn try_rewrite_method_call(&mut self, call: &cst::Call, expected: &Type, call_expr: ExprId) -> bool {
+        let func_expr = match self.current_extended_context().extended_expr(call.function) {
+            Some(expr) => expr.clone(),
+            None => self.current_context()[call.function].clone(),
+        };
+
+        let Expr::MemberAccess(member_access) = &func_expr else {
+            return false;
+        };
+
+        let object = member_access.object;
+        let member = member_access.member.clone();
+
+        // Type-check the object to learn its type
+        let struct_type = self.next_type_variable();
+        self.check_expr(object, &struct_type);
+
+        // Find the source file of the type definition
+        let Some(source_file) = self.find_type_source_file(&struct_type) else {
+            return false;
+        };
+
+        let exported = ExportedDefinitions(source_file).get(self.compiler);
+        let member_name = Arc::new(member.clone());
+        let Some(name) = exported.definitions.get(&member_name) else {
+            return false;
+        };
+        let name = *name;
+
+        let (method_type, bindings) = self.type_and_bindings_of_top_level_name(&name);
+
+        let Type::Function(func_type) = &method_type else {
+            return false;
+        };
+
+        if func_type.parameters.is_empty() {
+            return false;
+        }
+
+        let first_param = &func_type.parameters[0].typ;
+        let location = self.current_context().expr_location(call.function).clone();
+
+        // Build the object argument, auto-ref'ing if the first parameter is a reference type.
+        let object_arg = if let Type::Application(constructor, args) = self.follow_type(first_param) {
+            if matches!(self.follow_type(constructor), Type::Primitive(types::PrimitiveType::Reference(..))) {
+                let ref_kind = match self.follow_type(constructor) {
+                    Type::Primitive(types::PrimitiveType::Reference(k)) => *k,
+                    _ => unreachable!(),
+                };
+                let inner_type = args[0].clone();
+                if self.try_unify(&inner_type, &struct_type).is_err() {
+                    return false;
+                }
+                self.unify(&inner_type, &struct_type, TypeErrorKind::General, call_expr);
+
+                let ref_expr = Expr::Reference(cst::Reference { kind: ref_kind, rhs: object });
+                self.push_expr(ref_expr, first_param.clone(), location.clone())
+            } else {
+                if self.try_unify(first_param, &struct_type).is_err() {
+                    return false;
+                }
+                self.unify(first_param, &struct_type, TypeErrorKind::General, call_expr);
+                object
+            }
+        } else {
+            if self.try_unify(first_param, &struct_type).is_err() {
+                return false;
+            }
+            self.unify(first_param, &struct_type, TypeErrorKind::General, call_expr);
+            object
+        };
+
+        // Create a Variable expression for the method, with a fresh path
+        let method_path = self.push_path(
+            cst::Path { components: vec![(member, location.clone())] },
+            method_type.clone(),
+            location.clone(),
+        );
+        self.path_types.insert(method_path, method_type.clone());
+
+        let origin = Origin::TopLevelDefinition(name);
+        self.current_extended_context_mut().insert_path_origin(method_path, origin);
+
+        if let Some(bindings) = bindings {
+            self.current_extended_context_mut().insert_instantiation(method_path, bindings);
+        }
+
+        let method_var = self.push_expr(Expr::Variable(method_path), method_type.clone(), location);
+
+        // Build the new Call: `push (mut v) 3`
+        let mut new_arguments = vec![cst::Argument::explicit(object_arg)];
+        new_arguments.extend_from_slice(&call.arguments);
+
+        let new_call = Expr::Call(cst::Call { function: method_var, arguments: new_arguments });
+        self.current_extended_context_mut().insert_expr(call_expr, new_call);
+
+        // Now type-check the rewritten expression
+        self.check_expr(call_expr, expected);
+        true
     }
 
     fn check_lambda(&mut self, lambda: &cst::Lambda, expected: &Type, expr: ExprId, self_name: Option<NameId>) {
@@ -442,6 +552,24 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             let location = self.current_context().expr_location(expr).clone();
             let name = Arc::new(member_access.member.clone());
             self.compiler.accumulate(Diagnostic::NoSuchFieldForType { typ, location, name });
+        }
+    }
+
+    /// Find the source file where a type is defined, unwrapping references and type applications.
+    fn find_type_source_file(&self, typ: &Type) -> Option<crate::name_resolution::namespace::SourceFileId> {
+        match self.follow_type(typ) {
+            Type::UserDefined(Origin::TopLevelDefinition(id)) => Some(id.top_level_item.source_file),
+            Type::Application(constructor, args) => {
+                if matches!(
+                    self.follow_type(constructor),
+                    Type::Primitive(types::PrimitiveType::Reference(_))
+                ) {
+                    self.find_type_source_file(&args[0])
+                } else {
+                    self.find_type_source_file(constructor)
+                }
+            },
+            _ => None,
         }
     }
 

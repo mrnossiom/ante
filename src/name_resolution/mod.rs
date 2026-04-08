@@ -194,6 +194,10 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
                     return Some(submodule);
                 }
 
+                if let Some(&module_id) = self.names_in_global_scope.imported_modules.get(name) {
+                    return Some(Namespace::Module(module_id));
+                }
+
                 let type_id = self.names_in_global_scope.definitions.get(name)?;
                 let (item, _) = GetItem(type_id.top_level_item).get(self.compiler);
                 if matches!(&item.kind, TopLevelItemKind::TypeDefinition(_)) {

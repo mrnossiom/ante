@@ -270,8 +270,8 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         &mut self, implicit: DelayedImplicit, implicits_in_local_scope: &[NameId],
     ) -> Result<(), Diagnostic> {
         // TODO: This prevents infinite recursion but still slows us down when searching for an implicit
-        // 20 levels deep. We could check for `Type::ERROR` object/implicit types to help catch this early.
-        let arbitrary_recursion_limit = 20;
+        // N levels deep. We could check for `Type::ERROR` object/implicit types to help catch this early.
+        let arbitrary_recursion_limit = 8;
         // The type bindings parameter is for recursive calls when we need to find implicits
         // to slot in for another implicit function's arguments.
         let no_bindings = TypeBindings::new();

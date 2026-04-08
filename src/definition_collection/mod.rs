@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
 
 use inc_complete::DbGet;
 
@@ -33,9 +33,13 @@ pub fn visible_definitions_impl(context: &VisibleDefinitions, db: &DbHandle) -> 
     for import in &ast.cst.imports {
         // Ignore errors from imported files. We want to only collect errors
         // from this file. Otherwise we'll duplicate errors.
-        // TODO: Still issue an error if the file name is not found
         let Some(import_file_id) = get_file_id(&import.crate_name, &import.module_path, db) else {
-            push_no_such_file_error(import, db);
+            // When module_path is empty, items may refer to submodules (e.g. `import Std.Vec`)
+            if import.module_path.as_os_str().is_empty() {
+                resolve_submodule_imports(import, &mut visible, db);
+            } else {
+                push_no_such_file_error(import, db);
+            }
             continue;
         };
         let exported = ExportedDefinitions(import_file_id).get(db);
@@ -107,6 +111,28 @@ fn get_file_id(target_crate_name: &String, module_path: &PathBuf, db: &DbHandle)
     }
 
     None
+}
+
+/// When module_path is empty (crate root), try resolving each imported item as a submodule.
+/// E.g. `import Std.Vec` resolves "Vec" as the Vec.an submodule in the Std crate.
+fn resolve_submodule_imports(import: &Import, visible: &mut VisibleDefinitionsResult, db: &DbHandle) {
+    let crates = GetCrateGraph.get(db);
+    let Some(crate_) = crates.values().find(|c| c.name == import.crate_name) else {
+        push_no_such_file_error(import, db);
+        return;
+    };
+
+    for (item_name, item_location) in &import.items {
+        let module_file = PathBuf::from(item_name).with_extension("an");
+        if let Some(&file_id) = crate_.source_files.get(&module_file) {
+            visible.imported_modules.insert(Arc::new(item_name.clone()), file_id);
+        } else {
+            let location = item_location.clone();
+            let module_name = import.module_path.clone();
+            let crate_name = import.crate_name.clone();
+            db.accumulate(Diagnostic::UnknownImportFile { crate_name, module_name, location });
+        }
+    }
 }
 
 pub fn visible_types_impl(context: &VisibleTypes, db: &DbHandle) -> TypeDefinitions {
@@ -267,7 +293,11 @@ pub fn exported_definitions_impl(context: &ExportedDefinitions, db: &DbHandle) -
     }
 
     incremental::exit_query();
-    Arc::new(VisibleDefinitionsResult { definitions: declarer.definitions, methods: declarer.methods })
+    Arc::new(VisibleDefinitionsResult {
+        definitions: declarer.definitions,
+        methods: declarer.methods,
+        imported_modules: BTreeMap::new(),
+    })
 }
 
 struct Declarer<'local, 'db> {

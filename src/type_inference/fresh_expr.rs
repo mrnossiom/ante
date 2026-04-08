@@ -80,6 +80,7 @@ pub struct ExtendedTopLevelContext {
     /// Any closure capturing an environment will have an entry into this map with the non-empty
     /// set of variables it captures. Free functions are excluded from the map entirely.
     closure_environments: FxHashMap<ExprId, BTreeSet<NameId>>,
+
 }
 
 impl<'local, 'innter> TypeChecker<'local, 'innter> {
@@ -293,6 +294,7 @@ impl ExtendedTopLevelContext {
     pub(crate) fn get_closure_environment(&self, expr: ExprId) -> Option<&BTreeSet<NameId>> {
         self.closure_environments.get(&expr)
     }
+
 }
 
 impl Index<ExprId> for ExtendedTopLevelContext {

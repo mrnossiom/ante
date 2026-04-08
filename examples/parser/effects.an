@@ -74,7 +74,7 @@ map4 (l: List a) (f: fn a -> b) : List b can Log = ()
 // examples/parser/effects.an:26:4	error: Expected an expression but found `|`
 //     | log _ -> "impossible"
 // 
-// examples/parser/effects.an:65:0	error: Expected the end of this block but found end of input
+// examples/parser/effects.an:82:0	error: Expected the end of this block but found end of input
 // 
 // 
 // Found 6 errors and 0 warnings

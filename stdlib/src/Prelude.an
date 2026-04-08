@@ -617,7 +617,10 @@ impl print_string: Print String with
 impl print_maybe {Print a}: Print (Maybe a) with
     print m =
         match m
-        | Some a -> print a
+        | Some a ->
+            print "Some "
+            // TODO: Parenthesize if necessary
+            print a
         | None -> print "None"
 
 impl print_ref {Print a} {Copy a}: Print (ref a) with

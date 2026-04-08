@@ -1,0 +1,75 @@
+// A nonCopy type for testing affine semantics
+type Resource = id: I32
+
+consume (r: Resource) : Unit = ()
+
+// NonCopy type used twice should error on the first (nonlast) use 
+use_twice () =
+    r = Resource 1
+    consume r
+    consume r
+
+// A type can be used multiple times if there is a `Copy t` impl for it 
+copy_twice () =
+    x = 1
+    a = x + 1
+    b = x + 2
+    a + b
+
+// Taking a reference does not count as a move 
+ref_then_use () =
+    r = Resource 2
+    r_ref = ref r
+    consume r
+
+// Non-copy value used in both if/else branches (each is a move) 
+use_in_both_branches (cond: Bool) =
+    r = Resource 3
+    if cond
+    then consume r
+    else consume r
+
+// Non-copy value used before if that also uses it should error 
+use_before_branch (cond: Bool) =
+    r = Resource 4
+    consume r
+    if cond
+    then consume r
+    else ()
+
+// Closures capture by reference currently so this is fine, but should be an error if we capture by move
+capture_then_use () =
+    r = Resource 5
+    f () = consume r
+    consume r
+
+// A copyable function parameter used multiple times is fine 
+copy_param (x: I32) =
+    a = x + 1
+    b = x + 2
+    a + b
+
+take_two (a: Resource) (b: Resource) : Unit = ()
+
+// Non-copy value passed as two arguments should error on first arg 
+double_arg () =
+    r = Resource 6
+    take_two r r
+
+type NonCopy = x: Unit
+
+type Two t =
+    one: t
+    two: t
+
+// Decompose a non-copy type into each field separately
+decompose_fields () =
+    c = Two (Two (NonCopy ()) (NonCopy ())) (Two (NonCopy ()) (NonCopy ()))
+    _ = c.one.one
+    _ = c.one.two
+    _ = c.two
+    _ = c.two.two // error: `c.two` already moved
+
+main () = ()
+
+// args: --check

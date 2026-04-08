@@ -31,12 +31,12 @@ pub enum Diagnostic {
         location: Arc<LocationData>,
     },
     NameAlreadyInScope {
-        name: Arc<String>,
+        name: Name,
         first_location: Location,
         second_location: Location,
     },
     ImportedNameAlreadyInScope {
-        name: Arc<String>,
+        name: Name,
         first_location: Location,
         second_location: Location,
     },
@@ -46,12 +46,12 @@ pub enum Diagnostic {
         location: Location,
     },
     UnknownImportItem {
-        name: Arc<String>,
+        name: Name,
         module: Arc<PathBuf>,
         location: Location,
     },
     NameNotInScope {
-        name: Arc<String>,
+        name: Name,
         location: Location,
     },
     ExpectedType {
@@ -77,7 +77,7 @@ pub enum Diagnostic {
         location: Location,
     },
     MethodDeclaredOnUnknownType {
-        name: Arc<String>,
+        name: Name,
         location: Location,
     },
     LiteralUsedAsName {
@@ -85,10 +85,10 @@ pub enum Diagnostic {
     },
     ValueExpected {
         location: Location,
-        typ: Arc<String>,
+        typ: Name,
     },
     TypeExpected {
-        name: Arc<String>,
+        name: Name,
         location: Location,
     },
     TypeError {
@@ -103,7 +103,7 @@ pub enum Diagnostic {
         location: Location,
     },
     ConstructorFieldDuplicate {
-        name: Arc<String>,
+        name: Name,
         first_location: Location,
         second_location: Location,
     },
@@ -116,7 +116,7 @@ pub enum Diagnostic {
         location: Location,
     },
     NoSuchFieldForType {
-        name: Arc<String>,
+        name: Name,
         typ: String,
         location: Location,
     },
@@ -134,7 +134,7 @@ pub enum Diagnostic {
         location: Location,
     },
     MissingCases {
-        cases: BTreeSet<Arc<String>>,
+        cases: BTreeSet<Name>,
         location: Location,
     },
     MissingManyCases {
@@ -155,8 +155,8 @@ pub enum Diagnostic {
     },
     /// `constructor_names` here is limited to 2 for brevity
     ConstructorExpectedFoundType {
-        type_name: Arc<String>,
-        constructor_names: Vec<Arc<String>>,
+        type_name: Name,
+        constructor_names: Vec<Name>,
         location: Location,
     },
     NoImplicitFound {

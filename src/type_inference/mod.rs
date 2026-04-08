@@ -12,7 +12,7 @@ use crate::{
     lexer::token::IntegerKind,
     name_resolution::{Origin, ResolutionResult, namespace::SourceFileId},
     parser::{
-        cst::{self, ReferenceKind, TopLevelItem, TopLevelItemKind},
+        cst::{self, Name, ReferenceKind, TopLevelItem, TopLevelItemKind},
         desugar_context::DesugarContext,
         ids::{ExprId, NameId, PathId, PatternId, TopLevelId, TopLevelName},
     },
@@ -637,7 +637,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     /// Returns an empty map if unsuccessful.
     ///
     /// The map maps from the field name to a pair of (field type, field index).
-    fn get_field_types(&mut self, typ: &Type, generic_args: Option<&[Type]>) -> BTreeMap<Arc<String>, (Type, u32)> {
+    fn get_field_types(&mut self, typ: &Type, generic_args: Option<&[Type]>) -> BTreeMap<Name, (Type, u32)> {
         match self.follow_type(typ) {
             Type::Application(constructor, arguments) => {
                 // TODO: Error if `generic_args` is non-empty

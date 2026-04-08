@@ -19,8 +19,8 @@ use crate::{
     parser::{
         cst::{
             Comptime, Constructor, Declaration, Definition, EffectDefinition, EffectType, Expr, Generics, ItemName,
-            Path, Pattern, TopLevelItemKind, TraitDefinition, TraitImpl, Type, TypeDefinition, TypeDefinitionBody,
-            TypeKind,
+            Name, Path, Pattern, TopLevelItemKind, TraitDefinition, TraitImpl, Type, TypeDefinition,
+            TypeDefinitionBody, TypeKind,
         },
         desugar_context::DesugarContext,
         ids::{ExprId, NameId, PathId, PatternId, TopLevelId, TopLevelName},
@@ -50,7 +50,7 @@ struct Resolver<'local, 'inner> {
     path_links: BTreeMap<PathId, Origin>,
     name_links: BTreeMap<NameId, Origin>,
     names_in_global_scope: Arc<VisibleDefinitionsResult>,
-    names_in_local_scope: Vec<BTreeMap<Arc<String>, NameId>>,
+    names_in_local_scope: Vec<BTreeMap<Name, NameId>>,
     context: &'local DesugarContext,
     compiler: &'local DbHandle<'inner>,
     referenced_items: BTreeSet<TopLevelId>,
@@ -840,7 +840,7 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
 }
 
 enum FieldsResult {
-    Fields(BTreeSet<Arc<String>>),
+    Fields(BTreeSet<Name>),
     /// A prior error occurred, avoid issuing another
     PriorError,
     NotAStruct,

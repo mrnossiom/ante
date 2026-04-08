@@ -19,7 +19,7 @@ use crate::{
     parser::{
         self, ParseResult,
         context::TopLevelContext,
-        cst::TopLevelItem,
+        cst::{Name, TopLevelItem},
         desugar_context::DesugarContext,
         get_item,
         ids::{TopLevelId, TopLevelName},
@@ -166,7 +166,7 @@ define_input!(200, GetCrateGraph -> Arc<CrateGraph>, DbStorage);
 /// making it depend only on the name of the crate.
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CrateName(pub CrateId);
-define_intermediate!(300, CrateName -> Arc<String>, DbStorage, |ctx, db| {
+define_intermediate!(300, CrateName -> Name, DbStorage, |ctx, db| {
     match GetCrateGraph.get(db).get(&ctx.0) {
         Some(crate_) => Arc::new(crate_.name.clone()),
         None => Arc::new("(none)".to_string()),
@@ -198,7 +198,7 @@ define_intermediate!(500, VisibleDefinitions -> Arc<VisibleDefinitionsResult>, D
 pub struct VisibleDefinitionsResult {
     pub definitions: Definitions,
     pub methods: BTreeMap<TopLevelId, Definitions>,
-    pub imported_modules: BTreeMap<Arc<String>, SourceFileId>,
+    pub imported_modules: BTreeMap<Name, SourceFileId>,
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -223,10 +223,10 @@ define_intermediate!(700, VisibleImplicits -> Definitions, DbStorage, definition
 /// as well as the local id of that name within the top-level item. This NameId is important
 /// to distinguish multiple names defined by the same top-level item. For example, `a, b = 1, 2`
 /// defines both `a` and `b`. Similarly, a trait may define multiple methods, etc.
-pub type Definitions = BTreeMap<Arc<String>, TopLevelName>;
+pub type Definitions = BTreeMap<Name, TopLevelName>;
 
 /// Maps type names to their TopLevelName and Kind.
-pub type TypeDefinitions = BTreeMap<Arc<String>, (TopLevelName, Kind)>;
+pub type TypeDefinitions = BTreeMap<Name, (TopLevelName, Kind)>;
 
 /// A map from each top-level type in a file to the methods defined on it.
 /// If a type in a file does not have any methods defined on it, it may not be in the map.

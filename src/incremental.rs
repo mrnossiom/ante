@@ -9,7 +9,10 @@ use inc_complete::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    definition_collection,
+    definition_collection::{
+        self,
+        visible_implicits::{Implicits, visible_implicits_impl},
+    },
     diagnostics::{Diagnostic, Location, check_all},
     find_files::CrateGraph,
     name_resolution::{
@@ -212,7 +215,7 @@ define_intermediate!(600, VisibleTypes -> TypeDefinitions, DbStorage, definition
 /// This will always be a subset of all VisibleDefinitions to the same item.
 #[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VisibleImplicits(pub SourceFileId);
-define_intermediate!(700, VisibleImplicits -> Definitions, DbStorage, definition_collection::visible_implicits_impl);
+define_intermediate!(700, VisibleImplicits -> Arc<Implicits>, DbStorage, visible_implicits_impl);
 
 /// We iterate over collected definitions within `visible_definitions_impl`. Since
 /// collecting these can error, we need a stable iteration order, otherwise the order

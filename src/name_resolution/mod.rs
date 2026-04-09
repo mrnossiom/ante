@@ -68,7 +68,7 @@ pub enum Origin {
     Local(NameId),
     /// This name did not resolve, try to perform type based resolution on it during type inference
     TypeResolution,
-    /// This name refers to a builtin item such as `String`, `Unit`, `,` etc.
+    /// This name refers to a builtin item such as `Unit`, `Char`, etc.
     Builtin(Builtin),
 }
 

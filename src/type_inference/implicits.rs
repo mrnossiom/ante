@@ -285,6 +285,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         fuel: u32,
     ) -> Result<(), Diagnostic> {
         let target_type = self.expr_types[&implicit.destination].clone();
+        let target_type = target_type.follow_all_two(&self.bindings, &type_bindings);
 
         let parameter_index = implicit.parameter_index;
         let function = implicit.source;
@@ -326,18 +327,21 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         if candidates.len() <= MULTIPLE_MATCHING_IMPLS_CUTOFF
             && let Some(item) = self.current_item
         {
-            for (name, name_id) in VisibleImplicits(item.source_file).get(self.compiler).iter() {
+            let visible_implicits = VisibleImplicits(item.source_file).get(self.compiler);
+
+            visible_implicits.iter_possibly_matching_impls(&target_type, |name, name_id| {
                 if candidates.len() > MULTIPLE_MATCHING_IMPLS_CUTOFF {
                     // Multiple matching impls, don't waste time looking for more.
                     // There are many Eq impls we could waste time on for example.
-                    break;
+                    return true;
                 }
 
-                let (name_type, bindings) = self.type_and_bindings_of_top_level_name(name_id);
+                let (name_type, impl_bindings) = self.type_and_bindings_of_top_level_name(name_id);
+
                 let origin = Origin::TopLevelDefinition(*name_id);
                 self.check_implicit_candidate(
                     name_type,
-                    bindings,
+                    impl_bindings,
                     &target_type,
                     name.clone(),
                     origin,
@@ -348,7 +352,8 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                     type_bindings,
                     fuel,
                 );
-            }
+                false
+            });
         }
 
         if candidates.is_empty() {

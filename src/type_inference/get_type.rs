@@ -95,10 +95,10 @@ pub(super) fn try_get_generalized_type(
     }
 }
 
-/// Like `try_get_type` but allows the resulting type to contain fresh type variables
+/// Like `try_get_generalized_type` but allows the resulting type to contain fresh type variables
 /// for trait closure environments. The caller passes a `next_id` counter so that
 /// fresh IDs don't collide with other type variables.
-pub(super) fn try_get_partial_type(
+pub fn try_get_partial_type(
     definition: &Definition, context: &DesugarContext, resolve: &ResolutionResult, compiler: &DbHandle,
     next_id: &mut u32,
 ) -> Option<Type> {

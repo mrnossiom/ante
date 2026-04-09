@@ -220,39 +220,43 @@ impl Type {
 
     /// Similar to [Self::follow] but will replace all bound type variables reachable within
     /// this type with their bindings if found. This is sometimes referred to as "zonking."
-    pub fn follow_all(self: &Self, bindings: &TypeBindings) -> Type {
+    pub fn follow_all(&self, bindings: &TypeBindings) -> Type {
+        self.follow_all_two(bindings, &TypeBindings::new())
+    }
+
+    pub fn follow_all_two(&self, bindings: &TypeBindings, more_bindings: &TypeBindings) -> Type {
         match self {
             Type::Primitive(_) | Type::Generic(Generic::Named(_)) => self.clone(),
             Type::Generic(Generic::Inferred(id)) => {
                 if let Some(binding) = bindings.get(id) {
-                    binding.follow_all(bindings)
+                    binding.follow_all_two(bindings, more_bindings)
                 } else {
                     Type::Generic(Generic::Inferred(*id))
                 }
             },
             Type::Variable(id) => {
                 if let Some(binding) = bindings.get(id) {
-                    binding.follow_all(bindings)
+                    binding.follow_all_two(bindings, more_bindings)
                 } else {
                     Type::Variable(*id)
                 }
             },
             Type::Function(function) => {
                 let parameters = mapvec(function.parameters.iter(), |param| {
-                    let typ = param.typ.follow_all(bindings);
+                    let typ = param.typ.follow_all_two(bindings, more_bindings);
                     ParameterType::new(typ, param.is_implicit)
                 });
 
                 Type::Function(Arc::new(FunctionType {
                     parameters,
-                    environment: function.environment.follow_all(bindings),
-                    return_type: function.return_type.follow_all(bindings),
-                    effects: function.effects.follow_all(bindings),
+                    environment: function.environment.follow_all_two(bindings, more_bindings),
+                    return_type: function.return_type.follow_all_two(bindings, more_bindings),
+                    effects: function.effects.follow_all_two(bindings, more_bindings),
                 }))
             },
             Type::Application(constructor, args) => {
-                let constructor = Arc::new(constructor.follow_all(bindings));
-                let args = Arc::new(mapvec(args.iter(), |arg| arg.follow_all(bindings)));
+                let constructor = Arc::new(constructor.follow_all_two(bindings, more_bindings));
+                let args = Arc::new(mapvec(args.iter(), |arg| arg.follow_all_two(bindings, more_bindings)));
                 Type::Application(constructor, args)
             },
             Type::UserDefined(origin) => Type::UserDefined(*origin),
@@ -262,10 +266,13 @@ impl Type {
                         assert!(!bindings.contains_key(id));
                     }
                 }
-                let typ = Arc::new(typ.follow_all(bindings));
+
+                let typ = Arc::new(typ.follow_all_two(bindings, more_bindings));
                 Type::Forall(generics.clone(), typ)
             },
-            Type::Tuple(elements) => Type::Tuple(Arc::new(mapvec(elements.iter(), |t| t.follow_all(bindings)))),
+            Type::Tuple(elements) => {
+                Type::Tuple(Arc::new(mapvec(elements.iter(), |t| t.follow_all_two(bindings, more_bindings))))
+            },
         }
     }
 
@@ -601,6 +608,22 @@ impl Type {
     pub(crate) fn return_type(&self) -> Option<&Type> {
         match self {
             Type::Function(function) => Some(&function.return_type),
+            _ => None,
+        }
+    }
+
+    /// If this is a type application, return the constructor and arguments
+    pub fn as_application(&self) -> Option<(&Arc<Type>, &Arc<Vec<Type>>)> {
+        match self {
+            Type::Application(constructor, args) => Some((constructor, args)),
+            _ => None,
+        }
+    }
+
+    /// If this is user-defined, return the origin
+    pub fn as_user_defined(&self) -> Option<&Origin> {
+        match self {
+            Type::UserDefined(origin) => Some(origin),
             _ => None,
         }
     }

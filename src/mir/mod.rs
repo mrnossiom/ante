@@ -17,6 +17,7 @@ use std::sync::{
 };
 
 use rustc_hash::{FxHashMap, FxHashSet};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     iterator_extensions::mapvec,
@@ -821,7 +822,7 @@ pub struct Generic(u32);
 /// Each nth item in the bindings Vec corresponds to the nth generic of a definition.
 type GenericBindings = Vec<Type>;
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum PrimitiveType {
     Error,
     Unit,

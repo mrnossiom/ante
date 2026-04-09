@@ -5,9 +5,8 @@ use inc_complete::DbGet;
 use crate::{
     diagnostics::{Diagnostic, Location},
     incremental::{
-        self, DbHandle, Definitions, ExportedDefinitions, ExportedTypes, GetCrateGraph, GetImports, GetItem,
-        GetItemRaw, Methods, Parse, TypeDefinitions, VisibleDefinitions, VisibleDefinitionsResult, VisibleImplicits,
-        VisibleTypes,
+        self, DbHandle, Definitions, ExportedDefinitions, ExportedTypes, GetCrateGraph, GetImports, GetItem, Methods,
+        Parse, TypeDefinitions, VisibleDefinitions, VisibleDefinitionsResult, VisibleTypes,
     },
     name_resolution::namespace::SourceFileId,
     parser::{
@@ -17,6 +16,8 @@ use crate::{
     },
     type_inference::kinds::Kind,
 };
+
+pub mod visible_implicits;
 
 /// Collect all definitions which should be visible to expressions within this file.
 /// This includes all top-level definitions within this file, as well as any imported ones.
@@ -187,26 +188,6 @@ pub fn visible_types_impl(context: &VisibleTypes, db: &DbHandle) -> TypeDefiniti
     }
 
     incremental::exit_query();
-    definitions
-}
-
-/// Returns any global implicits visible to the given item in the context.
-/// This will always be a subset of all VisibleDefinitions to the same item.
-pub fn visible_implicits_impl(context: &VisibleImplicits, db: &DbHandle) -> Definitions {
-    let mut definitions = VisibleDefinitions(context.0).get(db).definitions.clone();
-
-    definitions.retain(|_, id| {
-        let item = GetItemRaw(id.top_level_item).get(db).0;
-        match &item.kind {
-            TopLevelItemKind::Definition(definition) => definition.implicit,
-            TopLevelItemKind::TypeDefinition(_) => false,
-            TopLevelItemKind::TraitDefinition(_) => false,
-            TopLevelItemKind::TraitImpl(_) => true,
-            TopLevelItemKind::EffectDefinition(_) => false,
-            TopLevelItemKind::Comptime(_) => false,
-        }
-    });
-
     definitions
 }
 

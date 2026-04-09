@@ -31,7 +31,7 @@ pub mod errors;
 mod free_variables;
 pub mod fresh_expr;
 pub mod generics;
-mod get_type;
+pub mod get_type;
 mod implicits;
 pub mod kinds;
 pub mod patterns;
@@ -479,7 +479,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         cst::Expr::Call(cst::Call { function: func_expr, arguments: vec![cst::Argument::explicit(arg_id)] })
     }
 
-    fn type_to_string(&self, typ: &Type) -> String {
+    pub(crate) fn type_to_string(&self, typ: &Type) -> String {
         typ.to_string(&self.bindings, self.current_context(), self.compiler)
     }
 

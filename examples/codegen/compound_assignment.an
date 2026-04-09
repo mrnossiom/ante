@@ -1,0 +1,44 @@
+main () =
+    // Basic compound assignment on var integers
+    var x = 10
+    x += 5
+    println x
+
+    x -= 3
+    println x
+
+    x *= 4
+    println x
+
+    x /= 6
+    println x
+
+    x %= 3
+    println x
+
+    // Compound assignment through mutable references
+    var y = 100
+    add_ten (mut y)
+    println y
+
+    // and with a non-primitive type
+    var t = T 3
+    t += T 4
+    println t.x
+
+add_ten (n: mut I32) =
+    n.* += 10
+
+type T = x: I32
+
+impl add_t: Add T with (+) a b = T (a.x + b.x)
+
+// args: --delete-binary
+// expected stdout:
+// 15
+// 12
+// 48
+// 8
+// 2
+// 110
+// 7

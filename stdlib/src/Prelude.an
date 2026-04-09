@@ -500,6 +500,7 @@ offset_bytes (ptr: Ptr t) (index: Usz): Ptr t =
     addr: Usz = transmute ptr
     transmute (addr + index)
 
+// Dereference without a Copy constraint. This is unsafe to use directly
 deref (x: ref t): t =
     intrinsic "Deref" x
 
@@ -513,7 +514,7 @@ ptr_store (p: Ptr a) (value: a): Unit =
 array_insert (p: Ptr a) (index: Usz) (value: a): Unit =
     offset p index |> ptr_store value
 
-ptr_to_ref: fn (Ptr a) -> mut a = transmute
+ptr_to_mut: fn (Ptr a) -> mut a = transmute
 
 trait Copy t with
     (.*): fn (ref t) -> t

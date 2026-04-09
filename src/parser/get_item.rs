@@ -101,7 +101,7 @@ fn desugar_impl(impl_: &TraitImpl, context: &mut DesugarContext) -> Definition {
             let env_name = context.push_name(Arc::new(format!("[env_{}]", i)), location.clone());
             let expanded_type = add_env_to_trait_type(typ, env_name, &location);
             let new_pattern = context.push_pattern(Pattern::TypeAnnotation(*inner, expanded_type), location.clone());
-            cst::Parameter { is_implicit: *is_implicit, pattern: new_pattern }
+            cst::Parameter { is_implicit: *is_implicit, is_mutable: false, pattern: new_pattern }
         })
         .collect();
 
@@ -280,6 +280,9 @@ fn collect_expressions_to_desugar(expr: ExprId, context: &DesugarContext, to_des
             let rhs = assignment.rhs;
             collect_expressions_to_desugar(assignment.lhs, context, to_desugar);
             collect_expressions_to_desugar(rhs, context, to_desugar);
+            if let Some((_, op_expr)) = assignment.op {
+                collect_expressions_to_desugar(op_expr, context, to_desugar);
+            }
         },
         Expr::Extern(_) => (),
     }
@@ -311,8 +314,15 @@ fn desugar_loop(expr: ExprId, context: &mut DesugarContext) {
                     (pattern, expr)
                 },
                 cst::LoopParameter::PatternAndExpr(pattern, expr) => (pattern, expr),
+                cst::LoopParameter::UnitLiteral(location) => {
+                    let pattern = cst::Pattern::Literal(cst::Literal::Unit);
+                    let pattern = context.push_pattern(pattern, location.clone());
+                    let expr = cst::Expr::Literal(cst::Literal::Unit);
+                    let expr = context.push_expr(expr, location.clone());
+                    (pattern, expr)
+                }
             };
-            (Parameter { is_implicit: false, pattern }, Argument::explicit(expr))
+            (Parameter { is_implicit: false, is_mutable: false, pattern }, Argument::explicit(expr))
         })
         .unzip();
 
@@ -364,7 +374,7 @@ fn desugar_call_wildcards(expr: ExprId, context: &mut DesugarContext) {
             let name_id = context.push_name(cst::Name::new(name.clone()), location.clone());
 
             let pattern = context.push_pattern(Pattern::Variable(name_id), location.clone());
-            parameters.push(Parameter { is_implicit: arg.is_implicit, pattern });
+            parameters.push(Parameter { is_implicit: arg.is_implicit, is_mutable: false, pattern });
 
             let path = cst::Path::ident(name, location.clone());
             let path_id = context.push_path(path, location.clone());

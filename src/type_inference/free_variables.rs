@@ -112,6 +112,9 @@ impl FreeVars {
             cst::Expr::Assignment(assignment) => {
                 self.find_free_variables(assignment.lhs, checker);
                 self.find_free_variables(assignment.rhs, checker);
+                if let Some((_, op_expr)) = assignment.op {
+                    self.find_free_variables(op_expr, checker);
+                }
             },
         }
     }

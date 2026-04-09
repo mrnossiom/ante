@@ -13,7 +13,7 @@ use crate::{
         Locateable, TypeChecker,
         errors::TypeErrorKind,
         get_type::try_get_partial_type,
-        types::{self, Type},
+        types::{self, FunctionType, ParameterType, Type},
     },
 };
 
@@ -166,7 +166,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 let expected_function_type = if args.is_empty() {
                     expected.clone()
                 } else {
-                    Type::Function(Arc::new(types::FunctionType {
+                    Type::Function(Arc::new(FunctionType {
                         parameters: parameters.clone(),
                         // Any type constructor we can match on shouldn't be a closure
                         environment: Type::NO_CLOSURE_ENV,
@@ -333,7 +333,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             let environment = self.next_type_variable();
             let effects = self.next_type_variable();
             let return_type = expected.clone();
-            Type::Function(Arc::new(types::FunctionType { parameters, environment, return_type, effects }))
+            Type::Function(Arc::new(FunctionType { parameters, environment, return_type, effects }))
         };
 
         self.check_expr(call.function, &expected_function_type);
@@ -426,7 +426,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 let environment = self.next_type_variable();
                 let return_type = self.next_type_variable();
                 let effects = self.next_type_variable();
-                let new_type = Arc::new(types::FunctionType { parameters, environment, return_type, effects });
+                let new_type = Arc::new(FunctionType { parameters, environment, return_type, effects });
                 let function_type = Type::Function(new_type.clone());
                 self.unify(expected, &function_type, TypeErrorKind::Lambda { expected_parameter_count }, expr);
                 new_type
@@ -531,7 +531,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     /// Returns the method's name, function type, and optional generic bindings.
     fn resolve_method_for_type(
         &mut self, struct_type: &Type, member: &str,
-    ) -> Option<(TopLevelName, Arc<types::FunctionType>, Option<Vec<Type>>)> {
+    ) -> Option<(TopLevelName, Arc<FunctionType>, Option<Vec<Type>>)> {
         let (source_file, type_top_level_id) = self.find_type_info(struct_type)?;
 
         // Only resolve methods on actual type definitions (structs/enums),
@@ -564,7 +564,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             Type::UserDefined(Origin::TopLevelDefinition(id)) => {
                 Some((id.top_level_item.source_file, id.top_level_item))
             },
-            Type::Application(constructor, _) => match self.reference_element(typ) {
+            Type::Application(constructor, _) => match typ.reference_element(&self.bindings) {
                 Some((_, element)) => self.find_type_info(&element),
                 _ => self.find_type_info(constructor),
             },
@@ -579,17 +579,18 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     ) -> Option<ExprId> {
         // If the first parameter expects a reference type, unwrap both sides
         // and auto-ref the object if needed.
-        let (param_type, struct_base, auto_ref) =
-            if let Some((ref_kind, inner_type)) = self.reference_element(first_param) {
-                let (struct_base_type, should_wrap_object_in_ref) = match self.reference_element(struct_type) {
-                    Some((_, element)) => (element, false),
-                    None => (struct_type.clone(), true),
-                };
-                let auto_ref = should_wrap_object_in_ref.then_some(ref_kind);
-                (inner_type, struct_base_type, auto_ref)
-            } else {
-                (first_param.clone(), struct_type.clone(), None)
+        let (param_type, struct_base, auto_ref) = if let Some((ref_kind, inner_type)) =
+            first_param.reference_element(&self.bindings)
+        {
+            let (struct_base_type, should_wrap_object_in_ref) = match struct_type.reference_element(&self.bindings) {
+                Some((_, element)) => (element, false),
+                None => (struct_type.clone(), true),
             };
+            let auto_ref = should_wrap_object_in_ref.then_some(ref_kind);
+            (inner_type, struct_base_type, auto_ref)
+        } else {
+            (first_param.clone(), struct_type.clone(), None)
+        };
 
         self.unify(&param_type, &struct_base, TypeErrorKind::General, call_expr);
 
@@ -748,7 +749,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
 
         // If the LHS is a reference type (e.g. `p.x` where `p: mut Point` yields `mut I32`),
         // the RHS should match the inner (pointee) type rather than the reference wrapper.
-        let rhs_type = if lhs_is_ref {
+        let value_type = if lhs_is_ref {
             match self.follow_type(&lhs_type) {
                 Type::Application(_, args) => args[0].clone(),
                 _ => unreachable!(),
@@ -756,7 +757,23 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         } else {
             lhs_type.clone()
         };
-        self.check_expr(assignment.rhs, &rhs_type);
+
+        // For compound assignments (+=, -=, etc.), resolve the operator function through
+        // implicits dispatch. The operator has type `fn value_type value_type -> value_type`.
+        if let Some((_, op_expr)) = assignment.op {
+            let expected_fn_type = Type::Function(Arc::new(FunctionType {
+                parameters: vec![
+                    ParameterType::explicit(value_type.clone()),
+                    ParameterType::explicit(value_type.clone()),
+                ],
+                environment: self.next_type_variable(),
+                return_type: value_type.clone(),
+                effects: self.next_type_variable(),
+            }));
+            self.check_expr(op_expr, &expected_fn_type);
+        }
+
+        self.check_expr(assignment.rhs, &value_type);
         self.unify(&Type::UNIT, expected, TypeErrorKind::General, id);
     }
 

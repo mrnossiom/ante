@@ -5,17 +5,20 @@ puts = extern "puts": fn (Ptr Char) -> I32
 putchar = extern "putchar": fn Char -> Unit
 getchar = extern "getchar": fn Unit -> I32
 exit = extern "exit": fn I32 -> Unit
-malloc: fn Usz -> Ptr a = extern "malloc"
 system = extern "system": fn (Ptr Char) -> I32
 strlen = extern "strlen": fn (Ptr Char) -> Usz
 
 // The compiler doesn't have checks for generic externs yet
 // `Ptr U8` is used here as a stand-in for void pointer.
+malloc_: fn /*size:*/Usz -> Ptr U8 = extern "malloc"
 calloc_: fn /*items:*/Usz /*size:*/Usz -> Ptr U8 = extern "calloc"
 realloc_: fn (Ptr U8) Usz -> Ptr U8 = extern "realloc"
 free_: fn (Ptr U8) -> Unit = extern "free"
 memcpy_: fn (Ptr U8) (Ptr U8) Usz -> Ptr U8 = extern "memcpy"
 memcmp_: fn (Ptr U8) (Ptr U8) Usz -> I32 = extern "memcmp"
+
+malloc (size: Usz): Ptr a =
+    transmute (malloc_ size)
 
 calloc (items: Usz) (size: Usz): Ptr a =
     transmute (calloc_ items size)

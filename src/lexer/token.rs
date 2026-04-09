@@ -234,6 +234,11 @@ pub enum Token {
     // Operators
     Equal,              // =
     Assignment,         // :=
+    AddAssign,          // +=
+    SubAssign,          // -=
+    MulAssign,          // *=
+    DivAssign,          // /=
+    ModAssign,          // %=
     EqualEqual,         // ==
     NotEqual,           // !=
     Range,              // ...
@@ -440,6 +445,11 @@ impl Display for Token {
             // Operators
             Token::Equal => write!(f, "="),
             Token::Assignment => write!(f, ":="),
+            Token::AddAssign => write!(f, "+="),
+            Token::SubAssign => write!(f, "-="),
+            Token::MulAssign => write!(f, "*="),
+            Token::DivAssign => write!(f, "/="),
+            Token::ModAssign => write!(f, "%="),
             Token::EqualEqual => write!(f, "=="),
             Token::NotEqual => write!(f, "!="),
             Token::Range => write!(f, ".."),

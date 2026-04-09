@@ -562,6 +562,10 @@ impl<'contents> Iterator for Lexer<'contents> {
                 self.advance2_with(Token::Interpolate)
             },
             ('\'', _) => self.lex_quoted(),
+            ('/', '=') => {
+                self.previous_token_expects_indent = true;
+                self.advance2_with(Token::DivAssign)
+            },
             ('/', '/') => self.lex_singleline_comment(),
             ('/', '*') => self.lex_multiline_comment(),
             ('=', '=') => self.advance2_with(Token::EqualEqual),
@@ -575,6 +579,10 @@ impl<'contents> Iterator for Lexer<'contents> {
                 self.previous_token_expects_indent = true;
                 self.advance_with(Token::Equal)
             },
+            ('-', '=') => {
+                self.previous_token_expects_indent = true;
+                self.advance2_with(Token::SubAssign)
+            },
             ('-', '>') => {
                 self.previous_token_expects_indent = true;
                 self.advance2_with(Token::RightArrow)
@@ -586,12 +594,24 @@ impl<'contents> Iterator for Lexer<'contents> {
             ('!', '=') => self.advance2_with(Token::NotEqual),
             ('<', '|') => self.advance2_with(Token::ApplyLeft),
             ('|', '>') => self.advance2_with(Token::ApplyRight),
+            ('+', '=') => {
+                self.previous_token_expects_indent = true;
+                self.advance2_with(Token::AddAssign)
+            },
             ('+', '+') => self.advance2_with(Token::Append),
             ('(', ')') => self.advance2_with(Token::UnitLiteral),
             ('<', '=') => self.advance2_with(Token::LessThanOrEqual),
             ('>', '=') => self.advance2_with(Token::GreaterThanOrEqual),
+            ('%', '=') => {
+                self.previous_token_expects_indent = true;
+                self.advance2_with(Token::ModAssign)
+            },
             ('%', '%') => self.advance2_with(Token::Divides),
             ('%', _) => self.advance_with(Token::Modulus),
+            ('*', '=') => {
+                self.previous_token_expects_indent = true;
+                self.advance2_with(Token::MulAssign)
+            },
             ('*', _) => self.advance_with(Token::Multiply),
             ('(', _) => {
                 self.open_braces.parenthesis += 1;

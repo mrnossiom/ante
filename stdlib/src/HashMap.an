@@ -110,7 +110,7 @@ HashMap.remove (map: mut HashMap k v) (key: k) {Hash k} {Eq k} : Maybe v =
     match map.get_entry key
     | None -> None
     | Some e2 ->
-        entry = ptr_to_ref e2 : mut Entry k v
+        entry = ptr_to_mut e2
         entry.occupied := false
         entry.tombstone := true
         map.len := map.len.* - 1

@@ -364,6 +364,7 @@ pub struct Lambda {
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Parameter {
     pub is_implicit: bool,
+    pub is_mutable: bool,
     pub pattern: PatternId,
 }
 
@@ -408,11 +409,24 @@ pub struct Return {
     pub expression: ExprId,
 }
 
-/// `lhs := rhs`
+/// The binary operator in a compound assignment (e.g. `+` in `+=`).
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Copy, Clone)]
+pub enum CompoundAssignOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+}
+
+/// `lhs := rhs` or `lhs += rhs` etc.
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
 pub struct Assignment {
     pub lhs: ExprId,
     pub rhs: ExprId,
+    /// For compound assignments (+=, -=, etc.): the operator kind and a synthetic
+    /// Variable expression for the operator function, resolved via normal trait dispatch.
+    pub op: Option<(CompoundAssignOp, ExprId)>,
 }
 
 /// Sugar for an immediately invoked helper function: `loop x (i = 0) -> ...`
@@ -430,6 +444,7 @@ pub struct Loop {
 pub enum LoopParameter {
     Variable(NameId),
     PatternAndExpr(PatternId, ExprId),
+    UnitLiteral(Location),
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]

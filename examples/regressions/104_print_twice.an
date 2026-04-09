@@ -1,43 +1,18 @@
-import HashMap
+import Std.HashMap
+import Std.HashMap.Hash, print_hashmap
 
 impl hash_u8: Hash U8 with
-    hash x = cast x
+    hash x = U64 x
 
-var map = empty ()
-insert (mut map) 1u8 3u16
+main () =
+    var map = HashMap.empty ()
+    map.insert 1u8 3u16
 
-print map
-print map
+    println map
+    println map
 
 // args: --delete-binary
-// expected exit status: 1
-// expected stderr:
-// examples/regressions/104_print_twice.an:1:1	error: This program has no `main` function
-// import HashMap
-// 
-// examples/regressions/104_print_twice.an:1:8	error: Imports paths should have at least 2 components (e.g. `Foo.Bar`), otherwise nothing gets imported
-// import HashMap
-// 
-// examples/regressions/104_print_twice.an:3:0	error: Expected a top-level item but found a newline
-// impl hash_u8: Hash U8 with
-// 
-// examples/regressions/104_print_twice.an:3:14	error: `Hash` not found in scope
-// impl hash_u8: Hash U8 with
-// 
-// examples/regressions/104_print_twice.an:4:13	error: Multiple matching implicits found for type Cast _ _ required by parameter 2: cast_char_i32, cast_char_u64, cast_f32_f64, cast_f32_i16, cast_f32_i32, ..
-//     hash x = cast x
-// 
-// examples/regressions/104_print_twice.an:6:0	error: Expected a top-level item but found `var`
-// var map = empty ()
-// 
-// examples/regressions/104_print_twice.an:7:7	error: Expected `=` to begin the function body but found `(`
-// insert (mut map) 1u8 3u16
-// 
-// examples/regressions/104_print_twice.an:9:6	error: Expected `=` to begin the function body but found `map`
-// print map
-// 
-// examples/regressions/104_print_twice.an:10:6	error: Expected `=` to begin the function body but found `map`
-// print map
-// 
-// Found 9 errors and 0 warnings
+// expected stdout:
+// [1 -> 3]
+// [1 -> 3]
 

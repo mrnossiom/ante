@@ -552,6 +552,9 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
                 // Mutability of the lhs is left to the type checker to check
                 self.resolve_expr(assignment.lhs);
                 self.resolve_expr(assignment.rhs);
+                if let Some((_, op_expr)) = assignment.op {
+                    self.resolve_expr(op_expr);
+                }
             },
             Expr::Error => (),
             Expr::Extern(_) => (),

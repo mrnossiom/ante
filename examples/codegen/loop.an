@@ -1,10 +1,5 @@
 main () =
-    start = 10
-    seq_sum = loop start (sum = 0) ->
-        if start == 0 then sum
-        else recur (start - 1) (sum + start)
-
-    println seq_sum
+    println (sum_up_to 10)
 
     loop (collatz = 7) ->
         if collatz == 1 then 
@@ -21,6 +16,13 @@ main () =
         print t
         if s == 3 then return ()
         else recur (s + 1) (t + 1)
+
+    loop () -> if false then recur ()
+
+sum_up_to n =
+    loop n (total = 0) ->
+        if n <= 0 then total
+        else recur (n - 1) (total + n)
 
 // args: --delete-binary
 // expected stdout:

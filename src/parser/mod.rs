@@ -1110,16 +1110,31 @@ impl<'tokens> Parser<'tokens> {
     }
 
     /// function_parameter: implicit_function_parameter
+    ///                   | '(' 'var' pattern ')'
     ///                   | function_parameter_pattern
     fn parse_function_parameter(&mut self) -> Result<Parameter> {
-        let (implicit, pattern) = if *self.current_token() == Token::BraceLeft {
+        if *self.current_token() == Token::BraceLeft {
             let pattern = self.parse_implicit_function_parameter()?;
-            (true, pattern)
+            Ok(Parameter { is_implicit: true, is_mutable: false, pattern })
+        } else if *self.current_token() == Token::ParenthesisLeft
+            && self.peek_next_token() == &Token::Var
+        {
+            let pattern = self.with_pattern_id_and_location(|this| {
+                this.advance(); // consume `(`
+                this.advance(); // consume `var`
+                let pattern = this.parse_with_recovery(
+                    Self::parse_pattern_inner,
+                    Token::ParenthesisRight,
+                    &[Token::Newline, Token::Equal],
+                )?;
+                this.expect(Token::ParenthesisRight, "a `)` to close the opening `(` from the var parameter")?;
+                Ok(pattern)
+            })?;
+            Ok(Parameter { is_implicit: false, is_mutable: true, pattern })
         } else {
-            (false, self.parse_function_parameter_pattern()?)
-        };
-
-        Ok(Parameter { is_implicit: implicit, pattern })
+            let pattern = self.parse_function_parameter_pattern()?;
+            Ok(Parameter { is_implicit: false, is_mutable: false, pattern })
+        }
     }
 
     /// implicit_function_parameter: '{' type '}'
@@ -1584,6 +1599,11 @@ impl<'tokens> Parser<'tokens> {
                 self.expect(Token::ParenthesisRight, "`)` to close the opening `(` of this loop parameter")?;
                 Ok(LoopParameter::PatternAndExpr(pattern, expr))
             },
+            Token::UnitLiteral => {
+                let location = self.current_token_location();
+                self.advance();
+                Ok(LoopParameter::UnitLiteral(location))
+            }
             _ => self.expected("an identifier or `(` to begin a loop parameter"),
         }
     }
@@ -1656,14 +1676,40 @@ impl<'tokens> Parser<'tokens> {
 
         let expression = self.parse_expression()?;
 
-        // Try to parse an assignment
+        // Try to parse a compound assignment (+=, -=, *=, /=, %=)
+        if let Some((op, op_str)) = self.try_accept_compound_assign_op() {
+            let rhs = self.parse_expression()?;
+            let location = self.expr_location(expression).to(&self.expr_location(rhs));
+
+            // Create a synthetic Variable expression for the operator function (e.g., "+")
+            // so it goes through normal name resolution and trait dispatch.
+            let op_location = location.clone();
+            let components = vec![(op_str.to_string(), op_location.clone())];
+            let path_id = self.push_path(cst::Path { components }, op_location.clone());
+            let op_expr = self.push_expr(Expr::Variable(path_id), op_location);
+
+            let assignment = cst::Assignment { lhs: expression, rhs, op: Some((op, op_expr)) };
+            return Ok(self.push_expr(Expr::Assignment(assignment), location));
+        }
+
+        // Try to parse a regular assignment (:=)
         if self.accept(Token::Assignment) {
             let rhs = self.parse_expression()?;
             let location = self.expr_location(expression).to(&self.expr_location(rhs));
-            Ok(self.push_expr(Expr::Assignment(cst::Assignment { lhs: expression, rhs }), location))
+            Ok(self.push_expr(Expr::Assignment(cst::Assignment { lhs: expression, rhs, op: None }), location))
         } else {
             Ok(expression)
         }
+    }
+
+    fn try_accept_compound_assign_op(&mut self) -> Option<(cst::CompoundAssignOp, &'static str)> {
+        use cst::CompoundAssignOp;
+        if self.accept(Token::AddAssign) { Some((CompoundAssignOp::Add, "+")) }
+        else if self.accept(Token::SubAssign) { Some((CompoundAssignOp::Sub, "-")) }
+        else if self.accept(Token::MulAssign) { Some((CompoundAssignOp::Mul, "*")) }
+        else if self.accept(Token::DivAssign) { Some((CompoundAssignOp::Div, "/")) }
+        else if self.accept(Token::ModAssign) { Some((CompoundAssignOp::Mod, "%")) }
+        else { None }
     }
 
     fn with_expr_id(&mut self, f: impl FnOnce(&mut Self) -> Result<(Expr, Location)>) -> Result<ExprId> {

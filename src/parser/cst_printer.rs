@@ -21,7 +21,7 @@ use crate::{
 use super::{
     TopLevelContext,
     cst::{
-        Call, Comptime, Cst, Declaration, Definition, EffectDefinition, EffectType, Expr, Extern, FunctionType, Handle,
+        Call, CompoundAssignOp, Comptime, Cst, Declaration, Definition, EffectDefinition, EffectType, Expr, Extern, FunctionType, Handle,
         HandlePattern, If, Import, Lambda, Literal, Match, MemberAccess, Parameter, Path, Pattern, Quoted, Reference,
         SequenceItem, TopLevelItem, TraitDefinition, TraitImpl, Type, TypeAnnotation, TypeDefinition,
         TypeDefinitionBody, TypeKind,
@@ -643,7 +643,14 @@ impl<'a> CstDisplay<'a> {
             },
             Expr::Assignment(assignment) => {
                 self.fmt_expr(assignment.lhs, context, f)?;
-                write!(f, " := ")?;
+                match &assignment.op {
+                    Some((CompoundAssignOp::Add, _)) => write!(f, " += ")?,
+                    Some((CompoundAssignOp::Sub, _)) => write!(f, " -= ")?,
+                    Some((CompoundAssignOp::Mul, _)) => write!(f, " *= ")?,
+                    Some((CompoundAssignOp::Div, _)) => write!(f, " /= ")?,
+                    Some((CompoundAssignOp::Mod, _)) => write!(f, " %= ")?,
+                    None => write!(f, " := ")?,
+                }
                 self.fmt_expr(assignment.rhs, context, f)
             },
             Expr::Extern(extern_) => self.fmt_extern(extern_, f),
@@ -1102,6 +1109,10 @@ impl<'a> CstDisplay<'a> {
                 write!(f, "{{")?;
                 self.fmt_pattern(parameter.pattern, context, f)?;
                 write!(f, "}}")?;
+            } else if parameter.is_mutable {
+                write!(f, "(var ")?;
+                self.fmt_pattern(parameter.pattern, context, f)?;
+                write!(f, ")")?;
             } else if self.is_pattern_atom(parameter.pattern, context) {
                 self.fmt_pattern(parameter.pattern, context, f)?;
             } else {
@@ -1186,6 +1197,7 @@ impl<'a> CstDisplay<'a> {
                     self.fmt_expr(*expr, context, f)?;
                     write!(f, ")")?;
                 },
+                LoopParameter::UnitLiteral(_) => write!(f, "()")?,
             }
         }
 

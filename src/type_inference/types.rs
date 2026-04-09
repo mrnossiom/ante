@@ -627,6 +627,26 @@ impl Type {
             _ => None,
         }
     }
+
+    /// `Some(kind)` if the passed type is a reference type constructor.
+    /// Note that this returns `None` for `Application(Reference, _)`,
+    /// it is only `Some` for references directly.
+    fn reference_constructor(&self, bindings: &TypeBindings) -> Option<ReferenceKind> {
+        match self.follow(bindings) {
+            Type::Primitive(PrimitiveType::Reference(kind)) => Some(*kind),
+            _ => None,
+        }
+    }
+
+    /// If this is a reference type, return the reference kind and its element type
+    pub fn reference_element(&self, bindings: &TypeBindings) -> Option<(ReferenceKind, Type)> {
+        match self.follow(bindings) {
+            Type::Application(constructor, args) if !args.is_empty() => {
+                constructor.reference_constructor(bindings).map(|kind| (kind, args[0].clone()))
+            },
+            _ => None,
+        }
+    }
 }
 
 pub struct TypePrinter<'a, Db, Names> {

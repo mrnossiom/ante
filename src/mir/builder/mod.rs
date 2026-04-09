@@ -262,7 +262,7 @@ where
             cst::Expr::Quoted(quoted) => self.quoted(quoted),
             cst::Expr::Loop(_) => unreachable!("Loops should be desugared before MIR generation"),
             cst::Expr::Return(return_) => self.return_(return_.expression),
-            cst::Expr::Assignment(assignment) => self.assignment(assignment.lhs, assignment.rhs),
+            cst::Expr::Assignment(assignment) => self.assignment(assignment),
             cst::Expr::Extern(extern_) => self.extern_(extern_, expr),
         }
     }
@@ -541,6 +541,14 @@ where
 
                 let parameter_value = Value::Parameter(this.current_block, i as u32);
                 this.bind_pattern(parameter.pattern, parameter_value);
+
+                if parameter.is_mutable {
+                    if let Some((_, name_id)) = this.try_find_name(parameter.pattern) {
+                        let alloc = this.push_instruction(Instruction::StackAlloc(parameter_value), Type::POINTER);
+                        this.local_variables.insert(name_id, alloc);
+                        this.mutable_locals.insert(name_id);
+                    }
+                }
             }
 
             if let Some(free_vars) = this.context().get_closure_environment(expr) {
@@ -885,11 +893,41 @@ where
         }
     }
 
-    fn assignment(&mut self, lhs: ExprId, rhs: ExprId) -> Value {
-        let pointer = self.lhs_as_pointer(lhs);
-        let value = self.expression(rhs);
+    fn assignment(&mut self, assignment: &cst::Assignment) -> Value {
+        let pointer = self.lhs_as_pointer(assignment.lhs);
+
+        let value = if let Some((_, op_expr)) = assignment.op {
+            // Compound assignment: load current value, apply operator, then store.
+            // The LHS is evaluated only once via lhs_as_pointer above.
+            let value_type = self.compound_assign_value_type(assignment.lhs);
+            let current = self.push_instruction(Instruction::Deref(pointer), value_type.clone());
+            let rhs = self.expression(assignment.rhs);
+
+            // Resolve the operator function through normal trait dispatch
+            let function = self.expression(op_expr);
+            let instruction = if self.type_of_value(&function).is_closure() {
+                Instruction::CallClosure { closure: function, arguments: vec![current, rhs] }
+            } else {
+                Instruction::Call { function, arguments: vec![current, rhs] }
+            };
+            self.push_instruction(instruction, value_type)
+        } else {
+            self.expression(assignment.rhs)
+        };
+
         self.push_instruction(Instruction::Store { pointer, value }, Type::UNIT);
         Value::Unit
+    }
+
+    /// Get the value type for the LHS of a compound assignment.
+    /// If the LHS has a reference type, returns the inner element type.
+    fn compound_assign_value_type(&self, lhs: ExprId) -> Type {
+        let lhs_type = &self.types.result.maps.expr_types[&lhs];
+
+        match lhs_type.reference_element(&self.types.bindings) {
+            Some((_, element)) => self.convert_type(&element, None),
+            None => self.convert_type(&lhs_type, None),
+        }
     }
 
     fn constructor(&mut self, constructor: &cst::Constructor, expr: ExprId) -> Value {

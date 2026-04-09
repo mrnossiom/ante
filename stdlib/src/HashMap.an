@@ -18,23 +18,23 @@ trait Hash t with
 HashMap.empty () = HashMap 0 0 (null ())
  
 HashMap.clear (map: mut HashMap k v) : Unit =
-    if map.capacity.* != 0 then
-        repeat map.capacity.* fn i ->
-            var entry = deref_ptr <| offset map.entries.* i
+    if map.capacity != 0 then
+        repeat map.capacity fn i ->
+            var entry = deref_ptr <| offset map.entries i
             entry.occupied := false
             entry.tombstone := false
 
 HashMap.resize (map: mut HashMap k v) (new_capacity: Usz) {Hash k} : Unit =
-    if new_capacity > map.capacity.* then
+    if new_capacity > map.capacity then
         new_memory = calloc new_capacity (size_of (MkType : Type (Entry k v)))
 
         if new_memory == null () then
             panic "Ran out of memory while resizing HashMap"
 
-        var new_map = HashMap (map.len.*) new_capacity new_memory
+        var new_map = HashMap map.len new_capacity new_memory
 
-        repeat map.capacity.* fn i ->
-            entry: Entry k v = deref_ptr <| offset map.entries.* i
+        repeat map.capacity fn i ->
+            entry: Entry k v = deref_ptr <| offset map.entries i
             if entry.occupied then
                 new_map.insert entry.key entry.value
 
@@ -44,31 +44,31 @@ HashMap.resize (map: mut HashMap k v) (new_capacity: Usz) {Hash k} : Unit =
 // Should we resize this map when pushing another element?
 HashMap.should_resize (map: ref HashMap k v) : Bool =
     scale_factor = 2
-    (map.len.* + 1) * scale_factor > map.capacity.*
+    (map.len + 1) * scale_factor > map.capacity
 
 HashMap.insert (map: mut HashMap k v) (key: k) (value: v) {Hash k} : Unit =
     if map.should_resize () then
-        map.resize ((map.capacity.* + 1) * 2)
+        map.resize ((map.capacity + 1) * 2)
 
     iter_until (map: mut HashMap k v) (key: k) (value: v) (start: Usz) (end: Usz) : Bool =
         if start >= end then
             false
         else
-            entry_ptr = offset (map.entries.*) start
+            entry_ptr = offset map.entries start
             entry = transmute entry_ptr : mut Entry k v
-            if entry.occupied.* then
+            if entry.occupied then
                 iter_until map key value (start + 1) end
             else
                 entry := Entry key value true false
                 true
 
-    h = Usz (Hash.hash key) % map.capacity.*
+    h = Usz (Hash.hash key) % map.capacity
 
-    if not iter_until map key value h (map.capacity.*) then
+    if not iter_until map key value h map.capacity then
         if not iter_until map key value 0 h then
             panic "Failed to insert entry into map"
 
-    map.len := map.len.* + 1usz
+    map.len := map.len + 1usz
 
 // TODO: Name resolution issue preventing this from being visible to iter_until
 // if it is defined within get_entry
@@ -92,8 +92,8 @@ HashMap.get_entry (map: ref HashMap k v) (key: k) {Hash k} {Eq k} : Maybe (Ptr (
             else
                 NotFound
 
-    h = Usz (Hash.hash key) % map.capacity.*
-    match iter_until h map.capacity.*
+    h = Usz (Hash.hash key) % map.capacity
+    match iter_until h map.capacity
     | Found value -> Some value
     | NotFound -> None
     | NotFinished ->
@@ -113,7 +113,7 @@ HashMap.remove (map: mut HashMap k v) (key: k) {Hash k} {Eq k} : Maybe v =
         entry = ptr_to_mut e2
         entry.occupied := false
         entry.tombstone := true
-        map.len := map.len.* - 1
+        map.len := map.len - 1
         Some (deref entry.value)
 
 impl print_hashmap {Print k} {Print v}: Print (HashMap k v) with

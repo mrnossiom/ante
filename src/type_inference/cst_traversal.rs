@@ -509,12 +509,29 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
 
         let fields = self.get_field_types(&struct_type, None);
         if let Some((field, field_index)) = fields.get(&member_access.member) {
-            self.current_extended_context_mut().push_member_access_index(expr, *field_index);
+            let field = field.clone();
+            let field_index = *field_index;
+            self.current_extended_context_mut().push_member_access_index(expr, field_index);
 
-            if self.try_coercion(field, expected, expr) {
+            // If the struct is a reference, field types are wrapped in the same reference.
+            // Auto-deref the field unless the expected type is known to be a reference.
+            let struct_is_ref = struct_type.reference_element(&self.bindings).is_some();
+            let expected_is_ref = expected.reference_element(&self.bindings).is_some();
+
+            if struct_is_ref && !expected_is_ref {
+                if let Some((_, inner_field_type)) = field.reference_element(&self.bindings) {
+                    self.unify(&inner_field_type, expected, TypeErrorKind::General, expr);
+                    let new_expr = self.auto_deref_coercion(expr, inner_field_type);
+                    self.current_extended_context_mut().insert_expr(expr, new_expr);
+                    self.check_expr(expr, expected);
+                    return;
+                }
+            }
+
+            if self.try_coercion(&field, expected, expr) {
                 self.check_expr(expr, expected);
             } else {
-                self.unify(field, expected, TypeErrorKind::General, expr);
+                self.unify(&field, expected, TypeErrorKind::General, expr);
             }
         } else if matches!(self.follow_type(&struct_type), Type::Variable(_)) {
             let location = self.current_context().expr_location(expr).clone();

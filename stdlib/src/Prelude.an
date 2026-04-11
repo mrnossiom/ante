@@ -538,6 +538,9 @@ impl copy_u32: Copy U32 with (.*) = deref
 impl copy_u64: Copy U64 with (.*) = deref
 impl copy_usz: Copy Usz with (.*) = deref
 
+impl copy_f32: Copy F32 with (.*) = deref
+impl copy_f64: Copy F64 with (.*) = deref
+
 impl copy_unit: Copy Unit with (.*) = deref
 impl copy_bool: Copy Bool with (.*) = deref
 impl copy_char: Copy Char with (.*) = deref
@@ -546,6 +549,9 @@ impl copy_ptr: Copy (Ptr t) with (.*) = deref
 impl copy_ref: Copy (ref t) with (.*) = deref
 impl copy_mut: Copy (mut t) with (.*) = deref
 impl copy_imm: Copy (imm t) with (.*) = deref
+
+// TODO: Strings should be reference counted
+impl copy_string: Copy String with (.*) = deref
 
 null (): Ptr a = transmute 0usz
 

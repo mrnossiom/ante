@@ -1116,9 +1116,7 @@ impl<'tokens> Parser<'tokens> {
         if *self.current_token() == Token::BraceLeft {
             let pattern = self.parse_implicit_function_parameter()?;
             Ok(Parameter { is_implicit: true, is_mutable: false, pattern })
-        } else if *self.current_token() == Token::ParenthesisLeft
-            && self.peek_next_token() == &Token::Var
-        {
+        } else if *self.current_token() == Token::ParenthesisLeft && self.peek_next_token() == &Token::Var {
             let pattern = self.with_pattern_id_and_location(|this| {
                 this.advance(); // consume `(`
                 this.advance(); // consume `var`
@@ -1603,7 +1601,7 @@ impl<'tokens> Parser<'tokens> {
                 let location = self.current_token_location();
                 self.advance();
                 Ok(LoopParameter::UnitLiteral(location))
-            }
+            },
             _ => self.expected("an identifier or `(` to begin a loop parameter"),
         }
     }
@@ -1704,12 +1702,19 @@ impl<'tokens> Parser<'tokens> {
 
     fn try_accept_compound_assign_op(&mut self) -> Option<(cst::CompoundAssignOp, &'static str)> {
         use cst::CompoundAssignOp;
-        if self.accept(Token::AddAssign) { Some((CompoundAssignOp::Add, "+")) }
-        else if self.accept(Token::SubAssign) { Some((CompoundAssignOp::Sub, "-")) }
-        else if self.accept(Token::MulAssign) { Some((CompoundAssignOp::Mul, "*")) }
-        else if self.accept(Token::DivAssign) { Some((CompoundAssignOp::Div, "/")) }
-        else if self.accept(Token::ModAssign) { Some((CompoundAssignOp::Mod, "%")) }
-        else { None }
+        if self.accept(Token::AddAssign) {
+            Some((CompoundAssignOp::Add, "+"))
+        } else if self.accept(Token::SubAssign) {
+            Some((CompoundAssignOp::Sub, "-"))
+        } else if self.accept(Token::MulAssign) {
+            Some((CompoundAssignOp::Mul, "*"))
+        } else if self.accept(Token::DivAssign) {
+            Some((CompoundAssignOp::Div, "/"))
+        } else if self.accept(Token::ModAssign) {
+            Some((CompoundAssignOp::Mod, "%"))
+        } else {
+            None
+        }
     }
 
     fn with_expr_id(&mut self, f: impl FnOnce(&mut Self) -> Result<(Expr, Location)>) -> Result<ExprId> {

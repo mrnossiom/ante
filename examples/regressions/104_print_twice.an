@@ -8,8 +8,8 @@ main () =
     var map = HashMap.empty ()
     map.insert 1u8 3u16
 
-    println map
-    println map
+    println (ref map)
+    println (ref map)
 
 // args: --delete-binary
 // expected stdout:

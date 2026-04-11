@@ -1,7 +1,7 @@
 // A nonCopy type for testing affine semantics
 type Resource = id: I32
 
-consume (r: Resource) : Unit = ()
+consume _ = ()
 
 // NonCopy type used twice should error on the first (nonlast) use 
 use_twice () =
@@ -73,3 +73,27 @@ decompose_fields () =
 main () = ()
 
 // args: --check
+// expected exit status: 1
+// expected stderr:
+// examples/typechecking/affine.an:10:12	error: Use of moved value r
+//     consume r
+// examples/typechecking/affine.an:9:12	note: r was previously moved here
+//     consume r
+// 
+// examples/typechecking/affine.an:37:17	error: Use of moved value r
+//     then consume r
+// examples/typechecking/affine.an:35:12	note: r was previously moved here
+//     consume r
+// 
+// examples/typechecking/affine.an:57:15	error: Use of moved value r
+//     take_two r r
+// examples/typechecking/affine.an:57:13	note: r was previously moved here
+//     take_two r r
+// 
+// examples/typechecking/affine.an:71:13	error: Use of moved value c.two.two
+//     _ = c.two.two // error: `c.two` already moved
+// examples/typechecking/affine.an:70:9	note: c.two.two was previously moved here
+//     _ = c.two
+// 
+// Found 4 errors and 0 warnings
+

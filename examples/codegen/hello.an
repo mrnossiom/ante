@@ -1,7 +1,7 @@
-import Std.C.puts
+import Std.C
 
 main () =
-    puts "Hello, World!\0".data
+    C.puts (C.String "Hello, World!\0".data)
     ()
 
 // args: --delete-binary

@@ -106,8 +106,9 @@ Vec.remove_all (v: mut Vec t) (elem: t) {Eq t} : Usz =
         if elem == v.data.[i] then
             idxs.push i
 
+    count = idxs.len
     v.remove_indices idxs
-    idxs.len
+    count
 
 
 //Remove an element by swapping it with the last element in O(1) time.
@@ -135,13 +136,13 @@ Vec.swap_last (v: mut Vec t) (idx: Usz) : Bool =
 //     has_next v = v.idx < v.len
 // 
 // 
-impl print_vec {p: Print t}: Print (Vec t) with
+impl print_vec {p: Print t}: Print (ref Vec t) with
     print v =
         print "["
         print_helper v 0 {p}
         print "]"
 
-print_helper (v: Vec q) (i: Usz) {Print q} : Unit =
+print_helper (v: ref Vec q) (i: Usz) {Print q} : Unit =
     if i < v.len then
         // TODO: This fails to find the correct impl without
         // this type annotation

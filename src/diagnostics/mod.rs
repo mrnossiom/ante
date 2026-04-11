@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, collections::BTreeSet, path::PathBuf, sync::Arc};
+use std::{cmp::Ordering, collections::BTreeSet, fmt::Formatter, path::PathBuf, sync::Arc};
 
 use colored::{ColoredString, Colorize};
 use serde::{Deserialize, Serialize};
@@ -195,6 +195,11 @@ pub enum Diagnostic {
     },
     MutatedCapturedVariable {
         location: Location,
+    },
+    UseOfMovedValue {
+        name: String,
+        location: Location,
+        moved_in: Location,
     },
 }
 
@@ -428,6 +433,9 @@ impl Diagnostic {
             Diagnostic::MutatedCapturedVariable { location: _ } => {
                 "Cannot mutate a captured variable because closures capture by value. Consider capturing a mutable reference instead".to_string()
             },
+            Diagnostic::UseOfMovedValue { name, location: _, moved_in: _ } => {
+                format!("Use of moved value {}", name.purple())
+            },
         }
     }
 
@@ -474,25 +482,19 @@ impl Diagnostic {
             | Diagnostic::TypeAnnotationNeeded { location, .. }
             | Diagnostic::NotAType { location, .. }
             | Diagnostic::MutatedCapturedVariable { location }
+            | Diagnostic::UseOfMovedValue { location, .. }
             | Diagnostic::NoMainFunction { location } => location,
         }
     }
 
-    fn marker(&self, show_color: bool) -> ColoredString {
-        match self.kind() {
-            DiagnosticKind::Error => self.color("error:", show_color),
-            DiagnosticKind::Warning => self.color("warning:", show_color),
-            DiagnosticKind::Note => self.color("note:", show_color),
-        }
-    }
-
-    /// Color the given string in either the error, warning, or note color
-    fn color(&self, msg: &str, show_color: bool) -> ColoredString {
-        match (show_color, self.kind()) {
-            (false, _) => msg.normal(),
-            (_, DiagnosticKind::Error) => msg.red(),
-            (_, DiagnosticKind::Warning) => msg.yellow(),
-            (_, DiagnosticKind::Note) => msg.purple(),
+    /// An optional secondary message for additional information
+    fn note(&self) -> Option<(&Location, String)> {
+        match self {
+            Diagnostic::UseOfMovedValue { name, location: _, moved_in } => {
+                let message = format!("{} was previously moved here", name.purple());
+                Some((moved_in, message))
+            },
+            _ => None,
         }
     }
 
@@ -500,10 +502,19 @@ impl Diagnostic {
         DiagnosticDisplay { diagnostic: self, compiler, show_color }
     }
 
-    fn format(&self, f: &mut std::fmt::Formatter, show_color: bool, compiler: &Db) -> std::fmt::Result {
-        let location = self.location();
-        let start = location.span.start;
+    fn format(&self, f: &mut Formatter, show_color: bool, compiler: &Db) -> std::fmt::Result {
+        Self::format_message_and_location(self.message(), self.location(), self.kind(), f, show_color, compiler)?;
 
+        if let Some((location, note)) = self.note() {
+            Self::format_message_and_location(note, location, DiagnosticKind::Note, f, show_color, compiler)?;
+        }
+        Ok(())
+    }
+
+    fn format_message_and_location(
+        message: String, location: &Location, kind: DiagnosticKind, f: &mut Formatter, show_color: bool, compiler: &Db,
+    ) -> std::fmt::Result {
+        let start = location.span.start;
         let file = location.file_id.get(compiler);
         let relative_path = os_agnostic_display_path(&file.path, show_color);
 
@@ -513,8 +524,8 @@ impl Diagnostic {
             relative_path,
             start.line_number,
             start.column_number,
-            self.marker(show_color),
-            self.message()
+            kind.marker(show_color),
+            message
         )?;
 
         let line = file.contents.lines().nth(start.line_number.max(1) as usize - 1).unwrap_or("");
@@ -527,7 +538,7 @@ impl Diagnostic {
 
         // write the first part of the line, then the erroring part in red, then the rest
         write!(f, "{}", &line[0..start_column])?;
-        write!(f, "{}", self.color(&line[start_column..start_column + length], show_color))?;
+        write!(f, "{}", kind.color(&line[start_column..start_column + length], show_color))?;
         writeln!(f, "{}", &line[start_column + length..])?;
 
         // If we're not printing in color, print a `^^^` indicator to show where the error is.
@@ -546,6 +557,26 @@ pub enum DiagnosticKind {
     Warning,
     #[allow(unused)]
     Note,
+}
+
+impl DiagnosticKind {
+    fn marker(self, show_color: bool) -> ColoredString {
+        match self {
+            DiagnosticKind::Error => self.color("error:", show_color),
+            DiagnosticKind::Warning => self.color("warning:", show_color),
+            DiagnosticKind::Note => self.color("note:", show_color),
+        }
+    }
+
+    /// Color the given string in either the error, warning, or note color
+    fn color(self, msg: &str, show_color: bool) -> ColoredString {
+        match (show_color, self) {
+            (false, _) => msg.normal(),
+            (_, DiagnosticKind::Error) => msg.red(),
+            (_, DiagnosticKind::Warning) => msg.yellow(),
+            (_, DiagnosticKind::Note) => msg.purple(),
+        }
+    }
 }
 
 /// Format the path in an OS-agnostic way. By default rust uses "/" on Unix

@@ -1,6 +1,6 @@
 import Std.C.puts
 
-show (x: String) = puts x.data
+show (x: String) = puts (Std.C.String x.data)
 
 main () =
     match Maybe.Some (Maybe.Some 3)

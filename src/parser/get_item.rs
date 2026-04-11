@@ -320,7 +320,7 @@ fn desugar_loop(expr: ExprId, context: &mut DesugarContext) {
                     let expr = cst::Expr::Literal(cst::Literal::Unit);
                     let expr = context.push_expr(expr, location.clone());
                     (pattern, expr)
-                }
+                },
             };
             (Parameter { is_implicit: false, is_mutable: false, pattern }, Argument::explicit(expr))
         })

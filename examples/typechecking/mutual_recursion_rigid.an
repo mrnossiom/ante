@@ -17,11 +17,11 @@ ex1b (a: u) b =
 trait T1 a with trait1: fn a -> Unit
 trait T2 a with trait2: fn a -> Unit
 
-ex2a (a: t) b =
+ex2a (a: t) b {Copy t} =
     ex2b a b
     trait1 a
 
-ex2b (a: u) b =
+ex2b (a: u) b {Copy u} =
     ex2c a b
     trait2 a
 
@@ -29,6 +29,7 @@ ex2c (a: v) b =
     ex2a a b
 
 // args: -e ast-t
+// expected exit status: 1
 // expected stdout:
 // (ex1a: fn t _ -> U32 can _) ((a: t)) (b: _) =
 //     (ex1b: fn t _ -> U32 can _) (a: t) (b: _)
@@ -44,23 +45,29 @@ ex2c (a: v) b =
 // type T2 a [env] =
 //     trait2: fn a [[env]] -> Unit
 // 
-// (ex2a: fn t _ -> _ can _) ((a: t)) (b: _) =
-//     (ex2b: fn t _ -> _ can _) (a: t) (b: _)
-//     (trait1: (error)) (a: t)
+// (ex2a: fn t (error) -> _ can _) ((a: (error))) (b: (error)) {(_: (error))} =
+//     (fn (p6: t) (p7: (error)) -> (ex2b: fn t (error) {Copy t} -> _ can _) (p6: t) (p7: (error)) {(error)}) (a: (error)) (b: (error))
+//     (trait1: (error)) (a: (error))
 // 
-// (ex2b: fn u _ -> _ can _) ((a: u)) (b: _) =
-//     (ex2c: fn u _ -> _ can _) (a: u) (b: _)
+// (ex2b: fn u (error) {Copy u} -> _ can _) ((a: u)) (b: (error)) {(_: Copy u)} =
+//     (ex2c: fn u (error) -> _ can _) (a: u) (b: (error))
 //     (trait2: (error)) (a: u)
 // 
-// (ex2c: fn v _ -> _ can _) ((a: v)) (b: _) =
-//     (ex2a: fn v _ -> _ can _) (a: v) (b: _)
+// (ex2c: fn v (error) -> _ can _) ((a: v)) (b: (error)) =
+//     (ex2a: fn v (error) -> _ can _) (a: v) (b: (error))
 
 // expected stderr:
+// examples/typechecking/mutual_recursion_rigid.an:20:0	error: Expected 2 arguments but found 3
+// ex2a (a: t) b {Copy t} =
+// 
+// examples/typechecking/mutual_recursion_rigid.an:21:4	error: No implicit found for type Copy t required by parameter 3
+//     ex2b a b
+// 
 // examples/typechecking/mutual_recursion_rigid.an:22:4	error: `trait1` not found in scope
 //     trait1 a
 // 
 // examples/typechecking/mutual_recursion_rigid.an:26:4	error: `trait2` not found in scope
 //     trait2 a
 // 
-// Found 2 errors and 0 warnings
+// Found 4 errors and 0 warnings
 

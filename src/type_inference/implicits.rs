@@ -259,7 +259,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     }
 
     /// Collect all implicits in scope into a single Vec
-    fn collect_implicits_in_scope(&self) -> Vec<NameId> {
+    pub(super) fn collect_implicits_in_scope(&self) -> Vec<NameId> {
         self.implicits.iter().flat_map(|scope| &scope.implicits_in_scope).copied().collect()
     }
 

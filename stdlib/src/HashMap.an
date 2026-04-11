@@ -24,7 +24,7 @@ HashMap.clear (map: mut HashMap k v) : Unit =
             entry.occupied := false
             entry.tombstone := false
 
-HashMap.resize (map: mut HashMap k v) (new_capacity: Usz) {Hash k} : Unit =
+HashMap.resize (map: mut HashMap k v) (new_capacity: Usz) {Hash k} {Copy k} {Copy v} : Unit =
     if new_capacity > map.capacity then
         new_memory = calloc new_capacity (size_of (MkType : Type (Entry k v)))
 
@@ -46,7 +46,7 @@ HashMap.should_resize (map: ref HashMap k v) : Bool =
     scale_factor = 2
     (map.len + 1) * scale_factor > map.capacity
 
-HashMap.insert (map: mut HashMap k v) (key: k) (value: v) {Hash k} : Unit =
+HashMap.insert (map: mut HashMap k v) (key: k) (value: v) {Hash k} {Copy k} {Copy v} : Unit =
     if map.should_resize () then
         map.resize ((map.capacity + 1) * 2)
 
@@ -116,13 +116,13 @@ HashMap.remove (map: mut HashMap k v) (key: k) {Hash k} {Eq k} : Maybe v =
         map.len := map.len - 1
         Some (deref entry.value)
 
-impl print_hashmap {Print k} {Print v}: Print (HashMap k v) with
+impl print_hashmap {Print k} {Print v}: Print (ref HashMap k v) with
     print map =
         putchar c"["
         print_helper map false 0
         putchar c"]"
 
-print_helper (map: HashMap k v) (did_first: Bool) (i: Usz) {Print k} {Print v} =
+print_helper (map: ref HashMap k v) (did_first: Bool) (i: Usz) {Print k} {Print v} =
     if i < map.capacity then
         entry: Entry k v = map.entries.[i]
         if entry.occupied then

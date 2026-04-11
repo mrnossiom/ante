@@ -3,6 +3,9 @@ type S = message: String
 impl print_s: Print S with
     print s = print s.message
 
+impl copy_s: Copy S with
+    (.*) s = S s.message
+
 // If the compiler decides to pass by reference, the code becomes:
 // void foo(const S *x, S *y) {
 //    ...

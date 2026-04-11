@@ -1,4 +1,5 @@
 import Std.C.puts, exit
+import Std.C
 
 foo (_: I32) (_: String) : Char = c"a"
 
@@ -10,7 +11,7 @@ baz (a: Usz): Ptr a =
 
 main () =
     exit2 = exit
-    puts2: fn (Ptr Char) -> I32 = puts
+    puts2: fn C.String -> I32 = puts
 
     exit2 "test"
     puts2
@@ -19,6 +20,7 @@ main () =
 // expected exit status: 1
 // expected stdout:
 // import Std.C.puts, exit
+// import Std.C
 // 
 // (foo: fn I32 String -> Char pure) ((_: I32)) ((_: String)) : Char = c"a"
 // 
@@ -28,17 +30,17 @@ main () =
 // (baz: fn Usz -> Ptr a pure) ((a: Usz)) : Ptr a =
 //     (transmute: fn Usz -> Ptr a pure) (a: Usz)
 // 
-// (main: fn Unit -> fn (Ptr Char) -> I32 pure can _) () =
+// (main: fn Unit -> fn String -> I32 pure can _) () =
 //     (exit2: fn I32 -> Unit pure) = (exit: fn I32 -> Unit pure)
-//     (puts2: fn (Ptr Char) -> I32 pure) = (puts: fn (Ptr Char) -> I32 pure)
+//     (puts2: fn String -> I32 pure) = (puts: fn String -> I32 pure)
 //     (exit2: fn I32 -> Unit pure) "test"
-//     (puts2: fn (Ptr Char) -> I32 pure)
+//     (puts2: fn String -> I32 pure)
 
 // expected stderr:
-// examples/typechecking/type_annotations.an:6:14	error: Expected I32 but found a
+// examples/typechecking/type_annotations.an:7:14	error: Expected I32 but found a
 //     fn _ b -> b
 // 
-// examples/typechecking/type_annotations.an:15:10	error: Expected I32 but found String
+// examples/typechecking/type_annotations.an:16:10	error: Expected I32 but found String
 //     exit2 "test"
 // 
 // Found 2 errors and 0 warnings

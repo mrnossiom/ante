@@ -1,12 +1,14 @@
+/// A C string is a pointer to a null-terminated character array
+type String = ptr: Ptr Char
 
 // TODO: These functions use absolute sized types like I32
 //       which are not exact standins for C's integer types.
-puts = extern "puts": fn (Ptr Char) -> I32
+puts = extern "puts": fn String -> I32
 putchar = extern "putchar": fn Char -> Unit
 getchar = extern "getchar": fn Unit -> I32
 exit = extern "exit": fn I32 -> Unit
-system = extern "system": fn (Ptr Char) -> I32
-strlen = extern "strlen": fn (Ptr Char) -> Usz
+system = extern "system": fn String -> I32
+strlen = extern "strlen": fn String -> Usz
 
 // The compiler doesn't have checks for generic externs yet
 // `Ptr U8` is used here as a stand-in for void pointer.
@@ -39,15 +41,17 @@ memcmp (lhs: Ptr a) (rhs: Ptr b) (size: Usz): I32 =
 type File = f: Ptr Unit
 type FilePos = f: Ptr Unit
 
-fopen = extern "fopen": fn (Ptr Char) (Ptr Char) -> File
+impl copy_file: Copy File with (.*) = deref
+
+fopen = extern "fopen": fn String String -> File
 fclose = extern "fclose": fn File -> Unit
 
-fputs = extern "fputs": fn (Ptr Char) File -> I32
+fputs = extern "fputs": fn String File -> I32
 fputc = extern "fputc": fn I32 File -> I32
 fwrite = extern "fwrite": fn (Ptr U8) Usz Usz File -> Usz
 
 fgetc = extern "fgetc": fn File -> I32
-fgets = extern "fgets": fn (Ptr Char) I32 File -> (Ptr Char)
+fgets = extern "fgets": fn String I32 File -> String
 ungetc = extern "ungetc": fn I32 File -> I32
 
 fgetpos = extern "fgetpos": fn File FilePos -> Unit

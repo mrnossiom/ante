@@ -25,6 +25,7 @@ use crate::{
     },
 };
 
+mod affine;
 mod cst_traversal;
 pub mod dependency_graph;
 pub mod errors;
@@ -172,6 +173,18 @@ struct TypeChecker<'local, 'inner> {
     /// Names defined within the current (innermost) lambda scope.
     /// Used to detect mutations of captured variables.
     current_lambda_locals: FxHashSet<NameId>,
+
+    /// Tracks which local variables (and their sub-paths) have been moved.
+    /// Used for affine type checking: non-Copy values may only be used once.
+    move_tracker: affine::MoveTracker,
+
+    /// When true, suppresses move checking and recording in `check_path`.
+    /// Set by `check_reference` (ref doesn't move) and `check_member_access`
+    /// (which handles its own partial-move tracking).
+    suppress_move: bool,
+
+    /// Cached TopLevelName for the Prelude's `Copy` type, lazily resolved on first use.
+    copy_type_name: Option<TopLevelName>,
 }
 
 /// Map from each TopLevelId to a tuple of (the item, parse context, resolution context)
@@ -202,6 +215,9 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             string_type: None,
             deref_name: None,
             current_lambda_locals: Default::default(),
+            move_tracker: Default::default(),
+            suppress_move: false,
+            copy_type_name: None,
         };
 
         let mut item_types = FxHashMap::default();
@@ -339,6 +355,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     /// Prepare the TypeChecker to type check another item.
     fn start_item(&mut self, item_id: TopLevelId) {
         self.current_item = Some(item_id);
+        self.move_tracker = Default::default();
 
         // Iterating over every item type here should be fine for performance.
         // The expected length of `self.item_types` is 1 in the vast majority of cases,

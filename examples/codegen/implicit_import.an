@@ -5,7 +5,7 @@ main () =
     var v = Std.Vec.empty ()
     Std.Vec.push (mut v) 3i32
     Std.Vec.push (mut v) 4
-    println v
+    println (ref v)
 
 // Found 1 error and 0 warnings
 

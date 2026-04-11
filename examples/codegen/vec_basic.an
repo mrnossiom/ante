@@ -6,7 +6,7 @@ main () =
     push (mut v) 4
     push (mut v) 5
     remove_index (mut v) 1
-    println v
+    println (ref v)
 
 // args: --delete-binary
 // expected stdout: [3, 5]

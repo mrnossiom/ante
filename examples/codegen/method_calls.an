@@ -13,13 +13,13 @@ main () =
     v.push 20
     v.push 30
     v.remove_index 1
-    println v
+    println (ref v)
 
     var map = HashMap.empty ()
     map.insert 1u8 100u16
     map.insert 2 200
     map.insert 3 300
-    println map
+    println (ref map)
 
 // args: --delete-binary
 // expected stdout:

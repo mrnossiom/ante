@@ -1,30 +1,43 @@
-import Std.C.File, fclose, fopen, fgetc, ungetc, feof, malloc, realloc, getchar
+import Std.C.fclose, fopen, fputs, fgetc, ungetc, feof, malloc, realloc, getchar, copy_file
+import Std.C
 
-open (path: String) (mode: String): File =
-    fopen path.data mode.data
+type File = c_file: C.File
 
-close (file: File): Unit =
-    fclose file
+File.open (path: String) (mode: String): File =
+    // TODO: Add null byte here
+    File <| fopen (C.String path.data) (C.String mode.data)
+
+File.close (file: File): Unit =
+    fclose file.c_file
+
+impl drop_file: Drop File with
+    drop f =
+        (deref f).close ()
 
 //Convenience function for using feof with better types
-eof (f: File): Bool =
-    feof f != 0
+File.eof (f: ref File): Bool =
+    feof f.c_file != 0
 
-next_char (f: File): Char =
-    Char (fgetc f)
+File.write (f: mut File) (text: String): Unit =
+    // TODO: Add null byte here
+    fputs (C.String text.data) f.c_file
+    ()
 
-next_line (f: File): String =
-    if eof f then return ""
+File.next_char (f: ref File): Char =
+    Char (fgetc f.c_file)
+
+File.next_line (f: mut File): String =
+    if f.eof () then return ""
 
     len, cstr = loop (len = 0) (capacity = 32) (cstr = malloc 32) ->
-        next = fgetc f
+        next = fgetc f.c_file
         if next < 0 then return (len, cstr)
         c = Char next
 
         //Flag feof if eof occurs after terminating newline
         if c == c"\n" then
-            peek = fgetc f
-            if peek >= 0 then ungetc peek f
+            peek = fgetc f.c_file
+            if peek >= 0 then ungetc peek f.c_file
             return (len, cstr)
 
         new_capacity, new_cstr = if len + 1 >= capacity then
@@ -39,11 +52,10 @@ next_line (f: File): String =
     String cstr (U32 len)
 
 // Iterating through a File iterates through each line
-impl iterator_file: Iterator File String with
+impl iterator_file: Iterator (mut File) String with
     next file =
-        if eof file
-        then None
-        else Some (file, next_line file)
+        if file.eof () then None
+        else Some (file, file.next_line ())
 
 // Read a line from stdin, ending with (and not including) a terminating c"\n"
 read_line (): String =

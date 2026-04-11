@@ -191,7 +191,18 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     fn check_path(&mut self, path: PathId, expected: &Type, expr: Option<ExprId>) {
         let actual = match self.path_origin(path) {
             Some(Origin::TopLevelDefinition(id)) => self.type_of_top_level_name(&id, path),
-            Some(Origin::Local(name)) => self.name_types[&name].clone(),
+            Some(Origin::Local(name)) => {
+                let typ = self.name_types[&name].clone();
+                if !self.suppress_move {
+                    let move_path = super::affine::MovePath::Variable(name);
+                    self.check_use_of_move_path(&move_path, path);
+                    if !self.type_is_copy(&typ) {
+                        let location = path.locate(self);
+                        self.move_tracker.record_move(move_path, location);
+                    }
+                }
+                typ
+            },
             Some(Origin::TypeResolution) => self.resolve_type_resolution(path, expected),
             Some(Origin::Builtin(builtin)) => self.check_builtin(builtin, path),
             None => return,
@@ -358,9 +369,14 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         let object = member_access.object;
         let member = member_access.member.clone();
 
-        // Type-check the object to learn its type
+        // Type-check the object to learn its type.
+        // Suppress moves: if the rewrite fails, the normal call handling will
+        // process the member access with proper partial-move tracking.
         let struct_type = self.next_type_variable();
+        let old_suppress = self.suppress_move;
+        self.suppress_move = true;
         self.check_expr(object, &struct_type);
+        self.suppress_move = old_suppress;
 
         // Resolve the method name to a top-level function
         let Some((method_name, func_type, bindings)) = self.resolve_method_for_type(&struct_type, &member) else {
@@ -437,6 +453,8 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         let old_return_type =
             std::mem::replace(&mut self.function_return_type, Some(function_type.return_type.clone()));
         let old_lambda_locals = std::mem::take(&mut self.current_lambda_locals);
+        // Closures capture by reference, so moves inside the lambda don't affect the outer scope
+        let old_move_tracker = std::mem::take(&mut self.move_tracker);
         if let Some(name) = self_name {
             self.current_lambda_locals.insert(name);
         }
@@ -473,6 +491,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
 
         self.function_return_type = old_return_type;
         self.current_lambda_locals = old_lambda_locals;
+        self.move_tracker = old_move_tracker;
         self.pop_implicits_scope();
 
         // pop_implicits_scope modifies the function by inserting implicit arguments, we need
@@ -505,7 +524,12 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
 
     fn check_member_access(&mut self, member_access: &cst::MemberAccess, expected: &Type, expr: ExprId) {
         let struct_type = self.next_type_variable();
+
+        // Suppress moves on the object — we handle partial move tracking here at the field level
+        let old_suppress = self.suppress_move;
+        self.suppress_move = true;
         self.check_expr(member_access.object, &struct_type);
+        self.suppress_move = old_suppress;
 
         let fields = self.get_field_types(&struct_type, None);
         if let Some((field, field_index)) = fields.get(&member_access.member) {
@@ -517,6 +541,20 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             // Auto-deref the field unless the expected type is known to be a reference.
             let struct_is_ref = struct_type.reference_element(&self.bindings).is_some();
             let expected_is_ref = expected.reference_element(&self.bindings).is_some();
+
+            // Track partial moves only when:
+            // - The struct is NOT behind a reference (accessing through a ref doesn't move)
+            // - We're not ourselves an intermediate object of a deeper member access chain
+            if !struct_is_ref && !old_suppress {
+                if let Some(parent_path) = self.try_build_move_path(member_access.object) {
+                    let move_path = super::affine::MovePath::Field(Box::new(parent_path), member_access.member.clone());
+                    self.check_use_of_move_path(&move_path, expr);
+                    if !self.type_is_copy(&field) {
+                        let location = expr.locate(self);
+                        self.move_tracker.record_move(move_path, location);
+                    }
+                }
+            }
 
             if struct_is_ref && !expected_is_ref {
                 if let Some((_, inner_field_type)) = field.reference_element(&self.bindings) {
@@ -631,16 +669,44 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             Cow::Owned(self.next_type_variable())
         };
 
+        // Save move state before branches so each branch sees the same pre-branch state
+        let pre_branch_moves = self.move_tracker.clone();
+
         self.push_implicits_scope();
         self.check_expr(if_.then, &expected);
         self.pop_implicits_scope();
+        let then_moves = self.move_tracker.clone();
 
         // TODO: No way to identify if `then_type != else_type`. This would be useful to point out
         // for error messages.
+        let then_diverges = self.expr_always_diverges(if_.then);
+
         if let Some(else_) = if_.else_ {
+            // Reset to pre-branch state for else branch
+            self.move_tracker = pre_branch_moves.clone();
             self.push_implicits_scope();
             self.check_expr(else_, &expected);
             self.pop_implicits_scope();
+            let else_moves = self.move_tracker.clone();
+            let else_diverges = self.expr_always_diverges(else_);
+
+            // After if/else, exclude moves from branches that always diverge (return)
+            // since execution never reaches the merge point from those branches.
+            let mut branches = Vec::new();
+            if !then_diverges {
+                branches.push(then_moves);
+            }
+            if !else_diverges {
+                branches.push(else_moves);
+            }
+            self.move_tracker = super::affine::MoveTracker::merge_branches(&pre_branch_moves, &branches);
+        } else {
+            // If-without-else: if the then-branch always returns, moves don't carry forward
+            if then_diverges {
+                self.move_tracker = pre_branch_moves;
+            } else {
+                self.move_tracker = super::affine::MoveTracker::merge_branches(&pre_branch_moves, &[then_moves]);
+            }
         }
     }
 
@@ -653,13 +719,20 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         self.push_implicits_scope();
         self.check_expr(match_.expression, &expr_type);
 
+        // Save move state before branches
+        let pre_branch_moves = self.move_tracker.clone();
+        let mut branch_trackers = Vec::new();
+
         for (pattern, branch) in match_.cases.iter() {
+            self.move_tracker = pre_branch_moves.clone();
             self.check_pattern(*pattern, &expr_type);
             // TODO: Specify if branch_type != type of first branch for better error messages
             self.push_implicits_scope();
             self.check_expr(*branch, expected);
             self.pop_implicits_scope();
+            branch_trackers.push(self.move_tracker.clone());
         }
+        self.move_tracker = super::affine::MoveTracker::merge_branches(&pre_branch_moves, &branch_trackers);
         self.pop_implicits_scope();
 
         // Now compile the match into a decision tree. The `match expr | ...` expression will be
@@ -714,7 +787,10 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             },
         };
 
+        let old_suppress = self.suppress_move;
+        self.suppress_move = true;
         self.check_expr(reference.rhs, &expected_element_type);
+        self.suppress_move = old_suppress;
     }
 
     fn check_constructor(&mut self, constructor: &cst::Constructor, expected: &Type, id: ExprId) {
@@ -823,6 +899,25 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 let location = id.locate(self);
                 self.compiler.accumulate(Diagnostic::ReturnNotInFunction { location });
             },
+        }
+    }
+
+    /// Check if an expression always diverges (e.g. ends with a `return`).
+    /// Used to exclude moves in diverging branches from post-branch merge.
+    fn expr_always_diverges(&self, id: ExprId) -> bool {
+        let expr = match self.current_extended_context().extended_expr(id) {
+            Some(expr) => Cow::Owned(expr.clone()),
+            None => Cow::Borrowed(&self.current_context()[id]),
+        };
+        match expr.as_ref() {
+            Expr::Return(_) => true,
+            Expr::Sequence(items) => items.last().map_or(false, |item| self.expr_always_diverges(item.expr)),
+            Expr::If(if_) => {
+                let then_diverges = self.expr_always_diverges(if_.then);
+                let else_diverges = if_.else_.map_or(false, |e| self.expr_always_diverges(e));
+                then_diverges && else_diverges
+            },
+            _ => false,
         }
     }
 

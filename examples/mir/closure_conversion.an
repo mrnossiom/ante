@@ -20,7 +20,7 @@ main () =
 
 use y = ()
 
-// args: -emir
+// args: -emir --no-color
 // expected stdout:
 // extern , d4: fn I32 I32 -> (I32, I32)
 // extern use d2: fn (I32, I32) -> Unit

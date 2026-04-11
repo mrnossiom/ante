@@ -13,7 +13,7 @@ main () =
 
 id x = x
 
-// args: -e ast-t
+// args: -e ast-t --no-color
 // expected stdout:
 // (add: fn (fn _ _ [_] -> _ can _) (fn _ _ [_] -> _ can _) -> fn _ [(fn _ _ [_] -> _ can _), (fn _ _ [_] -> _ can _)] -> fn _ [(fn _ _ [_] -> _ can _), (fn _ _ [_] -> _ can _), _] -> _ can _ can _ can _) (m: fn _ _ [_] -> _ can _) (n: fn _ _ [_] -> _ can _) = fn (f: _) [(m: fn _ _ [_] -> _ can _), (n: fn _ _ [_] -> _ can _)] -> fn (x: _) [(m: fn _ _ [_] -> _ can _), (n: fn _ _ [_] -> _ can _), (f: _)] -> (m: fn _ _ [_] -> _ can _) (f: _) ((n: fn _ _ [_] -> _ can _) (f: _) (x: _))
 // 

@@ -3,7 +3,8 @@ import T.t
 // Module imports can form a cycle!
 u x = t x
 
-// args: -e ast-r examples/nameresolution/T.an
+// args: -e ast-r examples/nameresolution/T.an --no-color
+// expected exit status: 1
 // expected stdout:
 // import U.u
 // 
@@ -17,17 +18,25 @@ u x = t x
 // u_c1m690_3723_0 x_1 = t_? x_1
 
 // expected stderr:
-// examples/nameresolution/U.an:1:8	error: Could not find crate `T`
-// import T.t
+// examples/nameresolution/U.an:1:8
+// 0 | import T.t
+// 1 | import T.t	// error: Could not find crate `T`
+//   |        ^^^
 // 
-// examples/nameresolution/U.an:4:6	error: `t` not found in scope
-// u x = t x
+// examples/nameresolution/U.an:4:7
+// 3 | // Module imports can form a cycle!
+// 4 | u x = t x	// error: `t` not found in scope
+//   |       ^
 // 
-// examples/nameresolution/T.an:1:8	error: Could not find crate `U`
-// import U.u
+// examples/nameresolution/T.an:1:8
+// 0 | import U.u
+// 1 | import U.u	// error: Could not find crate `U`
+//   |        ^^^
 // 
-// examples/nameresolution/T.an:4:6	error: `u` not found in scope
-// t x = u x
+// examples/nameresolution/T.an:4:7
+// 3 | // Recursive module imports are allowed!
+// 4 | t x = u x	// error: `u` not found in scope
+//   |       ^
 // 
 // Found 4 errors and 0 warnings
 

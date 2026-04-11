@@ -19,7 +19,7 @@ t = Option.Just 1
 
 type MyRef a = ref a
 
-// args: -e ast-r
+// args: -e ast-r --no-color
 // expected stdout:
 // // id = c1m929_4067
 // type Struct1_c1m929_4067_0 =

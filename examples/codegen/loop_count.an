@@ -5,7 +5,7 @@ main () =
             println (x + i)
             recur (i + 1)
 
-// args: --delete-binary
+// args: --delete-binary --no-color
 // expected stdout:
 // 1
 // 2

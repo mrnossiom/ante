@@ -25,7 +25,7 @@ main () =
         with filter (fn x -> x % 2 == 0)
         with for_ print
 
-// args: -e ast-t
+// args: -e ast-t --no-color
 // expected exit status: 1
 // expected stdout:
 // effect Emit a with
@@ -55,17 +55,30 @@ main () =
 //     (iota: fn U32 -> Unit can _) 10
 
 // expected stderr:
-// examples/typechecking/effects_subset.an:7:8	error: `emit` not found in scope
-//         emit i
+// examples/typechecking/effects_subset.an:7:9
+// 6 |     if i < n then
+// 7 |         emit i	// error: `emit` not found in scope
+//   |         ^^^^
+// 8 |         recur (i + 1)
 // 
-// examples/typechecking/effects_subset.an:11:4	error: Effects and handle expressions are currently unimplemented
-//     handle stream ()
+// examples/typechecking/effects_subset.an:11:5
+// 10 | filter stream predicate =
+// 11 |     handle stream ()	// error: Effects and handle expressions are currently unimplemented
+//    |     ^^^^^^^^^^^^^^^^
+// 12 |     | emit x ->
 // 
-// examples/typechecking/effects_subset.an:18:4	error: Effects and handle expressions are currently unimplemented
-//     handle stream ()
+// examples/typechecking/effects_subset.an:18:5
+// 17 | for_ stream f =
+// 18 |     handle stream ()	// error: Effects and handle expressions are currently unimplemented
+//    |     ^^^^^^^^^^^^^^^^
+// 19 |     | emit x ->
 // 
-// examples/typechecking/effects_subset.an:25:8	error: Expected the end of this block but found `with`
-//         with filter (fn x -> x % 2 == 0)
+// examples/typechecking/effects_subset.an:25:9
+// 24 |     iota 10
+//    |         // error: Expected the end of this block but found `with`
+// 25 |         with filter (fn x -> x % 2 == 0)
+//    |         ^^^^
+// 26 |         with for_ print
 // 
 // Found 4 errors and 0 warnings
 

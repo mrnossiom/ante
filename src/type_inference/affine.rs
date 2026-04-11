@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::{
     diagnostics::{Diagnostic, Location},
@@ -52,6 +52,7 @@ impl MovePath {
 #[derive(Clone, Default)]
 pub(super) struct MoveTracker {
     moved: FxHashMap<MovePath, Location>,
+    errored: FxHashSet<MovePath>,
 }
 
 impl MoveTracker {
@@ -88,6 +89,9 @@ impl MoveTracker {
                 if !result.moved.contains_key(path) {
                     result.moved.insert(path.clone(), loc.clone());
                 }
+            }
+            for path in &branch.errored {
+                result.errored.insert(path.clone());
             }
         }
         result
@@ -175,13 +179,19 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
 
     /// Check if using `path` is valid (not already moved or partially moved).
     /// Emits a diagnostic if the path was already moved.
-    pub(super) fn check_use_of_move_path(&self, path: &MovePath, locator: impl Locateable) {
+    /// Only emits the first error per path to avoid noisy duplicate diagnostics.
+    pub(super) fn check_use_of_move_path(&mut self, path: &MovePath, locator: impl Locateable) {
+        if self.move_tracker.errored.contains(path) {
+            return;
+        }
+
         // Check if this exact path or an ancestor was moved
         if let Some(moved_loc) = self.move_tracker.is_moved(path) {
             let name = path.display_name(self.current_extended_context());
             let location = locator.locate(self);
             let moved_in = moved_loc.clone();
             self.compiler.accumulate(Diagnostic::UseOfMovedValue { name: name.clone(), location, moved_in });
+            self.move_tracker.errored.insert(path.clone());
 
         // Check if any child was moved (partial move)
         } else if let Some((_child_path, moved_loc)) = self.move_tracker.has_child_moved(path) {
@@ -189,6 +199,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             let location = locator.locate(self);
             let moved_in = moved_loc.clone();
             self.compiler.accumulate(Diagnostic::UseOfMovedValue { name, location, moved_in });
+            self.move_tracker.errored.insert(path.clone());
         }
     }
 

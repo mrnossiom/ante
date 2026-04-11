@@ -30,29 +30,47 @@ filtered () =
 
 for filtered print
 
-// args: --delete-binary
+// args: --delete-binary --no-color
 // expected exit status: 1
 // expected stderr:
-// examples/regressions/217_filter.an:1:1	error: This program has no `main` function
-// effect Emit a with
+// examples/regressions/217_filter.an:1:1
+// 0 | effect Emit a with
+// 1 | effect Emit a with	// error: This program has no `main` function
+//   | 
+// 2 |     emit: a -> Unit
 // 
-// examples/regressions/217_filter.an:2:12	error: Expected the end of this block but found `->`
-//     emit: a -> Unit
+// examples/regressions/217_filter.an:2:13
+// 1 | effect Emit a with
+// 2 |     emit: a -> Unit	// error: Expected the end of this block but found `->`
+//   |             ^^
 // 
-// examples/regressions/217_filter.an:6:8	error: `emit` not found in scope
-//         emit i
+// examples/regressions/217_filter.an:6:9
+// 5 |     if i < n then
+// 6 |         emit i	// error: `emit` not found in scope
+//   |         ^^^^
+// 7 |         recur (i + 1)
 // 
-// examples/regressions/217_filter.an:10:7	error: Expected `=` to begin the function body but found `(`
-// filter (stream: Unit -> Unit) (f: a -> Bool pure) =
+// examples/regressions/217_filter.an:10:8
+//  9 | // Removing the `can` here used to panic
+//    | // error: Expected `=` to begin the function body but found `(`
+// 10 | filter (stream: Unit -> Unit) (f: a -> Bool pure) =
+//    |        ^
+// 11 |     handle 
 // 
-// examples/regressions/217_filter.an:18:0	error: Expected a top-level item but found `for`
-// for (stream: Unit -> Unit can Emit a) (f: a -> Unit pure) =
+// examples/regressions/217_filter.an:18:1
+//    | // error: Expected a top-level item but found `for`
+// 18 | for (stream: Unit -> Unit can Emit a) (f: a -> Unit pure) =
+//    | ^^^
+// 19 |     handle 
 // 
-// examples/regressions/217_filter.an:29:4	error: `filter` not found in scope
-//     filter zero_to_nine (fn x -> x % 2 == 0)
+// examples/regressions/217_filter.an:29:5
+// 28 | filtered () =
+// 29 |     filter zero_to_nine (fn x -> x % 2 == 0)	// error: `filter` not found in scope
+//    |     ^^^^^^
 // 
-// examples/regressions/217_filter.an:31:0	error: Expected a top-level item but found `for`
-// for filtered print
+// examples/regressions/217_filter.an:31:1
+// 31 | for filtered print	// error: Expected a top-level item but found `for`
+//    | ^^^
 // 
 // Found 7 errors and 0 warnings
 

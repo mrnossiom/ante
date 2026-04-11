@@ -22,7 +22,7 @@ main () =
 
     _ = mut (mut ref tuple).first
 
-// args: -e ast-t
+// args: -e ast-t --no-color
 // expected exit status: 1
 // expected stdout:
 // (main: fn Unit -> Unit can _) () =
@@ -42,23 +42,35 @@ main () =
 //     (_: mut (ref I32)) = mut (fn (p19: ref (ref I32)) -> (p19: ref (ref I32)) (.*: fn (ref (ref I32)) {Copy (ref I32)} -> ref I32 pure) (copy_ref: Copy (ref I32))) (mut ref (tuple: I32, I32)).first
 
 // expected stderr:
-// examples/typechecking/field_diagnostics.an:7:17	error: _, _ has no field named `missing`
-//     _ = mut tuple.missing
+// examples/typechecking/field_diagnostics.an:7:18
+// 6 |     _ = mut tuple.first
+// 7 |     _ = mut tuple.missing	// error: _, _ has no field named `missing`
+//   |                  ^^^^^^^^
 // 
-// examples/typechecking/field_diagnostics.an:11:19	error: ref (_, _) has no field named `missing`
-//     _ = mut imm_ref.missing
+// examples/typechecking/field_diagnostics.an:11:20
+// 10 |     _ = mut imm_ref.first
+// 11 |     _ = mut imm_ref.missing	// error: ref (_, _) has no field named `missing`
+//    |                    ^^^^^^^^
 // 
-// examples/typechecking/field_diagnostics.an:15:21	error: _, _ has no field named `missing`
-//     _ = ref mut_tuple.missing
+// examples/typechecking/field_diagnostics.an:15:22
+// 15 |     _ = ref mut_tuple.missing	// error: _, _ has no field named `missing`
+//    |                      ^^^^^^^^
+// 16 |     _ = mut mut_tuple.missing
 // 
-// examples/typechecking/field_diagnostics.an:16:21	error: _, _ has no field named `missing`
-//     _ = mut mut_tuple.missing
+// examples/typechecking/field_diagnostics.an:16:22
+// 15 |     _ = ref mut_tuple.missing
+// 16 |     _ = mut mut_tuple.missing	// error: _, _ has no field named `missing`
+//    |                      ^^^^^^^^
 // 
-// examples/typechecking/field_diagnostics.an:20:19	error: mut (_, _) has no field named `missing`
-//     _ = ref mut_ref.missing
+// examples/typechecking/field_diagnostics.an:20:20
+// 20 |     _ = ref mut_ref.missing	// error: mut (_, _) has no field named `missing`
+//    |                    ^^^^^^^^
+// 21 |     _ = mut mut_ref.missing
 // 
-// examples/typechecking/field_diagnostics.an:21:19	error: mut (_, _) has no field named `missing`
-//     _ = mut mut_ref.missing
+// examples/typechecking/field_diagnostics.an:21:20
+// 20 |     _ = ref mut_ref.missing
+// 21 |     _ = mut mut_ref.missing	// error: mut (_, _) has no field named `missing`
+//    |                    ^^^^^^^^
 // 
 // Found 6 errors and 0 warnings
 

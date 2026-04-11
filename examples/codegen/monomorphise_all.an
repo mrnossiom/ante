@@ -6,4 +6,4 @@ baz x = bar x
 
 main () = baz "hi"
 
-// args: --delete-binary
+// args: --delete-binary --no-color

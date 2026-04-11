@@ -23,7 +23,7 @@ main () =
     println (map.get 3)
     println (get (ref map) 5)
 
-// args: --delete-binary
+// args: --delete-binary --no-color
 // expected stdout:
 // [1 -> 3, 2 -> 6, 3 -> 9, 4 -> 12, 1 -> 18, 7 -> 21]
 // Some 9

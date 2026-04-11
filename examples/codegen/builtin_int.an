@@ -28,7 +28,7 @@ main () =
     println "default int:"
     test_int 3
 
-// args: --delete-binary
+// args: --delete-binary --no-color
 // expected stdout:
 // 6 -3 9 1 0
 // 6 253 9 1 0

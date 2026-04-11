@@ -18,7 +18,7 @@ main () =
     closure = count_down _ print_offset
     closure 2
 
-// args: --delete-binary
+// args: --delete-binary --no-color
 // expected stdout:
 // 4
 // 3

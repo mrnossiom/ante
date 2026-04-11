@@ -6,7 +6,8 @@ main () =
     foo 4 library_int
     foo 5 (library_fn ())
 
-// args: -e ast-r
+// args: -e ast-r --no-color
+// expected exit status: 1
 // expected stdout:
 // import Library.library_int, library_fn
 // 
@@ -19,14 +20,21 @@ main () =
 //     foo_c1m27_3132_1 5 (library_fn_? ())
 
 // expected stderr:
-// examples/nameresolution/import.an:1:8	error: Could not find crate `Library`
-// import Library.library_int, library_fn
+// examples/nameresolution/import.an:1:8
+// 0 | import Library.library_int, library_fn
+// 1 | import Library.library_int, library_fn	// error: Could not find crate `Library`
+//   |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 // 
-// examples/nameresolution/import.an:6:10	error: `library_int` not found in scope
-//     foo 4 library_int
+// examples/nameresolution/import.an:6:11
+// 5 | main () =
+// 6 |     foo 4 library_int	// error: `library_int` not found in scope
+//   |           ^^^^^^^^^^^
+// 7 |     foo 5 (library_fn ())
 // 
-// examples/nameresolution/import.an:7:11	error: `library_fn` not found in scope
-//     foo 5 (library_fn ())
+// examples/nameresolution/import.an:7:12
+// 6 |     foo 4 library_int
+// 7 |     foo 5 (library_fn ())	// error: `library_fn` not found in scope
+//   |            ^^^^^^^^^^
 // 
 // Found 3 errors and 0 warnings
 

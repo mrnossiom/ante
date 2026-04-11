@@ -9,6 +9,6 @@ main () =
 
 // Found 1 error and 0 warnings
 
-// args: --delete-binary
+// args: --delete-binary --no-color
 // expected stdout: [3, 4]
 

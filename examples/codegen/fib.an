@@ -4,6 +4,6 @@ fib n =
 
 main () = println (fib 10)
 
-// args: --delete-binary
+// args: --delete-binary --no-color
 // expected stdout: 55
 

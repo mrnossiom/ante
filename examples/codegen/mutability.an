@@ -13,7 +13,7 @@ mutate (n: mut I32) =
 
 double x = x * 2
 
-// args: --delete-binary
+// args: --delete-binary --no-color
 // expected stdout:
 // 32
 // 7

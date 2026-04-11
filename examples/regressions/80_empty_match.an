@@ -4,17 +4,25 @@
 match 3
 | x -> x
 
-// args: --delete-binary
+// args: --delete-binary --no-color
 // expected exit status: 1
 // expected stderr:
-// examples/regressions/80_empty_match.an:1:1	error: This program has no `main` function
-// // #80: match expression fails to assign variables when there are no constructors to match against
+// examples/regressions/80_empty_match.an:1:1
+// 0 | // #80: match expression fails to assign variables when there are no constructors to match against
+//   | // error: This program has no `main` function
+// 1 | // #80: match expression fails to assign variables when there are no constructors to match against
+//   | 
+// 2 | // Before the fix this crashed during codegen with an internal error message
 // 
-// examples/regressions/80_empty_match.an:4:0	error: Expected a top-level item but found `match`
-// match 3
+// examples/regressions/80_empty_match.an:4:1
+// 4 | match 3	// error: Expected a top-level item but found `match`
+//   | ^^^^^
+// 5 | | x -> x
 // 
-// examples/regressions/80_empty_match.an:5:0	error: Expected a top-level item but found `|`
-// | x -> x
+// examples/regressions/80_empty_match.an:5:1
+// 4 | match 3
+// 5 | | x -> x	// error: Expected a top-level item but found `|`
+//   | ^
 // 
 // Found 3 errors and 0 warnings
 

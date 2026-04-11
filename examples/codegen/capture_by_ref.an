@@ -10,7 +10,7 @@ main () =
     // After the closure runs, x should be 5
     println x
 
-// args: --delete-binary
+// args: --delete-binary --no-color
 // expected stdout:
 // 5
 // 5

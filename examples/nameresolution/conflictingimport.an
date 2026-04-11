@@ -4,7 +4,8 @@ library_int = 1
 
 library_fn _ = 3
 
-// args: -e ast-r examples/nameresolution/Library.an
+// args: -e ast-r examples/nameresolution/Library.an --no-color
+// expected exit status: 1
 // expected stdout:
 // // id = c1m753_7873
 // library_int_c1m753_7873_1 = 5
@@ -22,8 +23,10 @@ library_fn _ = 3
 // library_fn_c1m79_5383_0 __1 = 3
 
 // expected stderr:
-// examples/nameresolution/conflictingimport.an:1:8	error: Could not find crate `Library`
-// import Library.library_int, library_fn
+// examples/nameresolution/conflictingimport.an:1:8
+// 0 | import Library.library_int, library_fn
+// 1 | import Library.library_int, library_fn	// error: Could not find crate `Library`
+//   |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 // 
 // Found 1 error and 0 warnings
 

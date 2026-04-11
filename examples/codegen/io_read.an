@@ -35,7 +35,7 @@ main () =
     iter (mut f3) println
     f3.close ()
 
-// args: --delete-binary
+// args: --delete-binary --no-color
 // expected stdout:
 // li
 // line1

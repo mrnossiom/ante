@@ -13,26 +13,40 @@ handle_count f =
 
 handle_count foo |> print
 
-// args: --delete-binary
+// args: --delete-binary --no-color
 // expected exit status: 1
 // expected stderr:
-// examples/codegen/effects/count_effect.an:1:1	error: This program has no `main` function
-// effect Count with
+// examples/codegen/effects/count_effect.an:1:1
+// 0 | effect Count with
+// 1 | effect Count with	// error: This program has no `main` function
+//   | 
+// 2 |     count: Unit -> Unit
 // 
-// examples/codegen/effects/count_effect.an:2:16	error: Expected the end of this block but found `->`
-//     count: Unit -> Unit
+// examples/codegen/effects/count_effect.an:2:17
+// 1 | effect Count with
+// 2 |     count: Unit -> Unit	// error: Expected the end of this block but found `->`
+//   |                 ^^
 // 
-// examples/codegen/effects/count_effect.an:5:4	error: `count` not found in scope
-//     count ()
+// examples/codegen/effects/count_effect.an:5:5
+// 4 | foo () =
+// 5 |     count ()	// error: `count` not found in scope
+//   |     ^^^^^
+// 6 |     repeat 10 fn _ -> count ()
 // 
-// examples/codegen/effects/count_effect.an:6:22	error: `count` not found in scope
-//     repeat 10 fn _ -> count ()
+// examples/codegen/effects/count_effect.an:6:23
+// 5 |     count ()
+// 6 |     repeat 10 fn _ -> count ()	// error: `count` not found in scope
+//   |                       ^^^^^
 // 
-// examples/codegen/effects/count_effect.an:9:4	error: Effects and handle expressions are currently unimplemented
-//     handle
+// examples/codegen/effects/count_effect.an:9:5
+//  8 | handle_count f =
+//  9 |     handle	// error: Effects and handle expressions are currently unimplemented
+//    |     ^^^^^^
+// 10 |         f ()
 // 
-// examples/codegen/effects/count_effect.an:14:13	error: Expected `=` to begin the function body but found `foo`
-// handle_count foo |> print
+// examples/codegen/effects/count_effect.an:14:14
+// 14 | handle_count foo |> print	// error: Expected `=` to begin the function body but found `foo`
+//    |              ^^^
 // 
 // Found 6 errors and 0 warnings
 

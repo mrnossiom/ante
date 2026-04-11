@@ -16,7 +16,8 @@ main () =
     foo_and_bar foobar foobar
     foo_and_bar foo bar
 
-// args: -e ast-t
+// args: -e ast-t --no-color
+// expected exit status: 1
 // expected stdout:
 // type FooBar =
 //     foo: I32
@@ -45,11 +46,16 @@ main () =
 //     (foo_and_bar: fn Foo Bar -> String can _) (foo: Foo) (bar: Bar)
 
 // expected stderr:
-// examples/typechecking/member_access.an:8:5	error: Object type must be known by this point to access its field
-//     a.foo
+// examples/typechecking/member_access.an:8:6
+//  7 | foo_and_bar a b =
+//  8 |     a.foo	// error: Object type must be known by this point to access its field
+//    |      ^^^^
+//  9 |     stringify b.bar
 // 
-// examples/typechecking/member_access.an:9:15	error: Object type must be known by this point to access its field
-//     stringify b.bar
+// examples/typechecking/member_access.an:9:16
+//  8 |     a.foo
+//  9 |     stringify b.bar	// error: Object type must be known by this point to access its field
+//    |                ^^^^
 // 
 // Found 2 errors and 0 warnings
 

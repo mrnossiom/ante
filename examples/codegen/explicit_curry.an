@@ -11,7 +11,7 @@ main () =
 
     4 |> (_ + 2) |> println
 
-// args: --delete-binary
+// args: --delete-binary --no-color
 // expected stdout:
 // 6
 // 42

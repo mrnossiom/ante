@@ -23,7 +23,7 @@ main () =
             3
         else 4)
 
-// args: -e ast
+// args: -e ast --no-color
 // expected stdout:
 // normal = 1
 // 

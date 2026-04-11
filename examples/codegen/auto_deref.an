@@ -21,7 +21,7 @@ main () =
     println (deref_mut (mut y))
     println (trait_through_deref (ref y))
 
-// args: --delete-binary
+// args: --delete-binary --no-color
 // expected stdout:
 // 42
 // 42

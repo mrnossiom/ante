@@ -9,7 +9,7 @@ main () =
 
     2 + _
 
-// args: -e ast
+// args: -e ast --no-color
 // expected stdout:
 // main () =
 //     foo _ a

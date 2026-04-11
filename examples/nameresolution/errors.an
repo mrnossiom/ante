@@ -15,7 +15,7 @@ foo a b =
 a = 2
 a = 3 // already declared
 
-// args: -e ast-r
+// args: -e ast-r --no-color
 // expected exit status: 1
 // expected stdout:
 // // id = c1m416_9923
@@ -39,14 +39,19 @@ a = 3 // already declared
 // a_c1m416_7365_1 = 3
 
 // expected stderr:
-// examples/nameresolution/errors.an:5:17	error: `is_an_error` not found in scope
-//     not_an_error is_an_error
+// examples/nameresolution/errors.an:5:18
+// 4 |     // Not a name resolution error at least. This isn't testing the type checker
+// 5 |     not_an_error is_an_error	// error: `is_an_error` not found in scope
+//   |                  ^^^^^^^^^^^
 // 
-// examples/nameresolution/errors.an:7:18	error: `c` not found in scope
-//     fn a b -> a + c + b
+// examples/nameresolution/errors.an:7:19
+// 7 |     fn a b -> a + c + b	// error: `c` not found in scope
+//   |                   ^
 // 
-// examples/nameresolution/errors.an:16:0	warning: `a` was already defined
-// a = 3 // already declared
+// examples/nameresolution/errors.an:16:1
+// 15 | a = 2
+// 16 | a = 3 // already declared	// warning: `a` was already defined
+//    | ^
 // 
 // Found 2 errors and 1 warning
 

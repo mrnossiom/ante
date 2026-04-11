@@ -26,7 +26,7 @@ main () =
     | (1, 2) -> 1
     | (_, _, _, _) -> 3
 
-// args: -e ast-t
+// args: -e ast-t --no-color
 // expected exit status: 1
 // expected stdout:
 // (main: fn Unit -> I32 can _) () =
@@ -82,32 +82,57 @@ main () =
 //             | 0, (match_var47: I32), (match_var48: I32, I32) -> 1
 
 // expected stderr:
-// examples/typechecking/completeness_checking.an:2:10	error: Missing case: Some _
-//     match Maybe.None
+// examples/typechecking/completeness_checking.an:2:11
+// 1 | main () =
+// 2 |     match Maybe.None	// error: Missing case: Some _
+//   |           ^^^^^^^^^^
+// 3 |     | None -> 1
 // 
-// examples/typechecking/completeness_checking.an:5:11	error: Missing case: 1..=18446744073709551615, None
-//     match (2, Maybe.None)
+// examples/typechecking/completeness_checking.an:5:12
+// 5 |     match (2, Maybe.None)	// error: Missing case: 1..=18446744073709551615, None
+//   |            ^^^^^^^^^^^^^
+// 6 |     | (0, None) -> ()
 // 
-// examples/typechecking/completeness_checking.an:16:11	error: Missing cases: 0, 0..=1, 0, 3..=18446744073709551615, 2..=18446744073709551615, 0..=1, 2..=18446744073709551615, 3..=18446744073709551615
-//     match (1, 2)
+// examples/typechecking/completeness_checking.an:16:12
+// 15 |     // Redundant patterns
+//    |     // error: Missing cases: 0, 0..=1, 0, 3..=18446744073709551615, 2..=18446744073709551615, 0..=1, 2..=18446744073709551615, 3..=18446744073709551615
+// 16 |     match (1, 2)
+//    |            ^^^^
+// 17 |     | 1, _ -> 0
 // 
-// examples/typechecking/completeness_checking.an:18:6	warning: This case is already matched by prior patterns
-//     | 1, 2 -> 1
+// examples/typechecking/completeness_checking.an:18:7
+// 17 |     | 1, _ -> 0
+// 18 |     | 1, 2 -> 1	// warning: This case is already matched by prior patterns
+//    |       ^^^^
+// 19 |     | _, 2 -> 2
 // 
-// examples/typechecking/completeness_checking.an:21:11	error: Missing cases: false, false, true, true
-//     match (true, true)
+// examples/typechecking/completeness_checking.an:21:12
+// 20 |     
+// 21 |     match (true, true)	// error: Missing cases: false, false, true, true
+//    |            ^^^^^^^^^^
+// 22 |     | (false, true) -> 0
 // 
-// examples/typechecking/completeness_checking.an:25:11	error: Expected an integer type but found (_, _), _
-//     match (1, 2, 3, 4)
+// examples/typechecking/completeness_checking.an:25:12
+// 25 |     match (1, 2, 3, 4)	// error: Expected an integer type but found (_, _), _
+//    |            ^
+// 26 |     | (1, 2) -> 1
 // 
-// examples/typechecking/completeness_checking.an:26:7	error: Expected an integer type but found (_, _), _
-//     | (1, 2) -> 1
+// examples/typechecking/completeness_checking.an:26:8
+// 25 |     match (1, 2, 3, 4)
+// 26 |     | (1, 2) -> 1	// error: Expected an integer type but found (_, _), _
+//    |        ^
+// 27 |     | (_, _, _, _) -> 3
 // 
-// examples/typechecking/completeness_checking.an:26:10	error: Expected an integer type but found I32, (I32, I32)
-//     | (1, 2) -> 1
+// examples/typechecking/completeness_checking.an:26:11
+// 25 |     match (1, 2, 3, 4)
+// 26 |     | (1, 2) -> 1	// error: Expected an integer type but found I32, (I32, I32)
+//    |           ^
+// 27 |     | (_, _, _, _) -> 3
 // 
-// examples/typechecking/completeness_checking.an:27:6	warning: This case is already matched by prior patterns
-//     | (_, _, _, _) -> 3
+// examples/typechecking/completeness_checking.an:27:7
+// 26 |     | (1, 2) -> 1
+// 27 |     | (_, _, _, _) -> 3	// warning: This case is already matched by prior patterns
+//    |       ^^^^^^^^^^^^
 // 
 // Found 7 errors and 2 warnings
 

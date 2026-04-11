@@ -14,7 +14,7 @@ second b + 2i64
 // f : (forall a. (Unit -> (U64, I64) can a))
 // e : (U64, I64)
 
-// args: --check --show-types
+// args: --check --show-types --no-color
 // expected exit status: 2
 // expected stderr:
 // error: unexpected argument '--show-types' found

@@ -16,11 +16,15 @@ main () =
         println x
     | None -> println "s = None"
 
-// args: --delete-binary
+// args: --delete-binary --no-color
 // expected exit status: 1
 // expected stderr:
-// examples/codegen/data.an:16:8	error: Multiple matching implicits found for type Print _ required by parameter 2: print_bool, print_char, print_i8, print_i16, print_i32, ..
-//         println x
+// examples/codegen/data.an:16:9
+// 15 |         // so by this point we still get an impl error
+//    |         // error: Multiple matching implicits found for type Print _ required by parameter 2: print_bool, print_char, print_i8, print_i16, print_i32, ..
+// 16 |         println x
+//    |         ^^^^^^^
+// 17 |     | None -> println "s = None"
 // 
 // Found 1 error and 0 warnings
 

@@ -11,7 +11,7 @@ main () =
     foo 3
     bar : Unit
 
-// args: -e ast-r
+// args: -e ast-r --no-color
 // expected exit status: 1
 // expected stdout:
 // // id = c1m488_1237
@@ -19,8 +19,8 @@ main () =
 //     foo_c1m488_1237_3: fn a_1 [[env]_8] -> b_2
 //     bar_c1m488_1237_6: a_1
 // 
-// // id = c1m488_7510
-// implicit foo_i32_string_c1m488_7510_0: Foo_c1m488_1237_0 I32 String_c0m703_9662_0 NoClosureEnv = Foo_c1m488_1237_0 I32 String_c0m703_9662_0 NoClosureEnv with
+// // id = c1m488_9205
+// implicit foo_i32_string_c1m488_9205_0: Foo_c1m488_1237_0 I32 String_c0m703_9662_0 NoClosureEnv = Foo_c1m488_1237_0 I32 String_c0m703_9662_0 NoClosureEnv with
 //     foo_? = fn _x_2 -> "test"
 //     baz_? = 2
 // 
@@ -30,17 +30,27 @@ main () =
 //     bar_?: Unit_bUnit
 
 // expected stderr:
-// examples/nameresolution/Trait.an:6:5	error: Missing field: bar
-// impl foo_i32_string: Foo I32 String with
+// examples/nameresolution/Trait.an:6:6
+// 5 | // error: missing definition of bar
+// 6 | impl foo_i32_string: Foo I32 String with	// error: Missing field: bar
+//   |      ^^^^^^^^^^^^^^
+// 7 |     foo _x = "test"
 // 
-// examples/nameresolution/Trait.an:8:4	error: Foo I32 String NoClosureEnv has no field named `baz`
-//     baz = 2
+// examples/nameresolution/Trait.an:8:5
+//  7 |     foo _x = "test"
+//  8 |     baz = 2	// error: Foo I32 String NoClosureEnv has no field named `baz`
+//    |     ^^^
 // 
-// examples/nameresolution/Trait.an:11:4	error: `foo` not found in scope
-//     foo 3
+// examples/nameresolution/Trait.an:11:5
+// 10 | main () =
+// 11 |     foo 3	// error: `foo` not found in scope
+//    |     ^^^
+// 12 |     bar : Unit
 // 
-// examples/nameresolution/Trait.an:12:4	error: `bar` not found in scope
-//     bar : Unit
+// examples/nameresolution/Trait.an:12:5
+// 11 |     foo 3
+// 12 |     bar : Unit	// error: `bar` not found in scope
+//    |     ^^^
 // 
 // Found 4 errors and 0 warnings
 

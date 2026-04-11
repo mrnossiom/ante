@@ -13,7 +13,8 @@ a = foo 1 2i32
 b = foo 1.0 2.0
 c = foo "one" "two"
 
-// args: -e ast-t
+// args: -e ast-t --no-color
+// expected exit status: 1
 // expected stdout:
 // type Foo a [env] =
 //     foo: fn a a [[env]] -> a
@@ -25,20 +26,31 @@ c = foo "one" "two"
 // (c: _) = (foo: (error)) "one" "two"
 
 // expected stderr:
-// examples/typechecking/impl.an:5:5	error: Expected an identifier but found `Foo`
-// impl Foo I32 with
+// examples/typechecking/impl.an:5:6
+// 5 | impl Foo I32 with	// error: Expected an identifier but found `Foo`
+//   |      ^^^
+// 6 |     foo _a b = b
 // 
-// examples/typechecking/impl.an:8:5	error: Expected an identifier but found `Foo`
-// impl Foo F64 with
+// examples/typechecking/impl.an:8:6
+//  8 | impl Foo F64 with	// error: Expected an identifier but found `Foo`
+//    |      ^^^
+//  9 |     foo _a b = b
 // 
-// examples/typechecking/impl.an:12:4	error: `foo` not found in scope
-// a = foo 1 2i32
+// examples/typechecking/impl.an:12:5
+// 12 | a = foo 1 2i32	// error: `foo` not found in scope
+//    |     ^^^
+// 13 | b = foo 1.0 2.0
 // 
-// examples/typechecking/impl.an:13:4	error: `foo` not found in scope
-// b = foo 1.0 2.0
+// examples/typechecking/impl.an:13:5
+// 12 | a = foo 1 2i32
+// 13 | b = foo 1.0 2.0	// error: `foo` not found in scope
+//    |     ^^^
+// 14 | c = foo "one" "two"
 // 
-// examples/typechecking/impl.an:14:4	error: `foo` not found in scope
-// c = foo "one" "two"
+// examples/typechecking/impl.an:14:5
+// 13 | b = foo 1.0 2.0
+// 14 | c = foo "one" "two"	// error: `foo` not found in scope
+//    |     ^^^
 // 
 // Found 5 errors and 0 warnings
 

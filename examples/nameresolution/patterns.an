@@ -10,7 +10,7 @@ bar (x, y) = ()
 
 qux (x: U32, y) = ()
 
-// args: -e ast-r
+// args: -e ast-r --no-color
 // expected stdout:
 // // id = c1m906_1237
 // type Foo_c1m906_1237_0 =

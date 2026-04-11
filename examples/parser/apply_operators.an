@@ -11,7 +11,7 @@ main () =
 
     1, 2 |> baz <| 3, 4
 
-// args: -e ast
+// args: -e ast --no-color
 // expected stdout:
 // main () =
 //     a |> foo

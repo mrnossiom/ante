@@ -16,7 +16,7 @@ main () =
     exit2 "test"
     puts2
 
-// args: -e ast-t
+// args: -e ast-t --no-color
 // expected exit status: 1
 // expected stdout:
 // import Std.C.puts, exit
@@ -37,11 +37,15 @@ main () =
 //     (puts2: fn String -> I32 pure)
 
 // expected stderr:
-// examples/typechecking/type_annotations.an:7:14	error: Expected I32 but found a
-//     fn _ b -> b
+// examples/typechecking/type_annotations.an:7:15
+// 6 | bar: fn a a -> I32 =
+// 7 |     fn _ b -> b	// error: Expected I32 but found a
+//   |               ^
 // 
-// examples/typechecking/type_annotations.an:16:10	error: Expected I32 but found String
-//     exit2 "test"
+// examples/typechecking/type_annotations.an:16:11
+// 16 |     exit2 "test"	// error: Expected I32 but found String
+//    |           ^^^^^^
+// 17 |     puts2
 // 
 // Found 2 errors and 0 warnings
 

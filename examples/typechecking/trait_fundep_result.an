@@ -7,7 +7,8 @@ impl foo_impl: Foo I32 String with
 
 str = foo 0i32
 
-// args: -e ast-t
+// args: -e ast-t --no-color
+// expected exit status: 1
 // expected stdout:
 // type Foo a [env] =
 //     foo: fn a [[env]] -> b
@@ -18,14 +19,19 @@ str = foo 0i32
 // (str: _) = (foo: (error)) 0_I32
 
 // expected stderr:
-// examples/typechecking/trait_fundep_result.an:3:17	error: `b` not found in scope
-//     foo: fn a -> b
+// examples/typechecking/trait_fundep_result.an:3:18
+// 2 | trait Foo a -> b with
+// 3 |     foo: fn a -> b	// error: `b` not found in scope
+//   |                  ^
 // 
-// examples/typechecking/trait_fundep_result.an:5:5	error: Expected 1 argument but found 3
-// impl foo_impl: Foo I32 String with
+// examples/typechecking/trait_fundep_result.an:5:6
+// 5 | impl foo_impl: Foo I32 String with	// error: Expected 1 argument but found 3
+//   |      ^^^^^^^^
+// 6 |     foo _ = "hi"
 // 
-// examples/typechecking/trait_fundep_result.an:8:6	error: `foo` not found in scope
-// str = foo 0i32
+// examples/typechecking/trait_fundep_result.an:8:7
+//  8 | str = foo 0i32	// error: `foo` not found in scope
+//    |       ^^^
 // 
 // Found 3 errors and 0 warnings
 

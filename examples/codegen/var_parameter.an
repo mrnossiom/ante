@@ -10,7 +10,7 @@ main () =
     println x
     println y
 
-// args: --delete-binary
+// args: --delete-binary --no-color
 // expected stdout:
 // 11
 // 1

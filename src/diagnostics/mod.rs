@@ -1,12 +1,15 @@
 use std::{cmp::Ordering, collections::BTreeSet, fmt::Formatter, path::PathBuf, sync::Arc};
 
-use colored::{ColoredString, Colorize};
+use colored::{Color, ColoredString, Colorize};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    incremental::{CheckAll, Db, DbHandle, ExportedDefinitions, GetCrateGraph, Parse, TypeCheck},
+    incremental::{CheckAll, Db, DbHandle, ExportedDefinitions, GetCrateGraph, Parse, SourceFile, TypeCheck},
     iterator_extensions::mapvec,
-    lexer::token::{IntegerKind, Token},
+    lexer::{
+        Lexer,
+        token::{IntegerKind, Token},
+    },
     name_resolution::namespace::CrateId,
     parser::cst::Name,
     type_inference::{errors::TypeErrorKind, kinds::Kind},
@@ -503,52 +506,310 @@ impl Diagnostic {
     }
 
     fn format(&self, f: &mut Formatter, show_color: bool, compiler: &Db) -> std::fmt::Result {
-        Self::format_message_and_location(self.message(), self.location(), self.kind(), f, show_color, compiler)?;
+        let location = self.location();
+        let message = self.message();
+        let kind = self.kind();
+        let note = self.note();
 
-        if let Some((location, note)) = self.note() {
-            Self::format_message_and_location(note, location, DiagnosticKind::Note, f, show_color, compiler)?;
-        }
-        Ok(())
-    }
-
-    fn format_message_and_location(
-        message: String, location: &Location, kind: DiagnosticKind, f: &mut Formatter, show_color: bool, compiler: &Db,
-    ) -> std::fmt::Result {
         let start = location.span.start;
         let file = location.file_id.get(compiler);
-        let relative_path = os_agnostic_display_path(&file.path, show_color);
-
         writeln!(
             f,
-            "{}:{}:{}\t{} {}",
-            relative_path,
+            "{}:{}:{}",
+            os_agnostic_display_path(&file.path, show_color),
             start.line_number,
-            start.column_number,
-            kind.marker(show_color),
-            message
+            start.column_number
         )?;
 
-        let line = file.contents.lines().nth(start.line_number.max(1) as usize - 1).unwrap_or("");
+        let blocks = line_blocks(location, note.as_ref().map(|(loc, _)| *loc));
+        let digit_len = blocks.iter().map(|b| b.end).max().unwrap_or(1).ilog10() as usize + 1;
 
-        let start_column = start.column_number.max(1) as usize - 1;
-        let length = location.span.end.byte_index - start.byte_index;
-
-        // If the length continues to multiple lines, cut it short after the first line
-        let length = length.min(line.len() - start_column);
-
-        // write the first part of the line, then the erroring part in red, then the rest
-        write!(f, "{}", &line[0..start_column])?;
-        write!(f, "{}", kind.color(&line[start_column..start_column + length], show_color))?;
-        writeln!(f, "{}", &line[start_column + length..])?;
-
-        // If we're not printing in color, print a `^^^` indicator to show where the error is.
-        if !show_color {
-            let padding = " ".repeat(start_column);
-            let indicator = "^".repeat(length.max(1));
-            writeln!(f, "{}{}", padding, indicator)?;
+        for (i, block) in blocks.iter().enumerate() {
+            if i > 0 {
+                // Pads '...' with spaces if needed, or truncates a dot or two
+                writeln!(f, "{:digit_len$} | ", &"..."[..digit_len.min(3)])?;
+            }
+            for line_no in block.clone() {
+                let main = (start.line_number == line_no).then(|| (location.span, &message));
+                let note_span = note
+                    .as_ref()
+                    .and_then(|(loc, msg)| (loc.span.start.line_number == line_no).then(|| (loc.span, msg)));
+                output_source_line(&file, line_no as usize, digit_len, main, note_span, show_color, kind, f)?;
+            }
         }
         Ok(())
     }
+}
+
+/// Given a location, return the line numbers to display the code for
+fn lines_to_display(location: &Location) -> std::ops::Range<u32> {
+    location.span.start.line_number.saturating_sub(1)..location.span.start.line_number + 2
+}
+
+/// Compute the line blocks to display. Returns 1 merged block if ranges
+/// intersect or there's no note, or 2 blocks in source order if disjoint.
+fn line_blocks(main_loc: &Location, note_loc: Option<&Location>) -> Vec<std::ops::Range<u32>> {
+    let main = lines_to_display(main_loc);
+    let Some(note_loc) = note_loc else {
+        return vec![main];
+    };
+    let note = lines_to_display(note_loc);
+
+    if main.start <= note.end && note.start <= main.end {
+        vec![main.start.min(note.start)..main.end.max(note.end)]
+    } else if note.start < main.start {
+        vec![note, main]
+    } else {
+        vec![main, note]
+    }
+}
+
+const MAX_LINE_WIDTH: usize = 100;
+
+/// "\t// error:" roughly 9 chars minimum (1-space tab + "note" kind)
+/// to 19 char maximum (8-space tab + "warning" kind)
+const APPROX_COMMENT_OVERHEAD: usize = 15;
+
+/// Convert a span to a `(start_column, end_column)` range clamped to the line length
+fn span_to_columns(span: Span, line_len: usize) -> (usize, usize) {
+    let start = span.start.column_number.max(1) as usize - 1;
+    let len = (span.end.byte_index - span.start.byte_index).min(line_len - start);
+    (start, start + len)
+}
+
+/// Map a lexer token to a syntax highlight color.
+fn syntax_color(token: &Token) -> Option<Color> {
+    match token {
+        Token::TypeName(_) | Token::IntegerType(_) | Token::FloatType(_) => Some(Color::Blue),
+
+        Token::StringLiteral(_)
+        | Token::CharLiteral(_)
+        | Token::IntegerLiteral(..)
+        | Token::FloatLiteral(..)
+        | Token::BooleanLiteral(_)
+        | Token::UnitLiteral => Some(Color::BrightMagenta),
+
+        Token::And
+        | Token::As
+        | Token::Block
+        | Token::Can
+        | Token::Do
+        | Token::Effect
+        | Token::Else
+        | Token::Exists
+        | Token::Extern
+        | Token::Fn
+        | Token::For
+        | Token::Forall
+        | Token::Freeze
+        | Token::Given
+        | Token::Handle
+        | Token::If
+        | Token::Imm
+        | Token::Impl
+        | Token::Implicit
+        | Token::Import
+        | Token::In
+        | Token::Is
+        | Token::Loop
+        | Token::Match
+        | Token::Module
+        | Token::Mut
+        | Token::Not
+        | Token::Or
+        | Token::Owned
+        | Token::Pure
+        | Token::Ref
+        | Token::Return
+        | Token::Shared
+        | Token::Then
+        | Token::Trait
+        | Token::Type
+        | Token::Uniq
+        | Token::Var
+        | Token::While
+        | Token::With => Some(Color::Cyan),
+
+        _ => None,
+    }
+}
+
+/// Write `text` with syntax highlighting when `show_color` is true, otherwise plain.
+fn write_syntax_highlighted(text: &str, show_color: bool, f: &mut Formatter) -> std::fmt::Result {
+    if !show_color {
+        return write!(f, "{text}");
+    }
+
+    let mut last_end = 0;
+    for (token, span) in Lexer::new(text) {
+        if matches!(token, Token::EndOfInput | Token::Newline | Token::Indent | Token::Unindent) {
+            continue;
+        }
+        let start = span.start.byte_index;
+        let end = span.end.byte_index;
+        // Gaps between tokens are whitespace (or comments)
+        if start > last_end {
+            let text = &text[last_end..start];
+            write_whitespace(text, f)?;
+        }
+        let snippet = &text[start..end];
+        let snippet = syntax_color(&token).map(|color| snippet.color(color)).unwrap_or_else(|| snippet.into());
+        write!(f, "{snippet}")?;
+        last_end = end;
+    }
+    // Print any remaining whitespace
+    if last_end < text.len() {
+        write_whitespace(&text[last_end..], f)?;
+    }
+    Ok(())
+}
+
+fn write_whitespace(text: &str, f: &mut Formatter) -> std::fmt::Result {
+    // Whitespace can contain comments that were ignored by the parser.
+    // Highlight comments in bright_black.
+    // TODO: Is avoiding unnecessary color codes for just whitespace worth the check here?
+    if !text.chars().all(|c| c.is_whitespace()) { write!(f, "{}", text.bright_black()) } else { write!(f, "{text}") }
+}
+
+/// Write the source line with colored segments. Main span color takes priority over note.
+fn write_colored_line(
+    line: &str, main_range: Option<(usize, usize)>, note_range: Option<(usize, usize)>, show_color: bool,
+    kind: DiagnosticKind, f: &mut Formatter,
+) -> std::fmt::Result {
+    let mut bounds = vec![0, line.len()];
+    if let Some((s, e)) = main_range {
+        bounds.extend([s, e]);
+    }
+    if let Some((s, e)) = note_range {
+        bounds.extend([s, e]);
+    }
+    bounds.sort();
+    bounds.dedup();
+
+    for pair in bounds.windows(2) {
+        let range = pair[0]..pair[1];
+        let segment = &line[range.clone()];
+
+        if range_contains(main_range, range.start, range.end) {
+            let styled = kind.color(segment, show_color);
+            write!(f, "{}", if show_color { styled.underline() } else { styled })?;
+        } else if range_contains(note_range, range.start, range.end) {
+            let styled = DiagnosticKind::Note.color(segment, show_color);
+            write!(f, "{}", if show_color { styled.underline() } else { styled })?;
+        } else {
+            write_syntax_highlighted(segment, show_color, f)?;
+        }
+    }
+    Ok(())
+}
+
+/// Write `^^^` / `---` indicators for no-color mode, aligned under the source line
+fn write_no_color_indicator(
+    digit_len: usize, main_range: Option<(usize, usize)>, note_range: Option<(usize, usize)>, f: &mut Formatter,
+) -> std::fmt::Result {
+    let end = main_range.map_or(0, |(_, e)| e).max(note_range.map_or(0, |(_, e)| e));
+    let indicator: String = (0..end)
+        .map(|i| {
+            if range_contains(main_range, i, i + 1) {
+                '^'
+            } else if range_contains(note_range, i, i + 1) {
+                '-'
+            } else {
+                ' '
+            }
+        })
+        .collect();
+    writeln!(f, "{:digit_len$} | {}", "", indicator.trim_end())
+}
+
+/// Format a message comment: ` // error: <message>`
+fn format_message_comment(kind: DiagnosticKind, message: &str, show_color: bool) -> String {
+    let comment = if show_color { "//".bright_black() } else { "//".into() };
+    format!("\t{comment} {} {}", kind.marker(show_color), message.bright_black())
+}
+
+/// Write a message comment on its own line, aligned to the source indentation.
+/// Uses blank padding instead of a line number.
+fn write_overflow_message(
+    digit_len: usize, indent: usize, kind: DiagnosticKind, message: &str, show_color: bool, f: &mut Formatter,
+) -> std::fmt::Result {
+    let comment = if show_color { "//".bright_black() } else { "//".into() };
+    writeln!(f, "{:digit_len$} | {:indent$}{comment} {} {}", "", "", kind.marker(show_color), message.bright_black())
+}
+
+/// Outputs a formatted source line to the formatter (`line_no` is 1-indexed).
+///
+/// If `main`/`note` are set, their spans are highlighted and their messages
+/// shown as comments. These comments are inline if they fit within [MAX_LINE_WIDTH],
+/// otherwise they're on the line above.
+fn output_source_line(
+    file: &SourceFile, line_no: usize, digit_len: usize, main: Option<(Span, &String)>, note: Option<(Span, &String)>,
+    show_color: bool, kind: DiagnosticKind, f: &mut Formatter,
+) -> std::fmt::Result {
+    let line = file.contents.lines().nth(line_no.saturating_sub(1)).unwrap_or("");
+    if line.is_empty() && main.is_none() && note.is_none() {
+        return Ok(());
+    }
+
+    let main_range = main.map(|(span, _)| span_to_columns(span, line.len()));
+    let note_range = note.map(|(span, _)| span_to_columns(span, line.len()));
+
+    if main_range.is_none() && note_range.is_none() {
+        write!(f, "{line_no:digit_len$} | ")?;
+        write_syntax_highlighted(line, show_color, f)?;
+        return writeln!(f);
+    }
+
+    let messages = collect_messages(main, note, kind);
+    let inline = messages_fit_inline(digit_len, line, &messages);
+
+    if !inline {
+        let indent = line.len() - line.trim_start().len();
+        for (msg_kind, text) in &messages {
+            write_overflow_message(digit_len, indent, *msg_kind, text, show_color, f)?;
+        }
+    }
+
+    write!(f, "{line_no:digit_len$} | ")?;
+    write_colored_line(line, main_range, note_range, show_color, kind, f)?;
+
+    if inline {
+        for (msg_kind, text) in &messages {
+            write!(f, "{}", format_message_comment(*msg_kind, text, show_color))?;
+        }
+    }
+    writeln!(f)?;
+
+    if !show_color {
+        write_no_color_indicator(digit_len, main_range, note_range, f)?;
+    }
+    Ok(())
+}
+
+/// Collect the diagnostic messages to display for a source line
+fn collect_messages<'a>(
+    main: Option<(Span, &'a String)>, note: Option<(Span, &'a String)>, kind: DiagnosticKind,
+) -> Vec<(DiagnosticKind, &'a str)> {
+    let mut messages = Vec::new();
+    if let Some((_, msg)) = main {
+        messages.push((kind, msg.as_str()));
+    }
+    if let Some((_, msg)) = note {
+        messages.push((DiagnosticKind::Note, msg.as_str()));
+    }
+    messages
+}
+
+/// Check whether all message comments fit inline on the source line
+fn messages_fit_inline(digit_len: usize, line: &str, messages: &[(DiagnosticKind, &str)]) -> bool {
+    let prefix_len = digit_len + 3; // "{line_no} | "
+    let suffix_len: usize = messages.iter().map(|(_, m)| m.len() + APPROX_COMMENT_OVERHEAD).sum();
+    prefix_len + line.len() + suffix_len <= MAX_LINE_WIDTH
+}
+
+/// True if the given range is `Some` and fully contains `[start, end)`
+fn range_contains(range: Option<(usize, usize)>, start: usize, end: usize) -> bool {
+    range.is_some_and(|(s, e)| start >= s && end <= e)
 }
 
 #[derive(Copy, Clone)]

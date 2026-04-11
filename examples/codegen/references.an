@@ -46,7 +46,7 @@ main () =
     partial_field_assign ()
     struct_ref_assign ()
 
-// args: --delete-binary
+// args: --delete-binary --no-color
 // expected stdout:
 // 42
 // 99

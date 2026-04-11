@@ -4,7 +4,7 @@ foo a =
 
 // Make sure output is not "... given Print a, Print a"
 
-// args: -e ast-t
+// args: -e ast-t --no-color
 // expected exit status: 1
 // expected stdout:
 // (foo: fn _ -> Unit can _) (a: _) =
@@ -12,11 +12,18 @@ foo a =
 //     (fn (p5: _) -> (print: fn _ {Print _} -> Unit pure) (p5: _) {(error)}) (a: _)
 
 // expected stderr:
-// examples/typechecking/repeated_traits.an:2:4	error: Multiple matching implicits found for type Print _ required by parameter 2: print_bool, print_char, print_i8, print_i16, print_i32, ..
-//     print a
+// examples/typechecking/repeated_traits.an:2:5
+// 1 | foo a =
+//   |     // error: Multiple matching implicits found for type Print _ required by parameter 2: print_bool, print_char, print_i8, print_i16, print_i32, ..
+// 2 |     print a
+//   |     ^^^^^
+// 3 |     print a
 // 
-// examples/typechecking/repeated_traits.an:3:4	error: Multiple matching implicits found for type Print _ required by parameter 2: print_bool, print_char, print_i8, print_i16, print_i32, ..
-//     print a
+// examples/typechecking/repeated_traits.an:3:5
+// 2 |     print a
+//   |     // error: Multiple matching implicits found for type Print _ required by parameter 2: print_bool, print_char, print_i8, print_i16, print_i32, ..
+// 3 |     print a
+//   |     ^^^^^
 // 
 // Found 2 errors and 0 warnings
 

@@ -8,7 +8,7 @@ main () =
 
 // Found 1 error and 0 warnings
 
-// args: -e ast-t
+// args: -e ast-t --no-color
 // expected exit status: 1
 // expected stdout:
 // (main: fn Unit -> Unit can _) () =
@@ -18,8 +18,11 @@ main () =
 //     (closure: fn Unit [I32] -> Unit can _) ()
 
 // expected stderr:
-// examples/typechecking/mutate_capture.an:5:8	error: Cannot mutate a captured variable because closures capture by value. Consider capturing a mutable reference instead
-//         x := 5
+// examples/typechecking/mutate_capture.an:5:9
+// 4 |     closure () =
+//   |         // error: Cannot mutate a captured variable because closures capture by value. Consider capturing a mutable reference instead
+// 5 |         x := 5
+//   |         ^^^^^^
 // 
 // Found 1 error and 0 warnings
 

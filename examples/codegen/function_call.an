@@ -11,6 +11,6 @@ main () =
     show "foo\0"
     0
 
-// args: --delete-binary
+// args: --delete-binary --no-color
 // expected stdout: foo
 

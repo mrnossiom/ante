@@ -33,7 +33,8 @@ bad_unapplied (x: Box) : Box = x
 //
 // (bad_unapplied: fn (error) -> (error) pure) ((x: (error))) : Box = (x: (error))
 
-// args: -e ast-t
+// args: -e ast-t --no-color
+// expected exit status: 1
 // expected stdout:
 // type Foo =
 //     foo: Unit
@@ -52,17 +53,27 @@ bad_unapplied (x: Box) : Box = x
 // (bad_unapplied: fn Box -> Box pure) ((x: Box)) : Box = (x: Box)
 
 // expected stderr:
-// examples/typechecking/kinds.an:18:12	error: Expected 0 arguments but found 1
-// bad_app (x: Foo Bool) : Foo Bool = x
+// examples/typechecking/kinds.an:18:13
+// 17 | // Error case: Foo has Kind::Type, applying it to Bool is a kind mismatch
+// 18 | bad_app (x: Foo Bool) : Foo Bool = x	// error: Expected 0 arguments but found 1
+//    |             ^^^^^^^^
 // 
-// examples/typechecking/kinds.an:18:24	error: Expected 0 arguments but found 1
-// bad_app (x: Foo Bool) : Foo Bool = x
+// examples/typechecking/kinds.an:18:25
+// 17 | // Error case: Foo has Kind::Type, applying it to Bool is a kind mismatch
+// 18 | bad_app (x: Foo Bool) : Foo Bool = x	// error: Expected 0 arguments but found 1
+//    |                         ^^^^^^^^
 // 
-// examples/typechecking/kinds.an:21:18	error: Expected a type here, this type constructor is missing 1 argument
-// bad_unapplied (x: Box) : Box = x
+// examples/typechecking/kinds.an:21:19
+// 20 | // Error case: Box has Kind::TypeConstructorSimple(1), not Kind::Type
+//    | // error: Expected a type here, this type constructor is missing 1 argument
+// 21 | bad_unapplied (x: Box) : Box = x
+//    |                   ^^^
 // 
-// examples/typechecking/kinds.an:21:25	error: Expected a type here, this type constructor is missing 1 argument
-// bad_unapplied (x: Box) : Box = x
+// examples/typechecking/kinds.an:21:26
+// 20 | // Error case: Box has Kind::TypeConstructorSimple(1), not Kind::Type
+//    | // error: Expected a type here, this type constructor is missing 1 argument
+// 21 | bad_unapplied (x: Box) : Box = x
+//    |                          ^^^
 // 
 // Found 4 errors and 0 warnings
 

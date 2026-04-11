@@ -38,7 +38,7 @@ main () =
     else 
         true
 
-// args: -e ast
+// args: -e ast --no-color
 // expected exit status: 1
 // expected stdout:
 // type IntBinTreeNode =
@@ -72,8 +72,11 @@ main () =
 //         true
 
 // expected stderr:
-// examples/parser/parser_recovery.an:20:16	error: Expected the end of this block but found `(`
-//                 (append 
+// examples/parser/parser_recovery.an:20:17
+// 19 |             Cons val 
+// 20 |                 (append 	// error: Expected the end of this block but found `(`
+//    |                 ^
+// 21 |                     ||
 // 
 // Found 1 error and 0 warnings
 

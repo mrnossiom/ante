@@ -68,32 +68,62 @@ decompose_fields () =
     _ = c.one.one
     _ = c.one.two
     _ = c.two
-    _ = c.two.two // error: `c.two` already moved
+    _ = c.two.two
+
+// Method for testing notes in error messages when they are too far away
+// to show in the same span
+move_long_ago () =
+    r = Resource 42
+    consume r
+    ()
+    ()
+    ()
+    ()
+    ()
+    take_two r r
 
 main () = ()
 
-// args: --check
+// args: --check --no-color
 // expected exit status: 1
 // expected stderr:
-// examples/typechecking/affine.an:10:12	error: Use of moved value r
-//     consume r
-// examples/typechecking/affine.an:9:12	note: r was previously moved here
-//     consume r
+// examples/typechecking/affine.an:10:13
+//  8 |     r = Resource 1
+//  9 |     consume r	// note: r was previously moved here
+//    |             -
+// 10 |     consume r	// error: Use of moved value r
+//    |             ^
 // 
-// examples/typechecking/affine.an:37:17	error: Use of moved value r
-//     then consume r
-// examples/typechecking/affine.an:35:12	note: r was previously moved here
-//     consume r
+// examples/typechecking/affine.an:37:18
+// 34 |     r = Resource 4
+// 35 |     consume r	// note: r was previously moved here
+//    |             -
+// 36 |     if cond
+// 37 |     then consume r	// error: Use of moved value r
+//    |                  ^
+// 38 |     else ()
 // 
-// examples/typechecking/affine.an:57:15	error: Use of moved value r
-//     take_two r r
-// examples/typechecking/affine.an:57:13	note: r was previously moved here
-//     take_two r r
+// examples/typechecking/affine.an:57:16
+// 56 |     r = Resource 6
+// 57 |     take_two r r	// error: Use of moved value r	// note: r was previously moved here
+//    |              - ^
 // 
-// examples/typechecking/affine.an:71:13	error: Use of moved value c.two.two
-//     _ = c.two.two // error: `c.two` already moved
-// examples/typechecking/affine.an:70:9	note: c.two.two was previously moved here
-//     _ = c.two
+// examples/typechecking/affine.an:71:14
+// 69 |     _ = c.one.two
+// 70 |     _ = c.two	// note: c.two.two was previously moved here
+//    |          ----
+// 71 |     _ = c.two.two	// error: Use of moved value c.two.two
+//    |              ^^^^
 // 
-// Found 4 errors and 0 warnings
+// examples/typechecking/affine.an:83:14
+// 76 |     r = Resource 42
+// 77 |     consume r	// note: r was previously moved here
+//    |             -
+// 78 |     ()
+// .. | 
+// 82 |     ()
+// 83 |     take_two r r	// error: Use of moved value r
+//    |              ^
+// 
+// Found 5 errors and 0 warnings
 

@@ -138,7 +138,7 @@ impl<'contents> Lexer<'contents> {
         self.current_position.byte_index += ret.len_utf8();
 
         if ret == '\n' {
-            self.current_position.column_number = 0;
+            self.current_position.column_number = 1;
             self.current_position.line_number += 1;
         } else {
             self.current_position.column_number += 1;
@@ -148,12 +148,7 @@ impl<'contents> Lexer<'contents> {
     }
 
     fn locate(&self) -> Span {
-        let mut end = self.current_position;
-        // end is exclusive so we have to increment 1.
-        // no token ends in a `\n` so we can ignore the line number
-        end.column_number += 1;
-        end.byte_index += 1;
-        Span { start: self.token_start_position, end }
+        Span { start: self.token_start_position, end: self.current_position }
     }
 
     fn advance_with(&mut self, token: Token) -> IterElem {

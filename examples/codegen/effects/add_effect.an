@@ -25,32 +25,52 @@ sum_all () =
 // 10
 sum_all () |> print
 
-// args: --delete-binary
+// args: --delete-binary --no-color
 // expected exit status: 1
 // expected stderr:
-// examples/codegen/effects/add_effect.an:1:1	error: This program has no `main` function
-// effect Add with
+// examples/codegen/effects/add_effect.an:1:1
+// 0 | effect Add with
+// 1 | effect Add with	// error: This program has no `main` function
+//   | 
+// 2 |     add: U32 -> Unit
 // 
-// examples/codegen/effects/add_effect.an:2:13	error: Expected the end of this block but found `->`
-//     add: U32 -> Unit
+// examples/codegen/effects/add_effect.an:2:14
+// 1 | effect Add with
+// 2 |     add: U32 -> Unit	// error: Expected the end of this block but found `->`
+//   |              ^^
 // 
-// examples/codegen/effects/add_effect.an:6:4	error: `add` not found in scope
-//     add 1
+// examples/codegen/effects/add_effect.an:6:5
+// 5 |     print "foo"
+// 6 |     add 1	// error: `add` not found in scope
+//   |     ^^^
+// 7 |     add 2
 // 
-// examples/codegen/effects/add_effect.an:7:4	error: `add` not found in scope
-//     add 2
+// examples/codegen/effects/add_effect.an:7:5
+// 6 |     add 1
+// 7 |     add 2	// error: `add` not found in scope
+//   |     ^^^
 // 
-// examples/codegen/effects/add_effect.an:11:4	error: `add` not found in scope
-//     add 3
+// examples/codegen/effects/add_effect.an:11:5
+// 10 |     print "bar"
+// 11 |     add 3	// error: `add` not found in scope
+//    |     ^^^
+// 12 |     add 4
 // 
-// examples/codegen/effects/add_effect.an:12:4	error: `add` not found in scope
-//     add 4
+// examples/codegen/effects/add_effect.an:12:5
+// 11 |     add 3
+// 12 |     add 4	// error: `add` not found in scope
+//    |     ^^^
 // 
-// examples/codegen/effects/add_effect.an:15:4	error: Effects and handle expressions are currently unimplemented
-//     handle
+// examples/codegen/effects/add_effect.an:15:5
+// 14 | sum_all () =
+// 15 |     handle	// error: Effects and handle expressions are currently unimplemented
+//    |     ^^^^^^
+// 16 |         foo ()
 // 
-// examples/codegen/effects/add_effect.an:26:8	error: Expected `=` to begin the function body but found `()`
-// sum_all () |> print
+// examples/codegen/effects/add_effect.an:26:9
+// 25 | // 10
+// 26 | sum_all () |> print	// error: Expected `=` to begin the function body but found `()`
+//    |         ^^
 // 
 // Found 8 errors and 0 warnings
 

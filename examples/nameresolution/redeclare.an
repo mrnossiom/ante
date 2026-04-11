@@ -7,7 +7,7 @@ foo _ =
     a = 5
     ()
 
-// args: -e ast-r
+// args: -e ast-r --no-color
 // expected stdout:
 // // id = c1m779_7365
 // a_c1m779_7365_1 = 1
@@ -25,11 +25,16 @@ foo _ =
 //     ()
 
 // expected stderr:
-// examples/nameresolution/redeclare.an:2:0	warning: `a` was already defined
-// a = 2
+// examples/nameresolution/redeclare.an:2:1
+// 1 | a = 1
+// 2 | a = 2	// warning: `a` was already defined
+//   | ^
+// 3 | a = 3
 // 
-// examples/nameresolution/redeclare.an:3:0	warning: `a` was already defined
-// a = 3
+// examples/nameresolution/redeclare.an:3:1
+// 2 | a = 2
+// 3 | a = 3	// warning: `a` was already defined
+//   | ^
 // 
 // Compiled with 2 warnings
 

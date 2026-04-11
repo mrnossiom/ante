@@ -21,7 +21,7 @@ main () =
     i = TakeWhile 8 (_ >= 5)
     iter i println
 
-// args: --delete-binary
+// args: --delete-binary --no-color
 // expected stdout:
 // 8
 // 7

@@ -4,7 +4,7 @@ foo x =
 
 // type should be a -> (b -> a)
 
-// args: -e ast-t
+// args: -e ast-t --no-color
 // expected stdout:
 // (foo: fn _ -> fn _ [_] -> _ can _ can _) (x: _) =
 //     (y: fn _ [_] -> _ can _) (_: _) [(x: _)] = (x: _)

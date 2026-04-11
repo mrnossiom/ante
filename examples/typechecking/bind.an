@@ -14,7 +14,7 @@ x = Maybe.Some 10i32
 add_one x =
     bind x (fn x -> ret (x + 1i32))
 
-// args: -e ast-t
+// args: -e ast-t --no-color
 // expected stdout:
 // (bind: fn (Maybe _) (fn _ [_] -> Maybe _ can _) -> Maybe _ can _) (opt: Maybe _) (f: fn _ [_] -> Maybe _ can _) =
 //     (match_var6: (error)) = (opt: Maybe _)

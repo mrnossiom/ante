@@ -8,7 +8,7 @@ foo_result = foo 1
 puts2_result = puts2 "test"
 exit2_result = exit2 0
 
-// args: -e ast-t
+// args: -e ast-t --no-color
 // expected stdout:
 // (foo: fn a -> b pure) = extern "foo"
 // 

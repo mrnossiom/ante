@@ -24,7 +24,7 @@ foo (e: Either) =
     | Up -> ()
     | Down -> ()
 
-// args: -e ast-t
+// args: -e ast-t --no-color
 // expected stdout:
 // type Either =
 //     | Left

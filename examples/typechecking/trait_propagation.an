@@ -10,7 +10,7 @@ foo () = baz bar
 // because it has a typevariable.
 //
 
-// args: -e ast-t
+// args: -e ast-t --no-color
 // expected exit status: 1
 // expected stdout:
 // (bar: a) = extern "bar"
@@ -21,8 +21,9 @@ foo () = baz bar
 // (foo: fn Unit -> _ can _) () = (baz: (error)) (bar: _)
 
 // expected stderr:
-// examples/typechecking/trait_propagation.an:6:9	error: `baz` not found in scope
-// foo () = baz bar
+// examples/typechecking/trait_propagation.an:6:10
+// 6 | foo () = baz bar	// error: `baz` not found in scope
+//   |          ^^^
 // 
 // Found 1 error and 0 warnings
 

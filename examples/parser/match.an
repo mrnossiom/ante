@@ -16,7 +16,7 @@ main () =
     match "empty"
     "done"
 
-// args: -e ast
+// args: -e ast --no-color
 // expected exit status: 1
 // expected stdout:
 // main () =
@@ -27,17 +27,26 @@ main () =
 //     "done"
 
 // expected stderr:
-// examples/parser/match.an:4:4	error: Expected an expression but found `|`
-//     | 2 3 -> "foo"
+// examples/parser/match.an:4:5
+// 3 |     match test "foo" "bar"
+// 4 |     | 2 3 -> "foo"	// error: Expected an expression but found `|`
+//   |     ^
 // 
-// examples/parser/match.an:6:4	error: Expected an expression but found `|`
-//     | "bar" -> "bar"
+// examples/parser/match.an:6:5
+// 6 |     | "bar" -> "bar"	// error: Expected an expression but found `|`
+//   |     ^
+// 7 |     | "block" ->
 // 
-// examples/parser/match.an:7:4	error: Expected an expression but found `|`
-//     | "block" ->
+// examples/parser/match.an:7:5
+// 6 |     | "bar" -> "bar"
+// 7 |     | "block" ->	// error: Expected an expression but found `|`
+//   |     ^
+// 8 |         if true then 1 else 2
 // 
-// examples/parser/match.an:10:4	error: Expected an expression but found `|`
-//     | "last branch" ->
+// examples/parser/match.an:10:5
+// 10 |     | "last branch" ->	// error: Expected an expression but found `|`
+//    |     ^
+// 11 |         match "nested"
 // 
 // Found 4 errors and 0 warnings
 

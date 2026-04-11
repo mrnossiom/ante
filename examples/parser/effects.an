@@ -33,7 +33,7 @@ map3 (l: List a) (f: fn a -> b pure) : List b pure = ()
 
 map4 (l: List a) (f: fn a -> b) : List b can Log = ()
 
-// args: -e ast
+// args: -e ast --no-color
 // expected exit status: 1
 // expected stdout:
 // effect Log with
@@ -59,23 +59,37 @@ map4 (l: List a) (f: fn a -> b) : List b can Log = ()
 //     map4 (l: List a) (f: fn a -> b) : List b can Log = ()
 
 // expected stderr:
-// examples/parser/effects.an:15:4	error: Expected an expression but found `|`
-//     | log "a" -> print "case 1"
+// examples/parser/effects.an:15:5
+// 14 |         log "test2"
+// 15 |     | log "a" -> print "case 1"	// error: Expected an expression but found `|`
+//    |     ^
+// 16 |     | log "b" -> print "case 2"
 // 
-// examples/parser/effects.an:16:4	error: Expected an expression but found `|`
-//     | log "b" -> print "case 2"
+// examples/parser/effects.an:16:5
+// 15 |     | log "a" -> print "case 1"
+// 16 |     | log "b" -> print "case 2"	// error: Expected an expression but found `|`
+//    |     ^
+// 17 |     | log _   -> print "case 3"
 // 
-// examples/parser/effects.an:17:4	error: Expected an expression but found `|`
-//     | log _   -> print "case 3"
+// examples/parser/effects.an:17:5
+// 16 |     | log "b" -> print "case 2"
+// 17 |     | log _   -> print "case 3"	// error: Expected an expression but found `|`
+//    |     ^
 // 
-// examples/parser/effects.an:25:4	error: Expected an expression but found `|`
-//     | return _ -> "foo"
+// examples/parser/effects.an:25:5
+// 24 |     handle ()
+// 25 |     | return _ -> "foo"	// error: Expected an expression but found `|`
+//    |     ^
+// 26 |     | log _ -> "impossible"
 // 
-// examples/parser/effects.an:26:4	error: Expected an expression but found `|`
-//     | log _ -> "impossible"
+// examples/parser/effects.an:26:5
+// 25 |     | return _ -> "foo"
+// 26 |     | log _ -> "impossible"	// error: Expected an expression but found `|`
+//    |     ^
 // 
-// examples/parser/effects.an:82:0	error: Expected the end of this block but found end of input
-// 
+// examples/parser/effects.an:96:1
+// 96 | 	// error: Expected the end of this block but found end of input
+//    | 
 // 
 // Found 6 errors and 0 warnings
 

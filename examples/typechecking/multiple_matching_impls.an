@@ -34,7 +34,7 @@ impl does_not_match {_: Print a}: Foo a with
 impl candidate2: Foo Thing with
     foo _ = ()
 
-// args: -e ast-t
+// args: -e ast-t --no-color
 // expected exit status: 1
 // expected stdout:
 // type Thing =
@@ -68,23 +68,39 @@ impl candidate2: Foo Thing with
 //     (foo: fn Thing -> Unit pure) = fn (_: Thing) -> ()
 
 // expected stderr:
-// examples/typechecking/multiple_matching_impls.an:15:4	error: `foo` not found in scope
-//     foo (Thing ())
+// examples/typechecking/multiple_matching_impls.an:15:5
+// 14 |     // The call from which the `Foo a` constraint arises
+// 15 |     foo (Thing ())	// error: `foo` not found in scope
+//    |     ^^^
 // 
-// examples/typechecking/multiple_matching_impls.an:19:4	error: Expected the closure environment (Bar a), but the actual environment was empty
-//     foo a = bar a
+// examples/typechecking/multiple_matching_impls.an:19:5
+// 18 | impl candidate1 {_: Bar a}: Foo a with
+//    |     // error: Expected the closure environment (Bar a), but the actual environment was empty
+// 19 |     foo a = bar a
+//    |     ^^^
 // 
-// examples/typechecking/multiple_matching_impls.an:19:12	error: Expected fn _ [_] -> Unit can _ but found fn {Baz _} -> Bar _ pure
-//     foo a = bar a
+// examples/typechecking/multiple_matching_impls.an:19:13
+// 18 | impl candidate1 {_: Bar a}: Foo a with
+//    |     // error: Expected fn _ [_] -> Unit can _ but found fn {Baz _} -> Bar _ pure
+// 19 |     foo a = bar a
+//    |             ^^^
 // 
-// examples/typechecking/multiple_matching_impls.an:22:4	error: Expected the closure environment (Baz a), but the actual environment was empty
-//     bar a = baz a
+// examples/typechecking/multiple_matching_impls.an:22:5
+// 21 | impl bar {_: Baz a}: Bar a with
+//    |     // error: Expected the closure environment (Baz a), but the actual environment was empty
+// 22 |     bar a = baz a
+//    |     ^^^
 // 
-// examples/typechecking/multiple_matching_impls.an:22:12	error: Expected fn _ [_] -> Unit can _ but found Baz Thing
-//     bar a = baz a
+// examples/typechecking/multiple_matching_impls.an:22:13
+// 21 | impl bar {_: Baz a}: Bar a with
+// 22 |     bar a = baz a	// error: Expected fn _ [_] -> Unit can _ but found Baz Thing
+//    |             ^^^
 // 
-// examples/typechecking/multiple_matching_impls.an:30:4	error: Expected the closure environment (Print a), but the actual environment was empty
-//     foo _ = ()
+// examples/typechecking/multiple_matching_impls.an:30:5
+// 29 | impl does_not_match {_: Print a}: Foo a with
+//    |     // error: Expected the closure environment (Print a), but the actual environment was empty
+// 30 |     foo _ = ()
+//    |     ^^^
 // 
 // Found 6 errors and 0 warnings
 

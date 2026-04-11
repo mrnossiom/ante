@@ -24,7 +24,8 @@ bar 3 2
 
 bar "four" "five"
 
-// args: -e ast-t
+// args: -e ast-t --no-color
+// expected exit status: 1
 // expected stdout:
 // type Bar a [env] =
 //     bar: fn a a [[env]] -> b
@@ -46,32 +47,49 @@ bar "four" "five"
 // (baz: fn String _ -> _ can _) ((x: String)) (y: _) = (bar: (error)) (x: String) (y: _)
 
 // expected stderr:
-// examples/typechecking/trait_impls.an:3:19	error: `b` not found in scope
-//     bar: fn a a -> b
+// examples/typechecking/trait_impls.an:3:20
+// 2 | trait Bar a -> b with
+// 3 |     bar: fn a a -> b	// error: `b` not found in scope
+//   |                    ^
+// 4 |    
 // 
-// examples/typechecking/trait_impls.an:6:5	error: Expected 1 argument but found 3
-// impl bar1: Bar I32 String with
+// examples/typechecking/trait_impls.an:6:6
+// 6 | impl bar1: Bar I32 String with	// error: Expected 1 argument but found 3
+//   |      ^^^^
+// 7 |     bar _ _ = "good"
 // 
-// examples/typechecking/trait_impls.an:9:5	error: Expected 1 argument but found 3
-// impl bar2: Bar I32 I32 with
+// examples/typechecking/trait_impls.an:9:6
+//  9 | impl bar2: Bar I32 I32 with	// error: Expected 1 argument but found 3
+//    |      ^^^^
+// 10 |     bar _ _ = "bad return type"
 // 
-// examples/typechecking/trait_impls.an:12:5	error: Expected 1 argument but found 6
-// impl bar3: Bar I32 Char String F64 Unit with
+// examples/typechecking/trait_impls.an:12:6
+// 12 | impl bar3: Bar I32 Char String F64 Unit with	// error: Expected 1 argument but found 6
+//    |      ^^^^
+// 13 |     bar _ _ = "bad impl args"
 // 
-// examples/typechecking/trait_impls.an:17:5	error: Expected 1 argument but found 3
-// impl bar4: Bar I32 F64 with
+// examples/typechecking/trait_impls.an:17:6
+// 17 | impl bar4: Bar I32 F64 with	// error: Expected 1 argument but found 3
+//    |      ^^^^
+// 18 |     bar _ _ = 23.2 // Should be an error, we already have a Bar I32
 // 
-// examples/typechecking/trait_impls.an:20:10	error: `bar` not found in scope
-// foo a b = bar a b
+// examples/typechecking/trait_impls.an:20:11
+// 20 | foo a b = bar a b	// error: `bar` not found in scope
+//    |           ^^^
 // 
-// examples/typechecking/trait_impls.an:22:20	error: `bar` not found in scope
-// baz (x: String) y = bar x y
+// examples/typechecking/trait_impls.an:22:21
+// 22 | baz (x: String) y = bar x y	// error: `bar` not found in scope
+//    |                     ^^^
+// 23 | bar 3 2
 // 
-// examples/typechecking/trait_impls.an:23:4	error: Expected `=` to begin the function body but found `3`
-// bar 3 2
+// examples/typechecking/trait_impls.an:23:5
+// 22 | baz (x: String) y = bar x y
+// 23 | bar 3 2	// error: Expected `=` to begin the function body but found `3`
+//    |     ^
 // 
-// examples/typechecking/trait_impls.an:25:4	error: Expected `=` to begin the function body but found `"four"`
-// bar "four" "five"
+// examples/typechecking/trait_impls.an:25:5
+// 25 | bar "four" "five"	// error: Expected `=` to begin the function body but found `"four"`
+//    |     ^^^^^^
 // 
 // Found 9 errors and 0 warnings
 

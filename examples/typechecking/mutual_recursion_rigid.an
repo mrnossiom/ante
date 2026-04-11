@@ -28,7 +28,7 @@ ex2b (a: u) b {Copy u} =
 ex2c (a: v) b =
     ex2a a b
 
-// args: -e ast-t
+// args: -e ast-t --no-color
 // expected exit status: 1
 // expected stdout:
 // (ex1a: fn t _ -> U32 can _) ((a: t)) (b: _) =
@@ -57,17 +57,26 @@ ex2c (a: v) b =
 //     (ex2a: fn v (error) -> _ can _) (a: v) (b: (error))
 
 // expected stderr:
-// examples/typechecking/mutual_recursion_rigid.an:20:0	error: Expected 2 arguments but found 3
-// ex2a (a: t) b {Copy t} =
+// examples/typechecking/mutual_recursion_rigid.an:20:1
+// 20 | ex2a (a: t) b {Copy t} =	// error: Expected 2 arguments but found 3
+//    | ^^^^
+// 21 |     ex2b a b
 // 
-// examples/typechecking/mutual_recursion_rigid.an:21:4	error: No implicit found for type Copy t required by parameter 3
-//     ex2b a b
+// examples/typechecking/mutual_recursion_rigid.an:21:5
+// 20 | ex2a (a: t) b {Copy t} =
+// 21 |     ex2b a b	// error: No implicit found for type Copy t required by parameter 3
+//    |     ^^^^
+// 22 |     trait1 a
 // 
-// examples/typechecking/mutual_recursion_rigid.an:22:4	error: `trait1` not found in scope
-//     trait1 a
+// examples/typechecking/mutual_recursion_rigid.an:22:5
+// 21 |     ex2b a b
+// 22 |     trait1 a	// error: `trait1` not found in scope
+//    |     ^^^^^^
 // 
-// examples/typechecking/mutual_recursion_rigid.an:26:4	error: `trait2` not found in scope
-//     trait2 a
+// examples/typechecking/mutual_recursion_rigid.an:26:5
+// 25 |     ex2c a b
+// 26 |     trait2 a	// error: `trait2` not found in scope
+//    |     ^^^^^^
 // 
 // Found 4 errors and 0 warnings
 

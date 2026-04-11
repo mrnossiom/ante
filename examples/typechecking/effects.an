@@ -21,7 +21,7 @@ does_use x =
     y = get ()
     set (y + x)
 
-// args: -e ast-t
+// args: -e ast-t --no-color
 // expected exit status: 1
 // expected stdout:
 // effect Log with
@@ -45,20 +45,34 @@ does_use x =
 //     (set: (error)) ((fn (p5: _) (p6: _) -> (+: fn _ _ {Add _} -> _ pure) (p5: _) (p6: _) {(error)}) (y: _) (x: _))
 
 // expected stderr:
-// examples/typechecking/effects.an:10:4	error: Effects and handle expressions are currently unimplemented
-//     handle log "test1"
+// examples/typechecking/effects.an:10:5
+//  9 | handle_basic () = 
+// 10 |     handle log "test1"	// error: Effects and handle expressions are currently unimplemented
+//    |     ^^^^^^^^^^^^^^^^^^
+// 11 |     | log v -> set v
 // 
-// examples/typechecking/effects.an:14:4	error: Effects and handle expressions are currently unimplemented
-//     handle ()
+// examples/typechecking/effects.an:14:5
+// 13 | use_resume () =
+// 14 |     handle ()	// error: Effects and handle expressions are currently unimplemented
+//    |     ^^^^^^^^^
+// 15 |     // Test these two 'resume's refer to two different variables
 // 
-// examples/typechecking/effects.an:21:8	error: `get` not found in scope
-//     y = get ()
+// examples/typechecking/effects.an:21:9
+// 20 | does_use x =
+// 21 |     y = get ()	// error: `get` not found in scope
+//    |         ^^^
+// 22 |     set (y + x)
 // 
-// examples/typechecking/effects.an:22:4	error: `set` not found in scope
-//     set (y + x)
+// examples/typechecking/effects.an:22:5
+// 21 |     y = get ()
+// 22 |     set (y + x)	// error: `set` not found in scope
+//    |     ^^^
 // 
-// examples/typechecking/effects.an:22:11	error: Multiple matching implicits found for type Add _ required by parameter 3: add_i8, add_i16, add_i32, add_i64, add_isz, ..
-//     set (y + x)
+// examples/typechecking/effects.an:22:12
+// 21 |     y = get ()
+//    |     // error: Multiple matching implicits found for type Add _ required by parameter 3: add_i8, add_i16, add_i32, add_i64, add_isz, ..
+// 22 |     set (y + x)
+//    |            ^
 // 
 // Found 5 errors and 0 warnings
 

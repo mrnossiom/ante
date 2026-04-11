@@ -16,29 +16,45 @@ foo () =
 
 print <| read_or_zero foo
 
-// args: --delete-binary
+// args: --delete-binary --no-color
 // expected exit status: 1
 // expected stderr:
-// examples/codegen/effects/handle_multiple_effects.an:1:1	error: This program has no `main` function
+// examples/codegen/effects/handle_multiple_effects.an:1:1
+// 1 | 	// error: This program has no `main` function
+//   | 
+// 2 | effect Fail with
 // 
+// examples/codegen/effects/handle_multiple_effects.an:3:16
+// 2 | effect Fail with
+// 3 |     fail: Unit -> a	// error: Expected the end of this block but found `->`
+//   |                ^^
 // 
-// examples/codegen/effects/handle_multiple_effects.an:3:15	error: Expected the end of this block but found `->`
-//     fail: Unit -> a
+// examples/codegen/effects/handle_multiple_effects.an:6:16
+// 5 | effect Read a with
+// 6 |     read: Unit -> a	// error: Expected the end of this block but found `->`
+//   |                ^^
 // 
-// examples/codegen/effects/handle_multiple_effects.an:6:15	error: Expected the end of this block but found `->`
-//     read: Unit -> a
+// examples/codegen/effects/handle_multiple_effects.an:9:5
+//  8 | read_or_zero f =
+//    |     // error: Effects and handle expressions are currently unimplemented
+//  9 |     handle Some <| f ()
+//    |     ^^^^^^^^^^^^^^^^^^^
+// 10 |     | fail () -> None
 // 
-// examples/codegen/effects/handle_multiple_effects.an:9:4	error: Effects and handle expressions are currently unimplemented
-//     handle Some <| f ()
+// examples/codegen/effects/handle_multiple_effects.an:14:19
+// 13 | foo () =
+// 14 |     if false then fail ()	// error: `fail` not found in scope
+//    |                   ^^^^
+// 15 |     read ()
 // 
-// examples/codegen/effects/handle_multiple_effects.an:14:18	error: `fail` not found in scope
-//     if false then fail ()
+// examples/codegen/effects/handle_multiple_effects.an:15:5
+// 14 |     if false then fail ()
+// 15 |     read ()	// error: `read` not found in scope
+//    |     ^^^^
 // 
-// examples/codegen/effects/handle_multiple_effects.an:15:4	error: `read` not found in scope
-//     read ()
-// 
-// examples/codegen/effects/handle_multiple_effects.an:17:6	error: Expected `=` to begin the function body but found `<|`
-// print <| read_or_zero foo
+// examples/codegen/effects/handle_multiple_effects.an:17:7
+// 17 | print <| read_or_zero foo	// error: Expected `=` to begin the function body but found `<|`
+//    |       ^^
 // 
 // Found 7 errors and 0 warnings
 

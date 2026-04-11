@@ -14,7 +14,7 @@ main () = is_even 4
 // Both of these definitions should have the `Print (int a)` constraint.
 // TODO: is_odd here uses `forall a c.` instead of `forall a b.`
 
-// args: -e ast-t
+// args: -e ast-t --no-color
 // expected stdout:
 // (is_even: fn I32 -> Bool can _) (n: I32) =
 //     if (fn (p8: I32) (p9: I32) -> (==: fn I32 I32 {Eq I32} -> Bool pure) (p8: I32) (p9: I32) {(eq_i32: Eq I32)}) (n: I32) 0 then true else 

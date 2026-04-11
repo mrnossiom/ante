@@ -3,6 +3,6 @@ main () =
     stuff () = println foo
     stuff ()
 
-// args: --delete-binary
+// args: --delete-binary --no-color
 // expected stdout: hi there
 

@@ -28,7 +28,8 @@ a6_ = id (freeze auto_prime)
 a7 = choose id auto
 // a8 = choose id auto_prime // error expected
 
-// args: -e ast-t
+// args: -e ast-t --no-color
+// expected exit status: 1
 // expected stdout:
 // (id: fn _ -> _ can _) (x: _) = (x: _)
 // 
@@ -58,32 +59,48 @@ a7 = choose id auto
 // (a7: fn (error) -> (error) can _) = (choose: fn (fn (error) -> (error) can _) (fn (error) -> (error) can _) -> fn (error) -> (error) can _ can _) (id: fn (error) -> (error) can _) (auto: fn (error) -> (error) can _)
 
 // expected stderr:
-// examples/typechecking/impredicativity.an:4:6	error: Expected an expression but found `[`
-// ids = [freeze id]
+// examples/typechecking/impredicativity.an:4:7
+// 4 | ids = [freeze id]	// error: Expected an expression but found `[`
+//   |       ^
 // 
-// examples/typechecking/impredicativity.an:6:9	error: Expected a type but found `forall`
-// auto (x: forall a. fn a -> a) = x (freeze x)
+// examples/typechecking/impredicativity.an:6:10
+// 6 | auto (x: forall a. fn a -> a) = x (freeze x)	// error: Expected a type but found `forall`
+//   |          ^^^^^^
 // 
-// examples/typechecking/impredicativity.an:6:35	error: Expected an expression but found `freeze`
-// auto (x: forall a. fn a -> a) = x (freeze x)
+// examples/typechecking/impredicativity.an:6:36
+//   | // error: Expected an expression but found `freeze`
+// 6 | auto (x: forall a. fn a -> a) = x (freeze x)
+//   |                                    ^^^^^^
 // 
-// examples/typechecking/impredicativity.an:8:15	error: Expected a type but found `forall`
-// auto_prime (x: forall a. fn a -> a) = x x
+// examples/typechecking/impredicativity.an:8:16
+//  8 | auto_prime (x: forall a. fn a -> a) = x x	// error: Expected a type but found `forall`
+//    |                ^^^^^^
 // 
-// examples/typechecking/impredicativity.an:10:11	error: Expected an expression but found `freeze`
-// f5 = auto (freeze id)
+// examples/typechecking/impredicativity.an:10:12
+// 10 | f5 = auto (freeze id)	// error: Expected an expression but found `freeze`
+//    |            ^^^^^^
 // 
-// examples/typechecking/impredicativity.an:15:9	error: Expected a type but found `forall`
-// poly (f: forall a. fn a -> a) =
+// examples/typechecking/impredicativity.an:15:10
+// 15 | poly (f: forall a. fn a -> a) =	// error: Expected a type but found `forall`
+//    |          ^^^^^^
+// 16 |     f 42, f true
 // 
-// examples/typechecking/impredicativity.an:19:8	error: `revapp` not found in scope
-//     f = revapp (freeze id)
+// examples/typechecking/impredicativity.an:19:9
+// 18 | f9 =
+// 19 |     f = revapp (freeze id)	// error: `revapp` not found in scope
+//    |         ^^^^^^
+// 20 |     f poly
 // 
-// examples/typechecking/impredicativity.an:19:16	error: Expected an expression but found `freeze`
-//     f = revapp (freeze id)
+// examples/typechecking/impredicativity.an:19:17
+// 18 | f9 =
+// 19 |     f = revapp (freeze id)	// error: Expected an expression but found `freeze`
+//    |                 ^^^^^^
+// 20 |     f poly
 // 
-// examples/typechecking/impredicativity.an:26:10	error: Expected an expression but found `freeze`
-// a6_ = id (freeze auto_prime)
+// examples/typechecking/impredicativity.an:26:11
+// 25 | a6 = id auto_prime
+// 26 | a6_ = id (freeze auto_prime)	// error: Expected an expression but found `freeze`
+//    |           ^^^^^^
 // 
 // Found 9 errors and 0 warnings
 

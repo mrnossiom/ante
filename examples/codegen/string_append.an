@@ -2,5 +2,5 @@ main () =
     a = "你好"
     print (a ++ "，世界")
 
-// args: --delete-binary
+// args: --delete-binary --no-color
 // expected stdout: 你好，世界

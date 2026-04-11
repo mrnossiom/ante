@@ -29,7 +29,8 @@ implicit_call () =
     implicit make_string {Bool} = ""
     requires_string ()
 
-// args: -e ast-t
+// args: -e ast-t --no-color
+// expected exit status: 1
 // expected stdout:
 // (requires_string: fn {String} Unit -> Unit pure) {(s: String)} () : Unit = ()
 // 
@@ -66,14 +67,23 @@ implicit_call () =
 //     (fn (p2: Unit) [(make_string: fn {Bool} -> String can _)] -> (requires_string: fn {String} Unit -> Unit pure) {(make_string: fn {Bool} -> String can _) {(false_: Bool)}} (p2: Unit)) ()
 
 // expected stderr:
-// examples/typechecking/implicit.an:6:4	error: No implicit found for type String required by parameter 1
-//     requires_string ()
+// examples/typechecking/implicit.an:6:5
+// 5 | zero_matching () =
+// 6 |     requires_string ()	// error: No implicit found for type String required by parameter 1
+//   |     ^^^^^^^^^^^^^^^
 // 
-// examples/typechecking/implicit.an:16:4	error: Multiple matching implicits found for type String required by parameter 1: empty, spaces, greeting
-//     requires_string ()
+// examples/typechecking/implicit.an:16:5
+// 15 |     implicit greeting = "hi!"
+//    |     // error: Multiple matching implicits found for type String required by parameter 1: empty, spaces, greeting
+// 16 |     requires_string ()
+//    |     ^^^^^^^^^^^^^^^
 // 
-// examples/typechecking/implicit.an:23:4	error: Multiple matching implicits found for type U32 required by parameter 1: zero, one
-//     requires_u32 ()
+// examples/typechecking/implicit.an:23:5
+// 22 |     implicit zero = 0u32
+//    |     // error: Multiple matching implicits found for type U32 required by parameter 1: zero, one
+// 23 |     requires_u32 ()
+//    |     ^^^^^^^^^^^^
+// 24 |     
 // 
 // Found 3 errors and 0 warnings
 

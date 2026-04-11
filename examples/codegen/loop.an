@@ -24,7 +24,7 @@ sum_up_to n =
         if n <= 0 then total
         else recur (n - 1) (total + n)
 
-// args: --delete-binary
+// args: --delete-binary --no-color
 // expected stdout:
 // 55
 // 7 22 11 34 17 52 26 13 40 20 10 5 16 8 4 2 

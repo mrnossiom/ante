@@ -17,7 +17,7 @@ my_iter iterable f =
 
 main () = my_iter 10 println
 
-// args: --delete-binary
+// args: --delete-binary --no-color
 // expected stdout:
 // 10
 // 9

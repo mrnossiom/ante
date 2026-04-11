@@ -20,7 +20,7 @@ main () =
     | put () -> ()
     | three 0 1 -> ()
 
-// args: -e ast-r
+// args: -e ast-r --no-color
 // expected stdout:
 // // id = c1m485_8962
 // effect Three_c1m485_8962_0 with

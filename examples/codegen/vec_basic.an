@@ -8,6 +8,6 @@ main () =
     remove_index (mut v) 1
     println (ref v)
 
-// args: --delete-binary
+// args: --delete-binary --no-color
 // expected stdout: [3, 5]
 

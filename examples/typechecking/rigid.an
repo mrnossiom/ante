@@ -7,7 +7,7 @@ ex2: fn a -> b =
 
 main () = ()
 
-// args: -e ast-t
+// args: -e ast-t --no-color
 // expected exit status: 1
 // expected stdout:
 // (ex1: fn a -> b pure) ((x: a)) : b = (fn (p2: b) (p3: b) -> (+: fn b b {Add b} -> b pure) (p2: b) (p3: b) {(error)}) (x: a) 1_U32
@@ -18,17 +18,22 @@ main () = ()
 // (main: fn Unit -> Unit can _) () = ()
 
 // expected stderr:
-// examples/typechecking/rigid.an:2:16	error: Expected b but found a
-// ex1 (x: a): b = x + 1u32
+// examples/typechecking/rigid.an:2:17
+// 2 | ex1 (x: a): b = x + 1u32	// error: Expected b but found a
+//   |                 ^
 // 
-// examples/typechecking/rigid.an:2:18	error: No implicit found for type Add b required by parameter 3
-// ex1 (x: a): b = x + 1u32
+// examples/typechecking/rigid.an:2:19
+// 2 | ex1 (x: a): b = x + 1u32	// error: No implicit found for type Add b required by parameter 3
+//   |                   ^
 // 
-// examples/typechecking/rigid.an:2:20	error: Expected b but found U32
-// ex1 (x: a): b = x + 1u32
+// examples/typechecking/rigid.an:2:21
+// 2 | ex1 (x: a): b = x + 1u32	// error: Expected b but found U32
+//   |                     ^
 // 
-// examples/typechecking/rigid.an:6:12	error: Expected b but found a
-//     fn x -> x
+// examples/typechecking/rigid.an:6:13
+// 5 | ex2: fn a -> b =
+// 6 |     fn x -> x	// error: Expected b but found a
+//   |             ^
 // 
 // Found 4 errors and 0 warnings
 

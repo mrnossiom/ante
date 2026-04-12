@@ -1,5 +1,8 @@
 import Std.C.malloc, free
 
+export Rc, of, as_ref, as_mut, ref_count, inc_ref_count, dec_ref_count,
+    copy_rc, clone_rc, drop_rc
+
 /// A non-threadsafe reference-counted pointer.
 type Rc t =
     ptr: Ptr (U32, t)

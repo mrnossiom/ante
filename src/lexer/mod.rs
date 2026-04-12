@@ -128,7 +128,7 @@ impl<'contents> Lexer<'contents> {
     }
 
     fn at_end_of_input(&self) -> bool {
-        self.current == '\0'
+        self.current_position.byte_index >= self.file_contents.len()
     }
 
     fn advance(&mut self) -> char {
@@ -532,19 +532,28 @@ impl<'contents> Iterator for Lexer<'contents> {
             None => false,
         };
 
+        // Check for end of input before the main match. This uses byte position
+        // rather than checking for '\0' so that literal null bytes in source files
+        // don't cause a premature end of input.
+        if self.at_end_of_input() {
+            return if self.current_indent_level != 0 {
+                // Issue any pending unindent tokens before EndOfInput
+                self.lex_unindent(0)
+            } else if self.current_position.byte_index > self.file_contents.len() {
+                None
+            } else {
+                self.advance_with(Token::EndOfInput)
+            };
+        }
+
         match (self.current, self.next) {
             (c, _) if c.is_ascii_digit() => self.lex_number(),
             ('c', '"') => self.lex_char_literal(),
             (c, _) if c.is_alphanumeric() || c == '_' => self.lex_alphanumeric(),
             ('\0', _) => {
-                if self.current_indent_level != 0 {
-                    // Issue any pending unindent tokens before EndOfInput
-                    self.lex_unindent(0)
-                } else if self.current_position.byte_index > self.file_contents.len() {
-                    None
-                } else {
-                    self.advance_with(Token::EndOfInput)
-                }
+                // Literal null byte in source file - skip it
+                self.advance();
+                self.next()
             },
             ('"', _) => self.lex_string(),
             ('}', _) if matched_interpolation => {

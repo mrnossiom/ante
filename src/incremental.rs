@@ -64,6 +64,8 @@ pub struct DbStorage {
     visible_definitions: HashMapStorage<VisibleDefinitions>,
     visible_types: HashMapStorage<VisibleTypes>,
     visible_implicits: HashMapStorage<VisibleImplicits>,
+    all_definitions: HashMapStorage<AllDefinitions>,
+    all_types: HashMapStorage<AllTypes>,
     exported_definitions: HashMapStorage<ExportedDefinitions>,
     exported_types: HashMapStorage<ExportedTypes>,
     get_imports: HashMapStorage<GetImports>,
@@ -236,13 +238,25 @@ pub type TypeDefinitions = BTreeMap<Name, (TopLevelName, Kind)>;
 pub type Methods = BTreeMap<TopLevelId, Definitions>;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-/// Collect all exported definitions in a file. This separate step is important because we don't
-/// want ordinary name resolution of another file to depend upon private definitions in an import.
-/// Instead, it only depends on the `ExportedDefinitions` of that import.
+/// Collect all definitions in a file (unfiltered by export list). This is used so a file can
+/// see all of its own definitions internally regardless of what it exports.
+#[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AllDefinitions(pub SourceFileId);
+define_intermediate!(790, AllDefinitions -> Arc<VisibleDefinitionsResult>, DbStorage, definition_collection::all_definitions_impl);
+
+/// Collect all type definitions in a file (unfiltered by export list).
+#[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AllTypes(pub SourceFileId);
+define_intermediate!(890, AllTypes -> TypeDefinitions, DbStorage, definition_collection::all_types_impl);
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+/// Collect the exported definitions in a file, filtered by its export list. If the file has no
+/// export statement, nothing is exported. Other modules depend on this when importing.
 #[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExportedDefinitions(pub SourceFileId);
 define_intermediate!(800, ExportedDefinitions -> Arc<VisibleDefinitionsResult>, DbStorage, definition_collection::exported_definitions_impl);
 
+/// Collect the exported type definitions in a file, filtered by its export list.
 #[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExportedTypes(pub SourceFileId);
 define_intermediate!(900, ExportedTypes -> TypeDefinitions, DbStorage, definition_collection::exported_types_impl);

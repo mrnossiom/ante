@@ -1,0 +1,28 @@
+export foo, bar,
+    baz, Quux,
+    one, 123, two, %%, after_errors
+
+main () = ()
+
+// args: -e ast --no-color
+// expected exit status: 1
+// expected stdout:
+// export foo, bar, baz, Quux, one, two, after_errors
+// 
+// main () = ()
+
+// expected stderr:
+// examples/parser/export.an:3:10
+// 2 |     baz, Quux,
+//   |     // error: Expected an identifier, type name, or operator to export but found `123`
+// 3 |     one, 123, two, %%, after_errors
+//   |          ^^^
+// 
+// examples/parser/export.an:3:20
+// 2 |     baz, Quux,
+//   |     // error: Expected an identifier, type name, or operator to export but found `%%`
+// 3 |     one, 123, two, %%, after_errors
+//   |                    ^^
+// 
+// Found 2 errors and 0 warnings
+

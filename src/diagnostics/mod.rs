@@ -4,7 +4,7 @@ use colored::{Color, ColoredString, Colorize};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    incremental::{CheckAll, Db, DbHandle, ExportedDefinitions, GetCrateGraph, Parse, SourceFile, TypeCheck},
+    incremental::{AllDefinitions, CheckAll, Db, DbHandle, GetCrateGraph, Parse, SourceFile, TypeCheck},
     iterator_extensions::mapvec,
     lexer::{
         Lexer,
@@ -49,6 +49,11 @@ pub enum Diagnostic {
         location: Location,
     },
     UnknownImportItem {
+        name: Name,
+        module: Arc<PathBuf>,
+        location: Location,
+    },
+    ItemNotExported {
         name: Name,
         module: Arc<PathBuf>,
         location: Location,
@@ -266,6 +271,9 @@ impl Diagnostic {
             Diagnostic::UnknownImportItem { name, module, location: _ } => {
                 format!("`{name}` not found in module `{}`", module.display())
             },
+            Diagnostic::ItemNotExported { name, module, location: _ } => {
+                format!("`{name}` is not exported from module `{}`", module.display())
+            },
             Diagnostic::NameNotInScope { name, location: _ } => {
                 format!("`{name}` not found in scope")
             },
@@ -452,6 +460,7 @@ impl Diagnostic {
             | Diagnostic::ImportedNameAlreadyInScope { second_location: location, .. }
             | Diagnostic::UnknownImportFile { location, .. }
             | Diagnostic::UnknownImportItem { location, .. }
+            | Diagnostic::ItemNotExported { location, .. }
             | Diagnostic::NameNotInScope { location, .. }
             | Diagnostic::ExpectedType { location, .. }
             | Diagnostic::RecursiveType { location, .. }
@@ -597,6 +606,7 @@ fn syntax_color(token: &Token) -> Option<Color> {
         | Token::Effect
         | Token::Else
         | Token::Exists
+        | Token::Export
         | Token::Extern
         | Token::Fn
         | Token::For
@@ -898,7 +908,7 @@ pub(crate) fn check_all(_: &CheckAll, compiler: &DbHandle) {
     let has_main = local_crate
         .source_files
         .values()
-        .any(|file| ExportedDefinitions(*file).get(compiler).definitions.keys().any(|k| k.as_str() == "main"));
+        .any(|file| AllDefinitions(*file).get(compiler).definitions.keys().any(|k| k.as_str() == "main"));
 
     if !has_main {
         if let Some(first_file) = local_crate.source_files.values().next() {

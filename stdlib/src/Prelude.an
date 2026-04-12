@@ -5,6 +5,39 @@
 */
 import Std.C.putchar, exit, memcmp, malloc, memcpy
 
+export String, from_parts, Maybe, None, Some, unwrap, Result, Ok, Error, (,),
+    first, second, third, fourth, fifth,
+    Cast, cast, cast_same, cast_ptr_usz, cast_usz_ptr,
+    cast_u8_u16, cast_u8_u32, cast_u8_u64, cast_u8_usz, cast_u16_u8, cast_u16_u32, cast_u16_u64, cast_u16_usz, cast_u32_u8, cast_u32_u16, cast_u32_u64, cast_u32_usz, cast_u64_u8, cast_u64_u16, cast_u64_u32, cast_u64_usz,
+    cast_usz_u8, cast_usz_u16, cast_usz_u32, cast_usz_u64, cast_i8_i16, cast_i8_i32, cast_i8_i64, cast_i8_isz, cast_i16_i8, cast_i16_i32, cast_i16_i64, cast_i16_isz, cast_i32_i8, cast_i32_i16, cast_i32_i64, cast_i32_isz,
+    cast_i64_i8, cast_i64_i16, cast_i64_i32, cast_i64_isz, cast_isz_i8, cast_isz_i16, cast_isz_i32, cast_isz_i64, cast_i8_f32, cast_i16_f32, cast_i32_f32, cast_i64_f32, cast_isz_f32, cast_i8_f64, cast_i16_f64, cast_i32_f64,
+    cast_u8_f32, cast_u16_f64, cast_u32_f64, cast_u64_f64, cast_usz_f64, cast_u8_f64, cast_u16_f32, cast_u32_f32, cast_u64_f32, cast_usz_f32, cast_f32_i8, cast_f32_i16, cast_f32_i32, cast_f32_i64, cast_f32_isz, cast_f64_i8,
+    cast_f32_u8, cast_f32_u16, cast_f32_u32, cast_f32_u64, cast_f32_usz, cast_f64_u8, cast_f64_u16, cast_f64_u32, cast_f64_u64, cast_f64_usz, cast_i8_char, cast_i16_char, cast_i32_char, cast_i64_char, cast_isz_char,
+    cast_i64_f64, cast_isz_f64, cast_f64_i16, cast_f64_i32, cast_f64_i64, cast_f64_isz, cast_u8_char, cast_u16_char, cast_u32_char, cast_u64_char, cast_usz_char, cast_f64_f32, cast_f32_f64, cast_i32_usz, cast_char_i32, cast_char_u64,
+    TryCast, try_cast, try_cast_from_cast, try_cast_i64_u64, try_cast_u64,
+    Add, (+), add_i8, add_i16, add_i32, add_i64, add_isz, add_u8, add_u16, add_u32, add_u64, add_usz, add_f32, add_f64,
+    Sub, (-), sub_i8, sub_i16, sub_i32, sub_i64, sub_isz, sub_u8, sub_u16, sub_u32, sub_u64, sub_usz, sub_f32, sub_f64,
+    Mul, (*), mul_i8, mul_i16, mul_i32, mul_i64, mul_isz, mul_u8, mul_u16, mul_u32, mul_u64, mul_usz, mul_f32, mul_f64,
+    Div, (/), div_i8, div_i16, div_i32, div_i64, div_isz, div_u8, div_u16, div_u32, div_u64, div_usz, div_f32, div_f64,
+    Mod, (%), (%%), mod_i8, mod_i16, mod_i32, mod_i64, mod_isz, mod_u8, mod_u16, mod_u32, mod_u64, mod_usz,
+    Eq, (==), (!=), eq_i8, eq_i16, eq_i32, eq_i64, eq_isz, eq_u8, eq_u16, eq_u32, eq_u64, eq_usz, eq_f32, eq_f64, eq_char, eq_bool, eq_ref, eq_ptr, eq_maybe, eq_string,
+    Not, (not), not_bool, not_i32,
+    Cmp, (<), (>), (<=), (>=), cmp_i8, cmp_i16, cmp_i32, cmp_i64, cmp_isz, cmp_u8, cmp_u16, cmp_u32, cmp_u64, cmp_usz, cmp_f32, cmp_f64,
+    Num, num_i8, num_i16, num_i32, num_i64, num_isz, num_u8, num_u16, num_u32, num_u64, num_usz,
+    Append, (++), append_string,
+    (|>), (<|),
+    Extract, (.[), extract_ptr_usz,
+    Bitwise, band, bor, bxor, bitwise_i32,
+    Type, MkType, size_of,
+    offset, offset_bytes, deref, deref_ptr, ptr_store, array_insert, ptr_to_mut,
+    Clone, clone, Drop, drop,
+    Copy, (.*), copy_i8, copy_i16, copy_i32, copy_i64, copy_isz, copy_u8, copy_u16, copy_u32, copy_u64, copy_usz, copy_f32, copy_f64, copy_unit, copy_bool, copy_char, copy_ptr, copy_ref, copy_mut, copy_imm, copy_string,
+    null, transmute,
+    In, (in),
+    Print, print, println, print_unsigned, print_signed, print_float, print_u8, print_u16, print_u32, print_u64, print_usz, print_i8, print_i16, print_i32, print_i64, print_isz, print_char, print_f64, print_f32, print_string, print_maybe, print_ref, print_bool,
+    Iterator, next, iter, Range, iterator_range, iter_range, repeat,
+    panic
+
 // TODO: This should be reference counted
 // Representation of this type cannot be changed without also changing the
 // lowering of string literals in the compiler itself

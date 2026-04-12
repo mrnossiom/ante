@@ -360,6 +360,7 @@ pub struct Lambda {
     pub return_type: Option<Type>,
     pub effects: Option<Vec<EffectType>>,
     pub body: ExprId,
+    pub is_move: bool,
 }
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]

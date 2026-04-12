@@ -914,6 +914,9 @@ impl<'a> CstDisplay<'a> {
     fn fmt_lambda(
         &mut self, lambda: &Lambda, id: ExprId, context: &impl IdStore, f: &mut Formatter,
     ) -> std::fmt::Result {
+        if lambda.is_move {
+            write!(f, "move ")?;
+        }
         write!(f, "fn")?;
         self.fmt_lambda_inner(lambda, id, context, f, true)
     }

@@ -22,6 +22,7 @@ impl TypeChecker<'_, '_> {
     /// is instead done while building the initial [crate::mir::Mir].
     pub(super) fn check_for_closure(
         &mut self, id: ExprId, expected_environment_type: &Type, self_name: Option<NameId>,
+        is_move: bool,
     ) {
         let mut context = FreeVars::default();
         if let Some(name) = self_name {
@@ -29,11 +30,14 @@ impl TypeChecker<'_, '_> {
         }
         context.find_free_variables(id, self);
 
-        let env_type = make_env_type_with_names(&context.free_vars, self);
+        let env_type = make_env_type_with_names(&context.free_vars, self, is_move);
         self.unify(&env_type, expected_environment_type, TypeErrorKind::ClosureEnv, id);
 
         if !context.free_vars.is_empty() {
             self.current_extended_context_mut().insert_closure_environment(id, context.free_vars);
+            if is_move {
+                self.current_extended_context_mut().mark_move_closure(id);
+            }
         }
     }
 }
@@ -152,8 +156,20 @@ impl FreeVars {
     }
 }
 
-fn make_env_type_with_names(free_vars: &BTreeSet<NameId>, checker: &TypeChecker) -> Type {
-    let free_vars = free_vars.iter().map(|name| checker.name_types[name].clone());
+fn make_env_type_with_names(free_vars: &BTreeSet<NameId>, checker: &TypeChecker, is_move: bool) -> Type {
+    let free_vars = free_vars.iter().map(|name| {
+        let typ = checker.name_types[name].clone();
+        // Regular closures capture mutable variables by reference (as pointers in MIR).
+        // Wrap their type in a `mut` reference so the environment type matches.
+        // Immutable variables are captured by value — this is safe for escaping closures
+        // and observationally equivalent to by-reference since the value can't change.
+        // `move` closures capture all variables by value — no wrapping needed.
+        if !is_move && checker.mutable_definitions.contains(name) {
+            Type::Application(Arc::new(Type::MUT), Arc::new(vec![typ]))
+        } else {
+            typ
+        }
+    });
     make_env_type(free_vars)
 }
 

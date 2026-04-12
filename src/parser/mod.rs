@@ -691,7 +691,7 @@ impl<'tokens> Parser<'tokens> {
             .try_parse_or_recover_to_newline(|this| this.parse_block_or_expression())
             .unwrap_or_else(|| self.push_expr(Expr::Error, self.current_token_location()));
 
-        let lambda = Expr::Lambda(Lambda { parameters, return_type, effects, body });
+        let lambda = Expr::Lambda(Lambda { parameters, return_type, effects, body, is_move: false });
         self.insert_expr(lambda_id, lambda, start_location);
         Ok(Definition { implicit, mutable: false, pattern: name, rhs: lambda_id })
     }
@@ -1628,7 +1628,7 @@ impl<'tokens> Parser<'tokens> {
                 self.advance();
                 Ok(self.push_expr(Expr::Literal(Literal::Unit), location))
             },
-            Token::Fn => self.parse_lambda(),
+            Token::Move | Token::Fn => self.parse_lambda(),
             Token::Error(_) => {
                 // Report the lexer error and return Error to treat this as an expression value
                 let location = self.current_token_location();
@@ -1686,6 +1686,8 @@ impl<'tokens> Parser<'tokens> {
 
     fn parse_lambda(&mut self) -> Result<ExprId> {
         self.with_expr_id_and_location(|this| {
+            let is_move = this.accept(Token::Move);
+
             this.expect(Token::Fn, "`fn` to start this lambda")?;
             let parameters = this.parse_function_parameters()?;
 
@@ -1700,7 +1702,7 @@ impl<'tokens> Parser<'tokens> {
             this.expect(Token::RightArrow, "a `->` to separate this lambda's parameters from its body")?;
             let body = this.parse_block_or_expression()?;
 
-            Ok(Expr::Lambda(Lambda { parameters, return_type, effects, body }))
+            Ok(Expr::Lambda(Lambda { parameters, return_type, effects, body, is_move }))
         })
     }
 

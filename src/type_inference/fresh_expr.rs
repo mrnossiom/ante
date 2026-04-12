@@ -8,7 +8,7 @@ use std::{
     sync::Arc,
 };
 
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -80,6 +80,10 @@ pub struct ExtendedTopLevelContext {
     /// Any closure capturing an environment will have an entry into this map with the non-empty
     /// set of variables it captures. Free functions are excluded from the map entirely.
     closure_environments: FxHashMap<ExprId, BTreeSet<NameId>>,
+
+    /// Closures declared with the `move` keyword. These capture by value/move instead of
+    /// by reference. Used by the MIR builder to determine capture semantics.
+    move_closures: FxHashSet<ExprId>,
 }
 
 impl<'local, 'innter> TypeChecker<'local, 'innter> {
@@ -123,6 +127,7 @@ impl ExtendedTopLevelContext {
             constructor_field_orders: Default::default(),
             instantiations: Default::default(),
             closure_environments: Default::default(),
+            move_closures: Default::default(),
         }
     }
 
@@ -292,6 +297,14 @@ impl ExtendedTopLevelContext {
     /// Retrieves a closure's captured variables. Returns `None` if no variables are captured.
     pub(crate) fn get_closure_environment(&self, expr: ExprId) -> Option<&BTreeSet<NameId>> {
         self.closure_environments.get(&expr)
+    }
+
+    pub(crate) fn mark_move_closure(&mut self, expr: ExprId) {
+        self.move_closures.insert(expr);
+    }
+
+    pub(crate) fn is_move_closure(&self, expr: ExprId) -> bool {
+        self.move_closures.contains(&expr)
     }
 }
 

@@ -5,24 +5,9 @@ main () =
         x := 5
 
     closure ()
+    // Closures capture mutable variables by reference,
+    // so the assignment inside the closure affects the outer x.
+    println x
 
-// Found 1 error and 0 warnings
-
-// args: -e ast-t --no-color
-// expected exit status: 1
-// expected stdout:
-// (main: fn Unit -> Unit can _) () =
-//     mut (x: I32) = 0
-//     (closure: fn Unit [I32] -> Unit can _) () [(x: I32)] =
-//         (x: I32) := 5
-//     (closure: fn Unit [I32] -> Unit can _) ()
-
-// expected stderr:
-// examples/typechecking/mutate_capture.an:5:9
-// 4 |     closure () =
-//   |         // error: Cannot mutate a captured variable because closures capture by value. Consider capturing a mutable reference instead
-// 5 |         x := 5
-//   |         ^^^^^^
-// 
-// Found 1 error and 0 warnings
-
+// args: --delete-binary --no-color
+// expected stdout: 5

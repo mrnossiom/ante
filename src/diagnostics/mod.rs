@@ -201,9 +201,6 @@ pub enum Diagnostic {
         name: String,
         location: Location,
     },
-    MutatedCapturedVariable {
-        location: Location,
-    },
     UseOfMovedValue {
         name: String,
         location: Location,
@@ -441,9 +438,6 @@ impl Diagnostic {
             Diagnostic::NotAType { name, location: _ } => {
                 format!("{} is not a type", name.purple())
             },
-            Diagnostic::MutatedCapturedVariable { location: _ } => {
-                "Cannot mutate a captured variable because closures capture by value. Consider capturing a mutable reference instead".to_string()
-            },
             Diagnostic::UseOfMovedValue { name, location: _, moved_in: _ } => {
                 format!("Use of moved value {}", name.purple())
             },
@@ -493,7 +487,6 @@ impl Diagnostic {
             | Diagnostic::Unimplemented { location, .. }
             | Diagnostic::TypeAnnotationNeeded { location, .. }
             | Diagnostic::NotAType { location, .. }
-            | Diagnostic::MutatedCapturedVariable { location }
             | Diagnostic::UseOfMovedValue { location, .. }
             | Diagnostic::NoMainFunction { location } => location,
         }

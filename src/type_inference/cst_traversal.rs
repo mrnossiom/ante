@@ -34,6 +34,13 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
 
         self.check_pattern(definition.pattern, &expected_type);
 
+        // Track mutable definitions so closure capture analysis can wrap them in reference types
+        if definition.mutable {
+            if let Pattern::Variable(name) = &self.current_extended_context()[definition.pattern] {
+                self.mutable_definitions.insert(*name);
+            }
+        }
+
         // If the RHS is a lambda, call check_lambda directly so we can pass the definition's
         // own name as `self_name`. This prevents self-recursive local functions (such as the
         // `recur` helper produced by loop desugaring) from treating themselves as a captured
@@ -156,7 +163,6 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         match pattern.as_ref() {
             Pattern::Error => (),
             Pattern::Variable(name) | Pattern::MethodName { item_name: name, .. } => {
-                self.current_lambda_locals.insert(*name);
                 self.check_name(*name, expected);
             },
             Pattern::Literal(literal) => self.check_literal(literal, id, expected),
@@ -452,12 +458,8 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         // Remember the return type so that it can be checked by `return` statements
         let old_return_type =
             std::mem::replace(&mut self.function_return_type, Some(function_type.return_type.clone()));
-        let old_lambda_locals = std::mem::take(&mut self.current_lambda_locals);
         // Closures capture by reference, so moves inside the lambda don't affect the outer scope
         let old_move_tracker = std::mem::take(&mut self.move_tracker);
-        if let Some(name) = self_name {
-            self.current_lambda_locals.insert(name);
-        }
 
         self.push_implicits_scope();
         self.check_function_parameter_count(&function_type.parameters, lambda.parameters.len(), expr);
@@ -467,6 +469,12 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             // Avoid extra errors if the parameter length isn't as expected
             let expected_type = if parameter_lengths_match { &expected_type.typ } else { &Type::ERROR };
             self.check_pattern(parameter.pattern, expected_type);
+
+            if parameter.is_mutable {
+                if let Pattern::Variable(name) = &self.current_extended_context()[parameter.pattern] {
+                    self.mutable_definitions.insert(*name);
+                }
+            }
 
             if parameter.is_implicit {
                 self.add_implicit(parameter.pattern);
@@ -490,7 +498,6 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         self.check_expr(lambda.body, &return_type);
 
         self.function_return_type = old_return_type;
-        self.current_lambda_locals = old_lambda_locals;
         self.move_tracker = old_move_tracker;
         self.pop_implicits_scope();
 
@@ -504,7 +511,22 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 scope.push_deferred_closure_check(expr, function_type.environment.clone());
             }
         } else {
-            self.check_for_closure(expr, &function_type.environment, self_name);
+            self.check_for_closure(expr, &function_type.environment, self_name, lambda.is_move);
+        }
+
+        // For `move` closures, record that each captured non-Copy variable has been moved
+        // in the outer scope. Copy types are simply copied into the environment.
+        if lambda.is_move {
+            if let Some(free_vars) = self.current_extended_context().get_closure_environment(expr) {
+                let free_vars: Vec<_> = free_vars.iter().copied().collect();
+                for name in free_vars {
+                    let typ = self.name_types[&name].clone();
+                    if !self.type_is_copy(&typ) {
+                        let location = expr.locate(self);
+                        self.move_tracker.record_move(super::affine::MovePath::Variable(name), location);
+                    }
+                }
+            }
         }
     }
 
@@ -824,24 +846,12 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         let lhs_type = self.next_type_variable();
         self.check_expr(assignment.lhs, &lhs_type);
 
-        // Check if this assignment mutates a captured variable. Captures are by value,
-        // so mutating a capture won't affect the original. Allow if the LHS is a reference
-        // type since the assignment stores through the reference.
+        // If the LHS is a reference type (e.g. `p.x` where `p: mut Point` yields `mut I32`),
+        // the RHS should match the inner (pointee) type rather than the reference wrapper.
         let lhs_followed = self.follow_type(&lhs_type);
         let lhs_is_ref = matches!(&lhs_followed, Type::Application(c, _)
             if matches!(self.follow_type(c), Type::Primitive(types::PrimitiveType::Reference(_))));
 
-        if !lhs_is_ref {
-            if let Some(root_name) = self.find_lvalue_root_variable(assignment.lhs) {
-                if !self.current_lambda_locals.contains(&root_name) {
-                    let location = id.locate(self);
-                    self.compiler.accumulate(Diagnostic::MutatedCapturedVariable { location });
-                }
-            }
-        }
-
-        // If the LHS is a reference type (e.g. `p.x` where `p: mut Point` yields `mut I32`),
-        // the RHS should match the inner (pointee) type rather than the reference wrapper.
         let value_type = if lhs_is_ref {
             match self.follow_type(&lhs_type) {
                 Type::Application(_, args) => args[0].clone(),
@@ -868,25 +878,6 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
 
         self.check_expr(assignment.rhs, &value_type);
         self.unify(&Type::UNIT, expected, TypeErrorKind::General, id);
-    }
-
-    /// Walk through member accesses to find the root local variable of an lvalue expression.
-    fn find_lvalue_root_variable(&self, expr: ExprId) -> Option<NameId> {
-        let e = match self.current_extended_context().extended_expr(expr) {
-            Some(e) => Cow::Owned(e.clone()),
-            None => Cow::Borrowed(&self.current_context()[expr]),
-        };
-        match e.as_ref() {
-            Expr::Variable(path) => {
-                if let Some(Origin::Local(name)) = self.path_origin(*path) {
-                    Some(name)
-                } else {
-                    None
-                }
-            },
-            Expr::MemberAccess(access) => self.find_lvalue_root_variable(access.object),
-            _ => None,
-        }
     }
 
     /// Return can unify with any type locally so we don't need the expected type here

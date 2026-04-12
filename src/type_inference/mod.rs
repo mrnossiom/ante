@@ -170,10 +170,6 @@ struct TypeChecker<'local, 'inner> {
     /// Cached TopLevelName for the Prelude's `(.*)` (deref/Copy) function, lazily resolved on first use.
     deref_name: Option<TopLevelName>,
 
-    /// Names defined within the current (innermost) lambda scope.
-    /// Used to detect mutations of captured variables.
-    current_lambda_locals: FxHashSet<NameId>,
-
     /// Tracks which local variables (and their sub-paths) have been moved.
     /// Used for affine type checking: non-Copy values may only be used once.
     move_tracker: affine::MoveTracker,
@@ -185,6 +181,11 @@ struct TypeChecker<'local, 'inner> {
 
     /// Cached TopLevelName for the Prelude's `Copy` type, lazily resolved on first use.
     copy_type_name: Option<TopLevelName>,
+
+    /// Names defined with `var` or as mutable parameters. Used by closure capture analysis
+    /// to wrap mutable captures in a reference type so the closure shares the outer scope's storage.
+    mutable_definitions: FxHashSet<NameId>,
+
 }
 
 /// Map from each TopLevelId to a tuple of (the item, parse context, resolution context)
@@ -214,10 +215,10 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             coercion_wrapper_exprs: Default::default(),
             string_type: None,
             deref_name: None,
-            current_lambda_locals: Default::default(),
             move_tracker: Default::default(),
             suppress_move: false,
             copy_type_name: None,
+            mutable_definitions: Default::default(),
         };
 
         let mut item_types = FxHashMap::default();

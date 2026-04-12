@@ -139,6 +139,7 @@ fn desugar_impl(impl_: &TraitImpl, context: &mut DesugarContext) -> Definition {
             return_type: Some(trait_type),
             effects: Some(Vec::new()),
             body: constructor,
+            is_move: false,
         });
         context.push_expr(lambda, location)
     };
@@ -332,7 +333,7 @@ fn desugar_loop(expr: ExprId, context: &mut DesugarContext) {
     let recur = cst::Pattern::Variable(name_id);
     let recur = context.push_pattern(recur, location.clone());
 
-    let lambda = cst::Expr::Lambda(cst::Lambda { parameters, return_type: None, effects: None, body });
+    let lambda = cst::Expr::Lambda(cst::Lambda { parameters, return_type: None, effects: None, body, is_move: false });
     let lambda = context.push_expr(lambda, location.clone());
 
     let definition =
@@ -389,7 +390,7 @@ fn desugar_call_wildcards(expr: ExprId, context: &mut DesugarContext) {
     let new_call = Expr::Call(cst::Call { function: call.function, arguments: new_arguments });
     let new_call_id = context.push_expr(new_call, location.clone());
 
-    context.set_expr(expr, Expr::Lambda(Lambda { parameters, return_type: None, effects: None, body: new_call_id }));
+    context.set_expr(expr, Expr::Lambda(Lambda { parameters, return_type: None, effects: None, body: new_call_id, is_move: false }));
 }
 
 enum ExprDesugar {

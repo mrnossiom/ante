@@ -523,7 +523,8 @@ impl<'ctx> ModuleContext<'ctx> {
                 let c_string = global.as_pointer_value().into();
 
                 let length = self.llvm.i32_type().const_int(string.len() as u64, false).into();
-                self.llvm.const_struct(&[c_string, length], false).into()
+                let null_ptr = self.llvm.ptr_type(AddressSpace::default()).const_null().into();
+                self.llvm.const_struct(&[c_string, length, null_ptr], false).into()
             },
             mir::Instruction::MakeTuple(fields) => self.make_tuple(fields),
             mir::Instruction::StackAlloc(value) => {

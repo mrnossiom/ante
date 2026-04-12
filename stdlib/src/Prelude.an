@@ -3,7 +3,7 @@
     Standard functions and datatypes pre-imported
     into every Ante source file.
 */
-import Std.C.putchar, exit, memcmp, malloc, memcpy
+import Std.C.putchar, exit, memcmp, malloc, memcpy, free
 
 export String, from_parts, Maybe, None, Some, unwrap, Result, Ok, Error, (,),
     first, second, third, fourth, fifth,
@@ -30,7 +30,7 @@ export String, from_parts, Maybe, None, Some, unwrap, Result, Ok, Error, (,),
     Bitwise, band, bor, bxor, bitwise_i32,
     Type, MkType, size_of,
     offset, offset_bytes, deref, deref_ptr, ptr_store, array_insert, ptr_to_mut,
-    Clone, clone, Drop, drop,
+    Clone, clone, Drop, drop, drop_string,
     Copy, (.*), copy_i8, copy_i16, copy_i32, copy_i64, copy_isz, copy_u8, copy_u16, copy_u32, copy_u64, copy_usz, copy_f32, copy_f64, copy_unit, copy_bool, copy_char, copy_ptr, copy_ref, copy_mut, copy_imm, copy_string,
     null, transmute,
     In, (in),
@@ -38,16 +38,16 @@ export String, from_parts, Maybe, None, Some, unwrap, Result, Ok, Error, (,),
     Iterator, next, iter, Range, iterator_range, iter_range, repeat,
     panic
 
-// TODO: This should be reference counted
-// Representation of this type cannot be changed without also changing the
-// lowering of string literals in the compiler itself
 type String =
     data: Ptr Char
     length: U32
+    refcount: Ptr U32
 
-// Construct a fresh, unaliased string from an owned pointer to characters and a length
+// Construct a fresh, unaliased string from an owned pointer to characters and a length.
 String.from_parts (pointer: Ptr Char) (length: U32): String =
-    String pointer length
+    rc: Ptr U32 = malloc 4
+    ptr_store rc 1
+    String pointer length rc
 
 type Maybe t =
    | None
@@ -583,8 +583,21 @@ impl copy_ref: Copy (ref t) with (.*) = deref
 impl copy_mut: Copy (mut t) with (.*) = deref
 impl copy_imm: Copy (imm t) with (.*) = deref
 
-// TODO: Strings should be reference counted
-impl copy_string: Copy String with (.*) = deref
+impl copy_string: Copy String with
+    (.*) (s: ref String) =
+        if s.refcount != null () then
+            ptr_store s.refcount (deref_ptr s.refcount + 1)
+        deref s
+
+impl drop_string: Drop String with
+    drop (s: mut String) =
+        if s.refcount != null () then
+            count = deref_ptr s.refcount
+            if count == 1u32 then
+                free s.data
+                free s.refcount
+            else
+                ptr_store s.refcount (count - 1)
 
 null (): Ptr a = transmute 0usz
 

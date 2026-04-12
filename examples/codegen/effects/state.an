@@ -26,7 +26,6 @@ use_state 20_u64 with state 2
 // expected exit status: 1
 // expected stderr:
 // examples/codegen/effects/state.an:1:1
-// 0 | effect Use a with
 // 1 | effect Use a with	// error: This program has no `main` function
 //   | 
 // 2 |     get: Unit -> a

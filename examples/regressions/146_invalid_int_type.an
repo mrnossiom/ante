@@ -4,12 +4,10 @@ a: Num String = 3
 // expected exit status: 1
 // expected stderr:
 // examples/regressions/146_invalid_int_type.an:1:1
-// 0 | a: Num String = 3
 // 1 | a: Num String = 3	// error: This program has no `main` function
 //   | 
 // 
 // examples/regressions/146_invalid_int_type.an:1:17
-// 0 | a: Num String = 3
 // 1 | a: Num String = 3	// error: Expected an integer type but found Num String
 //   |                 ^
 // 

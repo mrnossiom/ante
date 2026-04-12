@@ -17,7 +17,6 @@ handle_count foo |> print
 // expected exit status: 1
 // expected stderr:
 // examples/codegen/effects/count_effect.an:1:1
-// 0 | effect Count with
 // 1 | effect Count with	// error: This program has no `main` function
 //   | 
 // 2 |     count: Unit -> Unit

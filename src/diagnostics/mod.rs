@@ -543,7 +543,7 @@ impl Diagnostic {
 
 /// Given a location, return the line numbers to display the code for
 fn lines_to_display(location: &Location) -> std::ops::Range<u32> {
-    location.span.start.line_number.saturating_sub(1)..location.span.start.line_number + 2
+    location.span.start.line_number.saturating_sub(1).max(1)..location.span.start.line_number + 2
 }
 
 /// Compute the line blocks to display. Returns 1 merged block if ranges

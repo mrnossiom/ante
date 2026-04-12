@@ -29,7 +29,6 @@ sum_all () |> print
 // expected exit status: 1
 // expected stderr:
 // examples/codegen/effects/add_effect.an:1:1
-// 0 | effect Add with
 // 1 | effect Add with	// error: This program has no `main` function
 //   | 
 // 2 |     add: U32 -> Unit

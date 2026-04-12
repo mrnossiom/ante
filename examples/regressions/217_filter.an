@@ -34,7 +34,6 @@ for filtered print
 // expected exit status: 1
 // expected stderr:
 // examples/regressions/217_filter.an:1:1
-// 0 | effect Emit a with
 // 1 | effect Emit a with	// error: This program has no `main` function
 //   | 
 // 2 |     emit: a -> Unit

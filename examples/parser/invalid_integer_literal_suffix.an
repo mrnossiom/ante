@@ -8,7 +8,6 @@ main () = 3_2_fdsa
 
 // expected stderr:
 // examples/parser/invalid_integer_literal_suffix.an:1:11
-// 0 | main () = 3_2_fdsa
 //   | // error: Expected an expression but found Invalid suffix after integer literal. Expected an integer type like i32 or a space to separate the two tokens
 // 1 | main () = 3_2_fdsa
 //   |           ^^^^

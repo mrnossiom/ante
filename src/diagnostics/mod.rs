@@ -7,8 +7,7 @@ use crate::{
     incremental::{AllDefinitions, CheckAll, Db, DbHandle, GetCrateGraph, Parse, SourceFile, TypeCheck},
     iterator_extensions::mapvec,
     lexer::{
-        Lexer,
-        token::{IntegerKind, Token},
+        token::{lookup_keyword, IntegerKind, Token}, Lexer
     },
     name_resolution::namespace::CrateId,
     parser::cst::Name,
@@ -580,7 +579,7 @@ fn span_to_columns(span: Span, line_len: usize) -> (usize, usize) {
 }
 
 /// Map a lexer token to a syntax highlight color.
-fn syntax_color(token: &Token) -> Option<Color> {
+fn syntax_color(token: &Token, snippet: &str) -> Option<Color> {
     match token {
         Token::TypeName(_) | Token::IntegerType(_) | Token::FloatType(_) => Some(Color::Blue),
 
@@ -591,48 +590,7 @@ fn syntax_color(token: &Token) -> Option<Color> {
         | Token::BooleanLiteral(_)
         | Token::UnitLiteral => Some(Color::BrightMagenta),
 
-        Token::And
-        | Token::As
-        | Token::Block
-        | Token::Can
-        | Token::Do
-        | Token::Effect
-        | Token::Else
-        | Token::Exists
-        | Token::Export
-        | Token::Extern
-        | Token::Fn
-        | Token::For
-        | Token::Forall
-        | Token::Freeze
-        | Token::Given
-        | Token::Handle
-        | Token::If
-        | Token::Imm
-        | Token::Impl
-        | Token::Implicit
-        | Token::Import
-        | Token::In
-        | Token::Is
-        | Token::Loop
-        | Token::Match
-        | Token::Module
-        | Token::Mut
-        | Token::Not
-        | Token::Or
-        | Token::Owned
-        | Token::Pure
-        | Token::Ref
-        | Token::Return
-        | Token::Shared
-        | Token::Then
-        | Token::Trait
-        | Token::Type
-        | Token::Uniq
-        | Token::Var
-        | Token::While
-        | Token::With => Some(Color::Cyan),
-
+        _ if lookup_keyword(snippet).is_some() => Some(Color::Cyan),
         _ => None,
     }
 }
@@ -656,7 +614,7 @@ fn write_syntax_highlighted(text: &str, show_color: bool, f: &mut Formatter) -> 
             write_whitespace(text, f)?;
         }
         let snippet = &text[start..end];
-        let snippet = syntax_color(&token).map(|color| snippet.color(color)).unwrap_or_else(|| snippet.into());
+        let snippet = syntax_color(&token, snippet).map(|color| snippet.color(color)).unwrap_or_else(|| snippet.into());
         write!(f, "{snippet}")?;
         last_end = end;
     }

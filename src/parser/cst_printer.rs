@@ -5,6 +5,7 @@ use std::{
 };
 
 use crate::{
+    diagnostics::Location,
     incremental::{Db, GetItem, Resolve, TypeCheck},
     lexer::token::INDEX_OPERATOR_FUNCTION_NAME,
     name_resolution::{Origin, namespace::SourceFileId},
@@ -167,6 +168,8 @@ impl<'a> CstDisplay<'a> {
             writeln!(f)?;
         }
 
+        self.fmt_export(&cst.exports, f)?;
+
         for item in &cst.top_level_items {
             if let Some(db) = self.db_resolve() {
                 let (item, context) = GetItem(item.id).get(db);
@@ -200,6 +203,20 @@ impl<'a> CstDisplay<'a> {
                 write!(f, ", ")?;
             }
             write!(f, "{item}")?;
+        }
+        Ok(())
+    }
+
+    fn fmt_export(&mut self, exports: &[(String, Location)], f: &mut Formatter) -> std::fmt::Result {
+        if !exports.is_empty() {
+            write!(f, "export ")?;
+            for (i, (item, _location)) in exports.iter().enumerate() {
+                if i != 0 {
+                    write!(f, ", ")?;
+                }
+                write!(f, "{item}")?;
+            }
+            writeln!(f, "\n")?;
         }
         Ok(())
     }
@@ -897,6 +914,9 @@ impl<'a> CstDisplay<'a> {
     fn fmt_lambda(
         &mut self, lambda: &Lambda, id: ExprId, context: &impl IdStore, f: &mut Formatter,
     ) -> std::fmt::Result {
+        if lambda.is_move {
+            write!(f, "move ")?;
+        }
         write!(f, "fn")?;
         self.fmt_lambda_inner(lambda, id, context, f, true)
     }

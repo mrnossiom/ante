@@ -1,5 +1,9 @@
 import Std.C.realloc
 
+export Vec, empty, is_empty, len, capacity, reserve, push, pop,
+    remove_index, remove_first, remove_indices, remove_all, swap_last,
+    print_vec, print_helper, extract_vec, (.[)
+
 type Vec t =
     data: Ptr t
     len: Usz

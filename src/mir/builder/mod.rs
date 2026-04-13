@@ -526,6 +526,16 @@ where
         let full_type = self.convert_expr_type(expr);
         let Type::Function(function_type) = &full_type else { unreachable!("Lambda does not have a function type") };
 
+        let is_move = self.context().is_move_closure(expr);
+
+        // Determine which captured variables are mutable in the outer scope.
+        let mutable_captures: rustc_hash::FxHashSet<NameId> =
+            if let Some(free_vars) = self.context().get_closure_environment(expr) {
+                free_vars.iter().filter(|v| self.mutable_locals.contains(v)).copied().collect()
+            } else {
+                Default::default()
+            };
+
         // Lambdas aren't really generic but they may capture generics from their containing
         // function. Marking them as generic here effectively hoists out the generic parameters.
         // It also means we have to instantiate lambdas when they're used with the current generic
@@ -558,6 +568,17 @@ where
 
                 let environment = Value::Parameter(this.current_block, lambda.parameters.len() as u32);
                 this.unpack_closure_environment(free_vars.iter().copied(), environment);
+
+                // For regular closures, mutable captures are pointers (by reference).
+                // Register them for auto-deref on access.
+                // For `move` closures, captures are values, so no auto-deref needed.
+                if !is_move {
+                    for var in free_vars.iter() {
+                        if mutable_captures.contains(var) {
+                            this.mutable_locals.insert(*var);
+                        }
+                    }
+                }
             }
 
             // Pre-populate the self-reference so recursive calls within the body
@@ -592,7 +613,7 @@ where
             value = self.push_instruction(Instruction::Instantiate(id, bindings), full_type.clone());
         }
         if let Some(free_vars) = self.context().get_closure_environment(expr) {
-            let environment = self.pack_closure_environment(free_vars);
+            let environment = self.pack_closure_environment(free_vars, is_move);
             value = self.push_instruction(Instruction::PackClosure { function: value, environment }, full_type);
         }
         value
@@ -600,23 +621,23 @@ where
 
     /// Packs each given variable into a closure environment tuple.
     /// Expects to be called after [Self::unpack_closure_environment]
-    fn pack_closure_environment(&mut self, free_vars: &BTreeSet<NameId>) -> Value {
+    fn pack_closure_environment(&mut self, free_vars: &BTreeSet<NameId>, is_move: bool) -> Value {
         // We must match the packing done in [type_inference::free_vars::make_tuple_type]
         assert!(!free_vars.is_empty());
 
         let values = mapvec(free_vars, |var| {
             let value = *self.local_variables.get(var).unwrap();
 
-            // Mutable variables declared with `var` are pointers but the type checker
-            // captures them in closure environments by value.
-            // TODO: These variables will still look mutable in the closure but mutating
-            // them will not change the original variable in the outer scope. We should likely
-            // issue an error in the type checker when captured non-reference variables are mutated.
-            if self.mutable_locals.contains(var) {
+            if is_move && self.mutable_locals.contains(var) {
+                // `move` closures capture mutable variables by value: dereference the
+                // StackAlloc pointer to load the current value into the environment.
                 let tc_type = &self.types.result.maps.name_types[var];
                 let val_type = self.convert_type(tc_type, None);
                 self.push_instruction(Instruction::Deref(value), val_type)
             } else {
+                // Regular closures: mutable variables are StackAlloc pointers, packed
+                // directly for capture by reference. Immutable variables are packed by value.
+                // Move closures: all immutable variables are packed by value.
                 value
             }
         });

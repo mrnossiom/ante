@@ -72,10 +72,11 @@ impl<'tokens> Parser<'tokens> {
 
     fn parse(mut self, db: &incremental::DbHandle) -> ParseResult {
         let imports = self.parse_imports();
+        let exports = self.parse_exports();
         let top_level_items = self.parse_top_level_items();
         self.accept(Token::Newline);
         let ending_comments = self.parse_comments();
-        let cst = Cst { imports, top_level_items, ending_comments };
+        let cst = Cst { imports, exports, top_level_items, ending_comments };
         for diagnostic in self.diagnostics {
             db.accumulate(diagnostic);
         }
@@ -459,6 +460,50 @@ impl<'tokens> Parser<'tokens> {
         imports
     }
 
+    fn parse_exports(&mut self) -> Vec<(String, Location)> {
+        use Token::{Comma, EndOfInput, Export, Identifier, Newline, TypeName};
+        self.accept(Newline);
+
+        let position_before_comments = self.token_index;
+        let _comments = self.parse_comments();
+
+        if !self.accept(Export) {
+            self.token_index = position_before_comments;
+            return Vec::new();
+        }
+
+        let mut items = self.delimited(Self::parse_ident_or_type_name, Comma, true);
+
+        // Try to recover on error and parse remaining exports
+        loop {
+            if matches!(*self.current_token(), Newline | EndOfInput) {
+                break;
+            // The current token is invalid (it stopped the previous delimited parse), but are
+            // there more valid names after it?
+            } else if matches!(self.try_peek_next_token(), Some(Identifier(_) | TypeName(_) | Comma)) {
+                let error = self.expected::<()>("an identifier, type name, or operator to export").unwrap_err();
+                self.diagnostics.push(error);
+                self.advance();
+                // Continue parsing exports
+                if *self.current_token() == Comma {
+                    self.advance();
+                }
+                items.extend(self.delimited(Self::parse_ident_or_type_name, Comma, true));
+            } else {
+                break;
+            }
+        }
+
+        if *self.current_token() != Newline {
+            let error = self.expected::<()>("an identifier, type name, or operator to export").unwrap_err();
+            self.diagnostics.push(error);
+            self.recover_to_next_newline_or_unindent();
+        }
+
+        self.accept(Newline);
+        items
+    }
+
     fn expect_newline_with_recovery(&mut self, error_message: &'static str) {
         let expect_newline = |this: &mut Self| this.expect(Token::Newline, error_message);
         if self.try_parse_or_recover_to_newline(expect_newline).is_none() {
@@ -507,6 +552,8 @@ impl<'tokens> Parser<'tokens> {
         let mut items = Vec::new();
 
         while !self.at_end_of_input() {
+            let start_index = self.token_index;
+
             let position_before_comments = self.token_index;
             let comments = self.parse_comments();
 
@@ -525,6 +572,12 @@ impl<'tokens> Parser<'tokens> {
                 break;
             }
             self.expect_newline_with_recovery("a newline after the top level item");
+
+            // Advance to prevent infinite loops if no progress was made
+            // This is usually indicative of a parser bug elsewhere
+            if self.token_index == start_index {
+                self.advance();
+            }
         }
 
         items
@@ -638,7 +691,7 @@ impl<'tokens> Parser<'tokens> {
             .try_parse_or_recover_to_newline(|this| this.parse_block_or_expression())
             .unwrap_or_else(|| self.push_expr(Expr::Error, self.current_token_location()));
 
-        let lambda = Expr::Lambda(Lambda { parameters, return_type, effects, body });
+        let lambda = Expr::Lambda(Lambda { parameters, return_type, effects, body, is_move: false });
         self.insert_expr(lambda_id, lambda, start_location);
         Ok(Definition { implicit, mutable: false, pattern: name, rhs: lambda_id })
     }
@@ -1030,6 +1083,31 @@ impl<'tokens> Parser<'tokens> {
                 self.advance();
                 self.expect(Token::ParenthesisRight, "a `)` to close the opening parenthesis from this operator")?;
                 Ok(operator)
+            },
+            _ => self.expected("an identifier"),
+        }
+    }
+
+    fn parse_ident_or_type_name(&mut self) -> Result<(String, Location)> {
+        match self.current_token() {
+            Token::Identifier(name) => {
+                let location = self.current_token_location();
+                self.advance();
+                Ok((name.clone(), location))
+            },
+            Token::TypeName(name) => {
+                let location = self.current_token_location();
+                self.advance();
+                Ok((name.clone(), location))
+            },
+            Token::ParenthesisLeft if self.peek_next_token().is_overloadable_operator() => {
+                let start = self.current_token_location();
+                self.advance();
+                let operator = self.current_token().to_string();
+                self.advance();
+                let end = self.current_token_location();
+                self.expect(Token::ParenthesisRight, "a `)` to close the opening parenthesis from this operator")?;
+                Ok((operator, start.to(&end)))
             },
             _ => self.expected("an identifier"),
         }
@@ -1550,7 +1628,7 @@ impl<'tokens> Parser<'tokens> {
                 self.advance();
                 Ok(self.push_expr(Expr::Literal(Literal::Unit), location))
             },
-            Token::Fn => self.parse_lambda(),
+            Token::Move | Token::Fn => self.parse_lambda(),
             Token::Error(_) => {
                 // Report the lexer error and return Error to treat this as an expression value
                 let location = self.current_token_location();
@@ -1608,6 +1686,8 @@ impl<'tokens> Parser<'tokens> {
 
     fn parse_lambda(&mut self) -> Result<ExprId> {
         self.with_expr_id_and_location(|this| {
+            let is_move = this.accept(Token::Move);
+
             this.expect(Token::Fn, "`fn` to start this lambda")?;
             let parameters = this.parse_function_parameters()?;
 
@@ -1622,7 +1702,7 @@ impl<'tokens> Parser<'tokens> {
             this.expect(Token::RightArrow, "a `->` to separate this lambda's parameters from its body")?;
             let body = this.parse_block_or_expression()?;
 
-            Ok(Expr::Lambda(Lambda { parameters, return_type, effects, body }))
+            Ok(Expr::Lambda(Lambda { parameters, return_type, effects, body, is_move }))
         })
     }
 

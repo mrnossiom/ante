@@ -19,7 +19,6 @@ t x = u x
 
 // expected stderr:
 // examples/nameresolution/U.an:1:8
-// 0 | import T.t
 // 1 | import T.t	// error: Could not find crate `T`
 //   |        ^^^
 // 
@@ -29,7 +28,6 @@ t x = u x
 //   |       ^
 // 
 // examples/nameresolution/T.an:1:8
-// 0 | import U.u
 // 1 | import U.u	// error: Could not find crate `U`
 //   |        ^^^
 // 

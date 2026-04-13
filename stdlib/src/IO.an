@@ -1,6 +1,9 @@
 import Std.C.fclose, fopen, fputs, fgetc, ungetc, feof, malloc, realloc, getchar, copy_file
 import Std.C
 
+export File, open, close, drop_file, eof, write, next_char, next_line,
+    iterator_file, read_line
+
 type File = c_file: C.File
 
 File.open (path: String) (mode: String): File =
@@ -49,7 +52,7 @@ File.next_line (f: mut File): String =
         recur (len + 1) new_capacity new_cstr
 
     array_insert cstr len c"\0"
-    String cstr (U32 len)
+    String.from_parts cstr (U32 len)
 
 // Iterating through a File iterates through each line
 impl iterator_file: Iterator (mut File) String with
@@ -74,4 +77,4 @@ read_line (): String =
         else buffer2, len
 
     array_insert buffer len c"\0"
-    String buffer (U32 len)
+    String.from_parts buffer (U32 len)

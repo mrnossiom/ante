@@ -21,7 +21,6 @@ main () =
 
 // expected stderr:
 // examples/nameresolution/import.an:1:8
-// 0 | import Library.library_int, library_fn
 // 1 | import Library.library_int, library_fn	// error: Could not find crate `Library`
 //   |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 // 

@@ -1,3 +1,9 @@
+export String, puts, putchar, getchar, exit, system, strlen,
+    malloc, calloc, realloc, free, memcpy, memcmp,
+    File, copy_file, fopen, fclose, fputs, fputc, fwrite,
+    fgetc, fgets, ungetc, fgetpos, ftell, fsetpos, fseek, feof, ferror,
+    FilePos
+
 /// A C string is a pointer to a null-terminated character array
 type String = ptr: Ptr Char
 

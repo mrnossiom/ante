@@ -8,7 +8,6 @@ match 3
 // expected exit status: 1
 // expected stderr:
 // examples/regressions/80_empty_match.an:1:1
-// 0 | // #80: match expression fails to assign variables when there are no constructors to match against
 //   | // error: This program has no `main` function
 // 1 | // #80: match expression fails to assign variables when there are no constructors to match against
 //   | 

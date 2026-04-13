@@ -18,7 +18,6 @@ for (fn () -> iota 10) print
 // expected exit status: 1
 // expected stderr:
 // examples/codegen/effects/generators_basic.an:1:1
-// 0 | effect Emit a with
 // 1 | effect Emit a with	// error: This program has no `main` function
 //   | 
 // 2 |     emit: a -> Unit

@@ -177,7 +177,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             // Run deferred closure checks after all implicits (including retries) are resolved
             // so that free-variable analysis sees the fully-resolved implicit arguments.
             for (expr, env_type) in closures {
-                self.check_for_closure(expr, &env_type, None);
+                self.check_for_closure(expr, &env_type, None, false);
             }
         }
 
@@ -544,7 +544,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         let body = self.push_expr(body, body_type, location);
 
         // TODO: This should have the same effects as `function`
-        Some(cst::Expr::Lambda(cst::Lambda { parameters, body, return_type: None, effects: Some(Vec::new()) }))
+        Some(cst::Expr::Lambda(cst::Lambda { parameters, body, return_type: None, effects: Some(Vec::new()), is_move: false }))
     }
 
     /// Creates a new expression referring to the given implicit value.

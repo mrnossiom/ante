@@ -4,7 +4,7 @@ use colored::{Color, ColoredString, Colorize};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    incremental::{CheckAll, Db, DbHandle, ExportedDefinitions, GetCrateGraph, Parse, SourceFile, TypeCheck},
+    incremental::{AllDefinitions, CheckAll, Db, DbHandle, GetCrateGraph, Parse, SourceFile, TypeCheck},
     iterator_extensions::mapvec,
     lexer::{
         Lexer,
@@ -49,6 +49,11 @@ pub enum Diagnostic {
         location: Location,
     },
     UnknownImportItem {
+        name: Name,
+        module: Arc<PathBuf>,
+        location: Location,
+    },
+    ItemNotExported {
         name: Name,
         module: Arc<PathBuf>,
         location: Location,
@@ -196,9 +201,6 @@ pub enum Diagnostic {
         name: String,
         location: Location,
     },
-    MutatedCapturedVariable {
-        location: Location,
-    },
     UseOfMovedValue {
         name: String,
         location: Location,
@@ -265,6 +267,9 @@ impl Diagnostic {
             },
             Diagnostic::UnknownImportItem { name, module, location: _ } => {
                 format!("`{name}` not found in module `{}`", module.display())
+            },
+            Diagnostic::ItemNotExported { name, module, location: _ } => {
+                format!("`{name}` is not exported from module `{}`", module.display())
             },
             Diagnostic::NameNotInScope { name, location: _ } => {
                 format!("`{name}` not found in scope")
@@ -433,9 +438,6 @@ impl Diagnostic {
             Diagnostic::NotAType { name, location: _ } => {
                 format!("{} is not a type", name.purple())
             },
-            Diagnostic::MutatedCapturedVariable { location: _ } => {
-                "Cannot mutate a captured variable because closures capture by value. Consider capturing a mutable reference instead".to_string()
-            },
             Diagnostic::UseOfMovedValue { name, location: _, moved_in: _ } => {
                 format!("Use of moved value {}", name.purple())
             },
@@ -452,6 +454,7 @@ impl Diagnostic {
             | Diagnostic::ImportedNameAlreadyInScope { second_location: location, .. }
             | Diagnostic::UnknownImportFile { location, .. }
             | Diagnostic::UnknownImportItem { location, .. }
+            | Diagnostic::ItemNotExported { location, .. }
             | Diagnostic::NameNotInScope { location, .. }
             | Diagnostic::ExpectedType { location, .. }
             | Diagnostic::RecursiveType { location, .. }
@@ -484,7 +487,6 @@ impl Diagnostic {
             | Diagnostic::Unimplemented { location, .. }
             | Diagnostic::TypeAnnotationNeeded { location, .. }
             | Diagnostic::NotAType { location, .. }
-            | Diagnostic::MutatedCapturedVariable { location }
             | Diagnostic::UseOfMovedValue { location, .. }
             | Diagnostic::NoMainFunction { location } => location,
         }
@@ -543,7 +545,7 @@ impl Diagnostic {
 
 /// Given a location, return the line numbers to display the code for
 fn lines_to_display(location: &Location) -> std::ops::Range<u32> {
-    location.span.start.line_number.saturating_sub(1)..location.span.start.line_number + 2
+    location.span.start.line_number.saturating_sub(1).max(1)..location.span.start.line_number + 2
 }
 
 /// Compute the line blocks to display. Returns 1 merged block if ranges
@@ -597,6 +599,7 @@ fn syntax_color(token: &Token) -> Option<Color> {
         | Token::Effect
         | Token::Else
         | Token::Exists
+        | Token::Export
         | Token::Extern
         | Token::Fn
         | Token::For
@@ -920,7 +923,7 @@ pub(crate) fn check_all(_: &CheckAll, compiler: &DbHandle) {
     let has_main = local_crate
         .source_files
         .values()
-        .any(|file| ExportedDefinitions(*file).get(compiler).definitions.keys().any(|k| k.as_str() == "main"));
+        .any(|file| AllDefinitions(*file).get(compiler).definitions.keys().any(|k| k.as_str() == "main"));
 
     if !has_main {
         if let Some(first_file) = local_crate.source_files.values().next() {

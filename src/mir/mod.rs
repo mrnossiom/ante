@@ -696,7 +696,7 @@ impl Type {
     }
 
     pub fn string() -> Type {
-        Type::Tuple(Arc::new(vec![Type::POINTER, Type::int(IntegerKind::U32)]))
+        Type::Tuple(Arc::new(vec![Type::POINTER, Type::int(IntegerKind::U32), Type::POINTER]))
     }
 
     pub fn generic(index: u32) -> Type {

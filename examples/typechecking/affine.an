@@ -105,7 +105,9 @@ main () = ()
 // 
 // examples/typechecking/affine.an:57:16
 // 56 |     r = Resource 6
-// 57 |     take_two r r	// error: Use of moved value r	// note: r was previously moved here
+//    |     // error: Use of moved value r
+//    |     // note: r was previously moved here
+// 57 |     take_two r r
 //    |              - ^
 // 
 // examples/typechecking/affine.an:71:14

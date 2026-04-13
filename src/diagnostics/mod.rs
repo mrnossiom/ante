@@ -800,10 +800,32 @@ fn collect_messages<'a>(
     messages
 }
 
-/// Check whether all message comments fit inline on the source line
+/// Compute the length of a string, ignoring ANSI escape sequences.
+fn visible_len(s: &str) -> usize {
+    let mut len = 0;
+    let mut chars = s.chars();
+    while let Some(c) = chars.next() {
+        if c == '\x1b' {
+            for c in chars.by_ref() {
+                if c == 'm' {
+                    break;
+                }
+            }
+        } else {
+            len += 1;
+        }
+    }
+    len
+}
+
+/// Check whether all message comments fit inline on the source line.
+/// Multiple messages are never inlined together to keep each on its own line.
 fn messages_fit_inline(digit_len: usize, line: &str, messages: &[(DiagnosticKind, &str)]) -> bool {
+    if messages.len() > 1 {
+        return false;
+    }
     let prefix_len = digit_len + 3; // "{line_no} | "
-    let suffix_len: usize = messages.iter().map(|(_, m)| m.len() + APPROX_COMMENT_OVERHEAD).sum();
+    let suffix_len: usize = messages.iter().map(|(_, m)| visible_len(m) + APPROX_COMMENT_OVERHEAD).sum();
     prefix_len + line.len() + suffix_len <= MAX_LINE_WIDTH
 }
 

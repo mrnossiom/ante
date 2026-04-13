@@ -42,7 +42,7 @@ does_use x =
 // 
 // (does_use: fn _ -> _ can _) (x: _) =
 //     (y: _) = (get: (error)) ()
-//     (set: (error)) ((fn (p5: _) (p6: _) -> (+: fn _ _ {Add _} -> _ pure) (p5: _) (p6: _) {(error)}) (y: _) (x: _))
+//     (set: (error)) ((+: fn _ _ {Add _} -> _ pure) (y: _) (x: _) {(error)})
 
 // expected stderr:
 // examples/typechecking/effects.an:10:5
@@ -70,7 +70,7 @@ does_use x =
 // 
 // examples/typechecking/effects.an:22:12
 // 21 |     y = get ()
-//    |     // error: Multiple matching implicits found for type Add _ required by parameter 3: add_i8, add_i16, add_i32, add_i64, add_isz, ..
+//    |     // error: Multiple matching implicits found for type Add _ required by parameter 3 of +: add_i8, add_i16, add_i32, add_i64, add_isz, ..
 // 22 |     set (y + x)
 //    |            ^
 // 

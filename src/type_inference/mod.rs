@@ -422,28 +422,45 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             false
         }
     }
+}
 
-    /// Try to apply a coercion between `actual` and `expected`, returning a new expression
-    /// if successful.
+/// Describes what a [`TypeChecker::try_coercion`] call rewrote, if anything.
+pub(super) enum CoercionOutcome {
+    /// No coercion was applied.
+    None,
+    /// The expression at the given `expr` was replaced; the caller should re-check it.
+    ReplacedExpr,
+    /// The Call at `call_expr` had implicit arguments spliced in; the function expression
+    /// itself is untouched and should not be re-checked against the reduced expected type.
+    InPlaceCall,
+}
+
+impl<'local, 'inner> TypeChecker<'local, 'inner> {
+    /// Try to apply a coercion between `actual` and `expected`.
     ///
     /// Possible coercions:
     /// - If `actual` is a function type with more implicit parameters than `expected` has,
-    /// search for implicit values in scope and create a new wrapper function over `expr`.
+    /// search for implicit values in scope and either splice them directly into the enclosing
+    /// Call (when `call_expr` is `Some`) or wrap `expr` in a new lambda.
     /// - If `actual` is a reference type `r t` and `expected` is `t` (non-reference, non-variable),
     /// insert a `(.*)` call to auto-deref, requiring `t: Copy`.
     ///
-    /// Returns `true` if `expr` was modified, or `false` otherwise
-    fn try_coercion(&mut self, actual: &Type, expected: &Type, expr: ExprId) -> bool {
+    /// Returns a [`CoercionOutcome`] describing what (if anything) was rewritten.
+    fn try_coercion(&mut self, actual: &Type, expected: &Type, expr: ExprId, call_expr: Option<ExprId>) -> CoercionOutcome {
         match (self.follow_type(actual), self.follow_type(expected)) {
             (Type::Function(actual_fn), Type::Function(expected_fn))
                 if actual_fn.parameters.len() != expected_fn.parameters.len() =>
             {
-                if let Some(new_expr) = self.implicit_parameter_coercion(actual_fn.clone(), expected_fn.clone(), expr) {
-                    self.current_extended_context_mut().insert_expr(expr, new_expr);
-                    self.coercion_wrapper_exprs.insert(expr);
-                    true
-                } else {
-                    false
+                match self.implicit_parameter_coercion(actual_fn.clone(), expected_fn.clone(), expr, call_expr) {
+                    Some(implicits::CoercionKind::Wrapper(new_expr)) => {
+                        self.current_extended_context_mut().insert_expr(expr, new_expr);
+                        if call_expr.is_none() {
+                            self.coercion_wrapper_exprs.insert(expr);
+                        }
+                        CoercionOutcome::ReplacedExpr
+                    },
+                    Some(implicits::CoercionKind::DirectCallInsertion) => CoercionOutcome::InPlaceCall,
+                    None => CoercionOutcome::None,
                 }
             },
             // Auto-deref: coerce `ref-kind t` to `t` by inserting a `(.*) expr` call if `Copy t`
@@ -459,12 +476,12 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                         self.bindings.extend(bindings);
                         let new_expr = self.auto_deref_coercion(expr, expected);
                         self.current_extended_context_mut().insert_expr(expr, new_expr);
-                        return true;
+                        return CoercionOutcome::ReplacedExpr;
                     }
                 }
-                false
+                CoercionOutcome::None
             },
-            _ => false,
+            _ => CoercionOutcome::None,
         }
     }
 

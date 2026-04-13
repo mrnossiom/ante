@@ -39,24 +39,24 @@ implicit_call () =
 // (requires_bool: fn {Bool} Unit -> Unit pure) {(b: Bool)} () : Unit = ()
 // 
 // (zero_matching: fn Unit -> Unit can _) () =
-//     (fn (p1: Unit) -> (requires_string: fn {String} Unit -> Unit pure) {(error)} (p1: Unit)) ()
+//     (requires_string: fn {String} Unit -> Unit pure) {(error)} ()
 // 
 // (one_matching: fn Unit -> Unit can _) () =
 //     implicit (hello: String) = "hello"
-//     (fn (p1: Unit) [(hello: String)] -> (requires_string: fn {String} Unit -> Unit pure) {(hello: String)} (p1: Unit)) ()
+//     (requires_string: fn {String} Unit -> Unit pure) {(hello: String)} ()
 // 
 // (multiple_matching: fn Unit -> Unit can _) () =
 //     implicit (empty: String) = ""
 //     implicit (spaces: String) = "  "
 //     implicit (greeting: String) = "hi!"
-//     (fn (p1: Unit) -> (requires_string: fn {String} Unit -> Unit pure) {(error)} (p1: Unit)) ()
+//     (requires_string: fn {String} Unit -> Unit pure) {(error)} ()
 // 
 // (one_matching_global: fn Unit -> Unit can _) () =
-//     (fn (p1: Unit) -> (requires_bool: fn {Bool} Unit -> Unit pure) {(false_: Bool)} (p1: Unit)) ()
+//     (requires_bool: fn {Bool} Unit -> Unit pure) {(false_: Bool)} ()
 // 
 // (multiple_matching_with_global: fn Unit -> Unit can _) () =
 //     implicit (zero: U32) = 0_U32
-//     (fn (p1: Unit) -> (requires_u32: fn {U32} Unit -> Unit pure) {(error)} (p1: Unit)) ()
+//     (requires_u32: fn {U32} Unit -> Unit pure) {(error)} ()
 // 
 // implicit (false_: Bool) = false
 // 
@@ -64,23 +64,24 @@ implicit_call () =
 // 
 // (implicit_call: fn Unit -> Unit can _) () =
 //     implicit (make_string: fn {Bool} -> String can _) {(_: Bool)} = ""
-//     (fn (p2: Unit) [(make_string: fn {Bool} -> String can _)] -> (requires_string: fn {String} Unit -> Unit pure) {(make_string: fn {Bool} -> String can _) {(false_: Bool)}} (p2: Unit)) ()
+//     (requires_string: fn {String} Unit -> Unit pure) {(make_string: fn {Bool} -> String can _) {(false_: Bool)}} ()
 
 // expected stderr:
 // examples/typechecking/implicit.an:6:5
 // 5 | zero_matching () =
-// 6 |     requires_string ()	// error: No implicit found for type String required by parameter 1
+//   |     // error: No implicit found for type String required by parameter 1 of requires_string
+// 6 |     requires_string ()
 //   |     ^^^^^^^^^^^^^^^
 // 
 // examples/typechecking/implicit.an:16:5
 // 15 |     implicit greeting = "hi!"
-//    |     // error: Multiple matching implicits found for type String required by parameter 1: empty, spaces, greeting
+//    |     // error: Multiple matching implicits found for type String required by parameter 1 of requires_string: empty, spaces, greeting
 // 16 |     requires_string ()
 //    |     ^^^^^^^^^^^^^^^
 // 
 // examples/typechecking/implicit.an:23:5
 // 22 |     implicit zero = 0u32
-//    |     // error: Multiple matching implicits found for type U32 required by parameter 1: zero, one
+//    |     // error: Multiple matching implicits found for type U32 required by parameter 1 of requires_u32: zero, one
 // 23 |     requires_u32 ()
 //    |     ^^^^^^^^^^^^
 // 24 |     

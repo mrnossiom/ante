@@ -11,5 +11,5 @@ main () =
 // args: -e ast-t --no-color
 // expected stdout:
 // (main: fn Unit -> Unit can _) () =
-//     (fn (p1: I32) -> (print: fn I32 {Print I32} -> Unit pure) (p1: I32) {(print_i32: Print I32)}) 2
+//     (print: fn I32 {Print I32} -> Unit pure) 2 {(print_i32: Print I32)}
 

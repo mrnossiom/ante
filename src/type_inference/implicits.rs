@@ -68,23 +68,35 @@ impl ImplicitsContext {
     }
 }
 
+/// Result of a successful implicit-parameter coercion.
+pub(super) enum CoercionKind {
+    /// A wrapper lambda expression was produced and should be inserted at the function's ExprId.
+    Wrapper(cst::Expr),
+    /// The enclosing Call had its arguments rewritten in place; the function expression is
+    /// unchanged and should not be re-checked against the reduced expected type.
+    DirectCallInsertion,
+}
+
 impl<'local, 'inner> TypeChecker<'local, 'inner> {
     /// Perform an implicit parameter coercion.
     ///
     /// Given a function `expr` which requires some implicit parameters present in the `actual`
     /// type but not the `expected` type, find values for those implicits (issuing errors for any
-    /// that cannot be found) an create a new wrapper function. E.g:
+    /// that cannot be found).
+    ///
+    /// If the function is immediately used in a Call (`call` is `Some`), the resolved implicit
+    /// arguments are spliced directly into that Call's argument list and this returns
+    /// [`CoercionKind::DirectCallInsertion`]. Otherwise a new wrapper lambda is created, e.g.:
     ///
     /// ```ante
     /// fn a c -> <expr> a <new-implicit> c
     /// ```
-    /// where `<new-implicit>` is a new implicit that was successfully found. In the case a
-    /// matching implicit value cannot be found, an error is issued and an error expression is
-    /// slotted in as the argument instead. In this way, this function will always return a new
-    /// closure wrapper.
+    ///
+    /// In the case a matching implicit value cannot be found, an error is issued and an error
+    /// expression is slotted in as the argument instead.
     pub(super) fn implicit_parameter_coercion(
-        &mut self, actual: Arc<FunctionType>, expected: Arc<FunctionType>, function: ExprId,
-    ) -> Option<cst::Expr> {
+        &mut self, actual: Arc<FunctionType>, expected: Arc<FunctionType>, function: ExprId, call: Option<ExprId>
+    ) -> Option<CoercionKind> {
         // Looking for implicit parameters that are in `actual` but not `expected`.
         // The reverse would be a type error.
         let mut new_expected = Vec::new();
@@ -101,7 +113,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             match (actual.is_implicit, current_expected.as_ref()) {
                 // actual is implicit, but expected isn't, search for an implicit in scope
                 (true, expected) if expected.map_or(true, |param| !param.is_implicit) => {
-                    let value = self.delay_find_implicit_value(&actual.typ, new_expected.len(), function);
+                    let value = self.delay_find_implicit_value(&actual.typ, new_expected.len(), function, call);
                     implicits_added.push(Some(value));
                     new_expected.push(ParameterType::implicit(self.expr_types[&value].clone()));
                 },
@@ -113,7 +125,29 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 },
             }
         }
-        self.create_closure_wrapper_for_implicit(function, implicits_added, new_expected)
+
+        if let Some(_) = call {
+            // The Call's arguments were already rewritten eagerly by `delay_find_implicit_value`.
+            // Here we just need to make the types consistent so that the enclosing `check_call`'s
+            // argument loop sees the correct bound types in its expected parameter variables.
+            let implicit_added = implicits_added.iter().any(|param| param.is_some());
+            if !implicit_added || implicits_added.len() != new_expected.len() {
+                return None;
+            }
+
+            let new_fn = Type::Function(Arc::new(FunctionType {
+                parameters: new_expected,
+                environment: expected.environment.clone(),
+                return_type: expected.return_type.clone(),
+                effects: expected.effects.clone(),
+            }));
+            self.unify(&Type::Function(actual), &new_fn, TypeErrorKind::General, function);
+
+            Some(CoercionKind::DirectCallInsertion)
+        } else {
+            self.create_closure_wrapper_for_implicit(function, implicits_added, new_expected)
+                .map(CoercionKind::Wrapper)
+        }
     }
 
     /// If the expression is a variable, return its name
@@ -195,12 +229,26 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     /// Delay finding an implicit value until later when more types are known.
     ///
     /// This returns a fresh [ExprId] where the implicit value will be emplaced into when found.
-    fn delay_find_implicit_value(&mut self, target_type: &Type, parameter_index: usize, function: ExprId) -> ExprId {
+    ///
+    /// If `call` is `Some`, an [`cst::Argument::implicit`] referencing the fresh [ExprId] is
+    /// spliced into that Call's argument list at `parameter_index`. Because implicits are
+    /// inserted in order of `parameter_index` (matching the ordering of `actual.parameters`
+    /// traversal in [`Self::implicit_parameter_coercion`]), later insertions see earlier ones
+    /// already in place and `parameter_index` is directly the correct insertion position.
+    fn delay_find_implicit_value(&mut self, target_type: &Type, parameter_index: usize, function: ExprId, call: Option<ExprId>) -> ExprId {
         let location = function.locate(self);
         let typ = target_type.clone();
         let fresh_id = self.push_expr(cst::Expr::Error, typ, location);
         let delayed = DelayedImplicit { source: function, destination: fresh_id, parameter_index };
         self.implicits.last_mut().unwrap().delayed_implicits.push(delayed);
+
+        if let Some(call_expr) = call {
+            if let cst::Expr::Call(mut existing) = self.current_extended_context()[call_expr].clone() {
+                existing.arguments.insert(parameter_index, cst::Argument::implicit(fresh_id));
+                self.current_extended_context_mut().insert_expr(call_expr, cst::Expr::Call(existing));
+            }
+        }
+
         fresh_id
     }
 
@@ -400,6 +448,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                         let arg_type = parameter.typ.clone();
                         let arg_location = function.locate(self);
                         let destination = self.push_expr(cst::Expr::Error, arg_type, arg_location);
+
                         let implicit = DelayedImplicit { source: function, destination, parameter_index };
 
                         if self

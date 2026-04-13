@@ -11,7 +11,7 @@ main () =
 // expected stderr:
 // examples/codegen/tuples.an:7:5
 // 6 |     foo ("test", 2, 'c')
-//   |     // error: Multiple matching implicits found for type Print _ required by parameter 2: print_bool, print_char, print_i8, print_i16, print_i32, ..
+//   |     // error: Multiple matching implicits found for type Print _ required by parameter 2 of foo: print_bool, print_char, print_i8, print_i16, print_i32, ..
 // 7 |     foo ("hi", 7, 2.0, 3, 4, 5)
 //   |     ^^^
 // 

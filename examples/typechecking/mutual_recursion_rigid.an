@@ -46,7 +46,7 @@ ex2c (a: v) b =
 //     trait2: fn a [[env]] -> Unit
 // 
 // (ex2a: fn t (error) -> _ can _) ((a: (error))) (b: (error)) {(_: (error))} =
-//     (fn (p6: t) (p7: (error)) -> (ex2b: fn t (error) {Copy t} -> _ can _) (p6: t) (p7: (error)) {(error)}) (a: (error)) (b: (error))
+//     (ex2b: fn t (error) {Copy t} -> _ can _) (a: (error)) (b: (error)) {(error)}
 //     (trait1: (error)) (a: (error))
 // 
 // (ex2b: fn u (error) {Copy u} -> _ can _) ((a: u)) (b: (error)) {(_: Copy u)} =
@@ -64,7 +64,7 @@ ex2c (a: v) b =
 // 
 // examples/typechecking/mutual_recursion_rigid.an:21:5
 // 20 | ex2a (a: t) b {Copy t} =
-// 21 |     ex2b a b	// error: No implicit found for type Copy t required by parameter 3
+// 21 |     ex2b a b	// error: No implicit found for type Copy t required by parameter 3 of ex2b
 //    |     ^^^^
 // 22 |     trait1 a
 // 

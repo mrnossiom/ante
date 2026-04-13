@@ -8,20 +8,20 @@ foo a =
 // expected exit status: 1
 // expected stdout:
 // (foo: fn _ -> Unit can _) (a: _) =
-//     (fn (p4: _) -> (print: fn _ {Print _} -> Unit pure) (p4: _) {(error)}) (a: _)
-//     (fn (p5: _) -> (print: fn _ {Print _} -> Unit pure) (p5: _) {(error)}) (a: _)
+//     (print: fn _ {Print _} -> Unit pure) (a: _) {(error)}
+//     (print: fn _ {Print _} -> Unit pure) (a: _) {(error)}
 
 // expected stderr:
 // examples/typechecking/repeated_traits.an:2:5
 // 1 | foo a =
-//   |     // error: Multiple matching implicits found for type Print _ required by parameter 2: print_bool, print_char, print_i8, print_i16, print_i32, ..
+//   |     // error: Multiple matching implicits found for type Print _ required by parameter 2 of print: print_bool, print_char, print_i8, print_i16, print_i32, ..
 // 2 |     print a
 //   |     ^^^^^
 // 3 |     print a
 // 
 // examples/typechecking/repeated_traits.an:3:5
 // 2 |     print a
-//   |     // error: Multiple matching implicits found for type Print _ required by parameter 2: print_bool, print_char, print_i8, print_i16, print_i32, ..
+//   |     // error: Multiple matching implicits found for type Print _ required by parameter 2 of print: print_bool, print_char, print_i8, print_i16, print_i32, ..
 // 3 |     print a
 //   |     ^^^^^
 // 

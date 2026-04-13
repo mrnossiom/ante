@@ -72,6 +72,11 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
 
     /// Check an expression's type matches the expected type.
     fn check_expr(&mut self, id: ExprId, expected: &Type) {
+        self.check_expr_inner(id, expected, None);
+    }
+
+    /// Check an expression's type matches the expected type.
+    fn check_expr_inner(&mut self, id: ExprId, expected: &Type, call_expr: Option<ExprId>) {
         self.expr_types.insert(id, expected.clone());
 
         let expr = match self.current_extended_context().extended_expr(id) {
@@ -81,7 +86,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
 
         match expr.as_ref() {
             Expr::Literal(literal) => self.check_literal(literal, id, expected),
-            Expr::Variable(path) => self.check_path(*path, expected, Some(id)),
+            Expr::Variable(path) => self.check_path(*path, expected, Some(id), call_expr),
             Expr::Call(call) => self.check_call(call, expected, id),
             Expr::Lambda(lambda) => self.check_lambda(lambda, expected, id, None),
             Expr::Sequence(items) => {
@@ -181,7 +186,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                     }))
                 };
 
-                self.check_path(*path, &expected_function_type, None);
+                self.check_path(*path, &expected_function_type, None, None);
                 for (expected_arg_type, arg) in parameters.into_iter().zip(args) {
                     self.check_pattern(*arg, &expected_arg_type.typ);
                 }
@@ -194,7 +199,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         };
     }
 
-    fn check_path(&mut self, path: PathId, expected: &Type, expr: Option<ExprId>) {
+    fn check_path(&mut self, path: PathId, expected: &Type, expr: Option<ExprId>, call_expr: Option<ExprId>) {
         let actual = match self.path_origin(path) {
             Some(Origin::TopLevelDefinition(id)) => self.type_of_top_level_name(&id, path),
             Some(Origin::Local(name)) => {
@@ -214,11 +219,23 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             None => return,
         };
         if let Some(expr) = expr {
-            if self.try_coercion(&actual, expected, expr) {
-                self.check_expr(expr, expected);
-                return;
-                // no need to unify or modify self.path_types, that will be handled in the
-                // recursive check_expr call since we've just changed the expression at this ExprId.
+            match self.try_coercion(&actual, expected, expr, call_expr) {
+                super::CoercionOutcome::ReplacedExpr => {
+                    self.check_expr(expr, expected);
+                    return;
+                    // no need to unify or modify self.path_types, that will be handled in the
+                    // recursive check_expr call since we've just changed the expression at this ExprId.
+                },
+                super::CoercionOutcome::InPlaceCall => {
+                    // The Call at `call_expr` was rewritten with the resolved implicit
+                    // arguments already spliced in. The function expression itself is
+                    // unchanged, so record its actual (full-implicit) type and return.
+                    // `implicit_parameter_coercion` already performed the unification
+                    // needed for `check_call`'s argument loop to see the right types.
+                    self.path_types.insert(path, actual);
+                    return;
+                },
+                super::CoercionOutcome::None => {},
             }
         }
         self.unify(&actual, expected, TypeErrorKind::General, path);
@@ -353,7 +370,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             Type::Function(Arc::new(FunctionType { parameters, environment, return_type, effects }))
         };
 
-        self.check_expr(call.function, &expected_function_type);
+        self.check_expr_inner(call.function, &expected_function_type, Some(call_expr));
         for (arg, expected_arg_type) in call.arguments.iter().zip(expected_parameter_types) {
             self.check_expr(arg.expr, &expected_arg_type.typ);
         }
@@ -588,10 +605,11 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 }
             }
 
-            if self.try_coercion(&field, expected, expr) {
-                self.check_expr(expr, expected);
-            } else {
-                self.unify(&field, expected, TypeErrorKind::General, expr);
+            match self.try_coercion(&field, expected, expr, None) {
+                super::CoercionOutcome::ReplacedExpr => self.check_expr(expr, expected),
+                super::CoercionOutcome::InPlaceCall | super::CoercionOutcome::None => {
+                    self.unify(&field, expected, TypeErrorKind::General, expr);
+                },
             }
         } else if matches!(self.follow_type(&struct_type), Type::Variable(_)) {
             let location = self.current_context().expr_location(expr).clone();

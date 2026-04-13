@@ -10,7 +10,7 @@ main () = ()
 // args: -e ast-t --no-color
 // expected exit status: 1
 // expected stdout:
-// (ex1: fn a -> b pure) ((x: a)) : b = (fn (p2: b) (p3: b) -> (+: fn b b {Add b} -> b pure) (p2: b) (p3: b) {(error)}) (x: a) 1_U32
+// (ex1: fn a -> b pure) ((x: a)) : b = (+: fn b b {Add b} -> b pure) (x: a) 1_U32 {(error)}
 // 
 // (ex2: fn a -> b pure) =
 //     fn (x: a) -> (x: a)
@@ -23,7 +23,8 @@ main () = ()
 //   |                 ^
 // 
 // examples/typechecking/rigid.an:2:19
-// 2 | ex1 (x: a): b = x + 1u32	// error: No implicit found for type Add b required by parameter 3
+//   | // error: No implicit found for type Add b required by parameter 3 of +
+// 2 | ex1 (x: a): b = x + 1u32
 //   |                   ^
 // 
 // examples/typechecking/rigid.an:2:21

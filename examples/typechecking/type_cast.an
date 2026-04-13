@@ -15,27 +15,29 @@ main () =
 // expected exit status: 1
 // expected stdout:
 // (main: fn Unit -> Unit can _) () =
-//     (a: U32) = (fn (p12: U8) -> (Std.Prelude.Cast.cast: fn U8 {Cast U8 U32} -> U32 pure) (p12: U8) {(cast_u8_u32: Cast U8 U32)}) 42_U8: U32
-//     (b: I64) = (fn (p13: I64) -> (Std.Prelude.Cast.cast: fn I64 {Cast I64 I64} -> I64 pure) (p13: I64) {(cast_same: Cast I64 I64)}) ((fn (p14: I32) -> (Std.Prelude.Cast.cast: fn I32 {Cast I32 I64} -> I64 pure) (p14: I32) {(cast_i32_i64: Cast I32 I64)}) 42: I64): I64
-//     (c: I32) = (fn (p15: U8) -> (Std.Prelude.Cast.cast: fn U8 {Cast U8 I32} -> I32 pure) (p15: U8) {(error)}) 42_U8: I32
-//     (d: U8) = (fn (p16: String) -> (Std.Prelude.Cast.cast: fn String {Cast String U8} -> U8 pure) (p16: String) {(error)}) "hello": U8
-//     (e: U8) = (fn (p17: Bool) -> (Std.Prelude.Cast.cast: fn Bool {Cast Bool U8} -> U8 pure) (p17: Bool) {(error)}) true: U8
+//     (a: U32) = (Std.Prelude.Cast.cast: fn U8 {Cast U8 U32} -> U32 pure) 42_U8 {(cast_u8_u32: Cast U8 U32)}: U32
+//     (b: I64) = (Std.Prelude.Cast.cast: fn I64 {Cast I64 I64} -> I64 pure) ((Std.Prelude.Cast.cast: fn I32 {Cast I32 I64} -> I64 pure) 42 {(cast_i32_i64: Cast I32 I64)}: I64) {(cast_same: Cast I64 I64)}: I64
+//     (c: I32) = (Std.Prelude.Cast.cast: fn U8 {Cast U8 I32} -> I32 pure) 42_U8 {(error)}: I32
+//     (d: U8) = (Std.Prelude.Cast.cast: fn String {Cast String U8} -> U8 pure) "hello" {(error)}: U8
+//     (e: U8) = (Std.Prelude.Cast.cast: fn Bool {Cast Bool U8} -> U8 pure) true {(error)}: U8
 
 // expected stderr:
 // examples/typechecking/type_cast.an:6:9
 // 5 |     // No Cast impl from U8 to I32
-// 6 |     c = I32 42u8	// error: No implicit found for type Cast U8 I32 required by parameter 2
+//   |     // error: No implicit found for type Cast U8 I32 required by parameter 2 of cast
+// 6 |     c = I32 42u8
 //   |         ^^^^^^
 // 
 // examples/typechecking/type_cast.an:9:9
 //  8 |     // No Cast impl from String to U8
-//    |     // error: No implicit found for type Cast String U8 required by parameter 2
+//    |     // error: No implicit found for type Cast String U8 required by parameter 2 of cast
 //  9 |     d = U8 "hello"
 //    |         ^^^^^^^^^^
 // 
 // examples/typechecking/type_cast.an:12:9
 // 11 |     // No Cast impl from Bool to U8
-// 12 |     e = U8 true	// error: No implicit found for type Cast Bool U8 required by parameter 2
+//    |     // error: No implicit found for type Cast Bool U8 required by parameter 2 of cast
+// 12 |     e = U8 true
 //    |         ^^^^^^^
 // 
 // Found 3 errors and 0 warnings

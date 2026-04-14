@@ -370,4 +370,8 @@ impl NameStore for ExtendedTopLevelContext {
     fn get_name(&self, id: NameId) -> &Name {
         &self[id]
     }
+
+    fn try_get_name(&self, id: NameId) -> Option<&Name> {
+        self.more_names.get(&id).or_else(|| self.original.try_get_name(id))
+    }
 }

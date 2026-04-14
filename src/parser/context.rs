@@ -84,4 +84,8 @@ impl NameStore for TopLevelContext {
     fn get_name(&self, id: NameId) -> &crate::parser::cst::Name {
         &self.names[id]
     }
+
+    fn try_get_name(&self, id: NameId) -> Option<&Name> {
+        self.names.get(id)
+    }
 }

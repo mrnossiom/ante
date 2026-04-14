@@ -4,16 +4,13 @@ use crate::{
     diagnostics::{Diagnostic, Location, UnimplementedItem},
     incremental::{ExportedDefinitions, GetItemRaw, GetType, Resolve},
     iterator_extensions::mapvec,
-    name_resolution::{Origin, builtin::Builtin, namespace::SourceFileId},
+    name_resolution::{builtin::Builtin, namespace::SourceFileId, Origin},
     parser::{
         cst::{self, Definition, Expr, Literal, Pattern},
         ids::{ExprId, NameId, PathId, PatternId, TopLevelId, TopLevelName},
     },
     type_inference::{
-        Locateable, TypeChecker,
-        errors::TypeErrorKind,
-        get_type::try_get_partial_type,
-        types::{self, FunctionType, ParameterType, Type},
+        errors::TypeErrorKind, get_type::try_get_partial_type, types::{self, FunctionType, ParameterType, Type, TypeBindings}, Locateable, TypeChecker
     },
 };
 
@@ -536,6 +533,8 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             self.check_for_closure(expr, &function_type.environment, self_name, lambda.is_move);
         }
 
+        self.try_close_lambda_effects(&function_type);
+
         // For `move` closures, record that each captured non-Copy variable has been moved
         // in the outer scope. Copy types are simply copied into the environment.
         if lambda.is_move {
@@ -549,6 +548,26 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                     }
                 }
             }
+        }
+    }
+
+    /// If a lambda is polymorphic over its effect set `a` but `a` is not mentioned elsewhere
+    /// in the lambda's type, we simplify the type be closing the effect set (removing `a`).
+    ///
+    /// This results in `fn a -> b can e` being closed into `fn a -> b pure` or similarly
+    /// `fn a -> b can IO, Throw t, e` being closed into `fn a -> b can IO, Throw t`. However,
+    /// `fn (fn a -> b can e) a -> b can e` will not remove the `e`.
+    fn try_close_lambda_effects(&mut self, function: &FunctionType) {
+        let Some(row) = function.effects.effect_row(&self.bindings) else { return };
+
+        // Check if `row` is mentioned anywhere in the function except its effect set
+        let no_bindings = TypeBindings::new();
+        let occurs = function.parameters.iter().any(|param| self.occurs(&param.typ, row, &no_bindings))
+            || self.occurs(&function.environment, row, &no_bindings)
+            || self.occurs(&function.return_type, row, &no_bindings);
+
+        if !occurs {
+            self.bindings.insert(row, Type::no_effects());
         }
     }
 

@@ -238,10 +238,15 @@ pub trait IdStore: NameStore {
 
 pub trait NameStore {
     fn get_name(&self, id: NameId) -> &Name;
+    fn try_get_name(&self, id: NameId) -> Option<&Name>;
 }
 
 impl NameStore for VecMap<NameId, Name> {
     fn get_name(&self, id: NameId) -> &Name {
         &self[id]
+    }
+
+    fn try_get_name(&self, id: NameId) -> Option<&Name> {
+        self.get(id)
     }
 }

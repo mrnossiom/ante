@@ -705,6 +705,23 @@ impl Type {
             _ => None,
         }
     }
+
+    /// If this type is an effect set which is open to extension, return the row variable
+    /// representing the rest of the effect set.
+    pub fn effect_row(&self, bindings: &TypeBindings) -> Option<TypeVariableId> {
+        match self.follow(bindings) {
+            Type::Variable(id) => Some(*id),
+            Type::Effects(effects) => {
+                for effect in effects.iter() {
+                    if let Some(row) = effect.effect_row(bindings) {
+                        return Some(row);
+                    }
+                }
+                None
+            },
+            _ => None,
+        }
+    }
 }
 
 pub struct TypePrinter<'a, Db, Names> {
@@ -845,7 +862,13 @@ where
                     unreachable!()
                 }
             },
-            Origin::Local(name) => write!(f, "{}", self.names.get_name(name)),
+            Origin::Local(name) => {
+                if let Some(name) = self.names.try_get_name(name) {
+                    write!(f, "{name}")
+                } else {
+                    write!(f, "#name-not-in-context")
+                }
+            },
             Origin::TypeResolution => write!(f, "TypeResolution"),
             Origin::Builtin(builtin) => write!(f, "{builtin}"),
         }

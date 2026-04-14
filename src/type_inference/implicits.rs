@@ -95,7 +95,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     /// In the case a matching implicit value cannot be found, an error is issued and an error
     /// expression is slotted in as the argument instead.
     pub(super) fn implicit_parameter_coercion(
-        &mut self, actual: Arc<FunctionType>, expected: Arc<FunctionType>, function: ExprId, call: Option<ExprId>
+        &mut self, actual: Arc<FunctionType>, expected: Arc<FunctionType>, function: ExprId, call: Option<ExprId>,
     ) -> Option<CoercionKind> {
         // Looking for implicit parameters that are in `actual` but not `expected`.
         // The reverse would be a type error.
@@ -145,8 +145,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
 
             Some(CoercionKind::DirectCallInsertion)
         } else {
-            self.create_closure_wrapper_for_implicit(function, implicits_added, new_expected)
-                .map(CoercionKind::Wrapper)
+            self.create_closure_wrapper_for_implicit(function, implicits_added, new_expected).map(CoercionKind::Wrapper)
         }
     }
 
@@ -235,7 +234,9 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     /// inserted in order of `parameter_index` (matching the ordering of `actual.parameters`
     /// traversal in [`Self::implicit_parameter_coercion`]), later insertions see earlier ones
     /// already in place and `parameter_index` is directly the correct insertion position.
-    fn delay_find_implicit_value(&mut self, target_type: &Type, parameter_index: usize, function: ExprId, call: Option<ExprId>) -> ExprId {
+    fn delay_find_implicit_value(
+        &mut self, target_type: &Type, parameter_index: usize, function: ExprId, call: Option<ExprId>,
+    ) -> ExprId {
         let location = function.locate(self);
         let typ = target_type.clone();
         let fresh_id = self.push_expr(cst::Expr::Error, typ, location);
@@ -593,7 +594,13 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         let body = self.push_expr(body, body_type, location);
 
         // TODO: This should have the same effects as `function`
-        Some(cst::Expr::Lambda(cst::Lambda { parameters, body, return_type: None, effects: Some(Vec::new()), is_move: false }))
+        Some(cst::Expr::Lambda(cst::Lambda {
+            parameters,
+            body,
+            return_type: None,
+            effects: Some(Vec::new()),
+            is_move: false,
+        }))
     }
 
     /// Creates a new expression referring to the given implicit value.

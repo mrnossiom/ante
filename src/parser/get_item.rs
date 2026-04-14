@@ -390,7 +390,10 @@ fn desugar_call_wildcards(expr: ExprId, context: &mut DesugarContext) {
     let new_call = Expr::Call(cst::Call { function: call.function, arguments: new_arguments });
     let new_call_id = context.push_expr(new_call, location.clone());
 
-    context.set_expr(expr, Expr::Lambda(Lambda { parameters, return_type: None, effects: None, body: new_call_id, is_move: false }));
+    context.set_expr(
+        expr,
+        Expr::Lambda(Lambda { parameters, return_type: None, effects: None, body: new_call_id, is_move: false }),
+    );
 }
 
 enum ExprDesugar {

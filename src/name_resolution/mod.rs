@@ -500,6 +500,11 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
                 if let Some(return_type) = &lambda.return_type {
                     self.resolve_type(return_type, true);
                 }
+                if let Some(effects) = &lambda.effects {
+                    for effect in effects {
+                        self.resolve_effect_type(effect, true);
+                    }
+                }
                 self.resolve_expr(lambda.body);
                 self.pop_local_scope();
             },

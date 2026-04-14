@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, rc::Rc, sync::Arc};
+use std::{cell::Cell, collections::BTreeMap, rc::Rc, sync::Arc};
 
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
@@ -58,7 +58,7 @@ pub fn type_check_impl(context: &TypeCheckSCC, compiler: &DbHandle) -> TypeCheck
 
         let item = &checker.item_contexts[item_id].0;
         match &item.kind {
-            TopLevelItemKind::Definition(definition) => checker.check_definition(definition),
+            TopLevelItemKind::Definition(definition) => checker.check_definition(definition, &Type::no_effects()),
             TopLevelItemKind::TypeDefinition(type_definition) => checker.check_type_definition(type_definition),
             TopLevelItemKind::TraitDefinition(_) => unreachable!("Traits should be desugared into types by this point"),
             TopLevelItemKind::TraitImpl(_) => unreachable!("Impls should be simplified into definitions by this point"),
@@ -134,7 +134,7 @@ struct TypeChecker<'local, 'inner> {
 
     /// Type inference is the first pass where type variables are introduced.
     /// This field starts from 0 to give each a unique ID within the current inference group.
-    next_type_variable_id: u32,
+    next_type_variable_id: Cell<u32>,
 
     /// Contains the ItemContext for each item in the TypeChecker's type check group.
     /// Most often, this is just a single item. In the case of mutually recursive type
@@ -185,7 +185,6 @@ struct TypeChecker<'local, 'inner> {
     /// Names defined with `var` or as mutable parameters. Used by closure capture analysis
     /// to wrap mutable captures in a reference type so the closure shares the outer scope's storage.
     mutable_definitions: FxHashSet<NameId>,
-
 }
 
 /// Map from each TopLevelId to a tuple of (the item, parse context, resolution context)
@@ -201,7 +200,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         let mut this = Self {
             compiler,
             bindings: Default::default(),
-            next_type_variable_id: 0,
+            next_type_variable_id: Cell::new(0),
             name_types: Default::default(),
             path_types: Default::default(),
             expr_types: Default::default(),
@@ -225,14 +224,13 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         for (item_id, (item, context, resolution)) in item_contexts.iter() {
             for name in resolution.top_level_names.iter() {
                 let typ = if let TopLevelItemKind::Definition(definition) = &item.kind {
-                    get_type::try_get_partial_type(
-                        definition,
-                        context.as_ref(),
-                        resolution,
-                        compiler,
-                        &mut this.next_type_variable_id,
-                    )
-                    .unwrap_or_else(|| this.next_type_variable())
+                    let next_id = &mut this.next_type_variable_id.get();
+
+                    let typ =
+                        get_type::try_get_partial_type(definition, context.as_ref(), resolution, compiler, next_id);
+
+                    this.next_type_variable_id.set(*next_id);
+                    typ.unwrap_or_else(|| this.next_type_variable())
                 } else {
                     this.next_type_variable()
                 };
@@ -381,13 +379,13 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         }
     }
 
-    fn next_type_variable_id(&mut self) -> TypeVariableId {
-        let id = TypeVariableId(self.next_type_variable_id);
-        self.next_type_variable_id += 1;
+    fn next_type_variable_id(&self) -> TypeVariableId {
+        let id = TypeVariableId(self.next_type_variable_id.get());
+        self.next_type_variable_id.update(|id| id + 1);
         id
     }
 
-    fn next_type_variable(&mut self) -> Type {
+    fn next_type_variable(&self) -> Type {
         Type::Variable(self.next_type_variable_id())
     }
 
@@ -446,7 +444,9 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     /// insert a `(.*)` call to auto-deref, requiring `t: Copy`.
     ///
     /// Returns a [`CoercionOutcome`] describing what (if anything) was rewritten.
-    fn try_coercion(&mut self, actual: &Type, expected: &Type, expr: ExprId, call_expr: Option<ExprId>) -> CoercionOutcome {
+    fn try_coercion(
+        &mut self, actual: &Type, expected: &Type, expr: ExprId, call_expr: Option<ExprId>,
+    ) -> CoercionOutcome {
         match (self.follow_type(actual), self.follow_type(expected)) {
             (Type::Function(actual_fn), Type::Function(expected_fn))
                 if actual_fn.parameters.len() != expected_fn.parameters.len() =>
@@ -508,7 +508,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             parameters: vec![ParameterType::explicit(original_type)],
             environment: Type::NO_CLOSURE_ENV,
             return_type: element_type,
-            effects: Type::UNIT, // TODO: Effects
+            effects: Type::no_effects(),
         }));
         let func_expr = self.push_expr(cst::Expr::Variable(deref_path), function_type, location);
         cst::Expr::Call(cst::Call { function: func_expr, arguments: vec![cst::Argument::explicit(arg_id)] })
@@ -521,7 +521,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     /// Try to unify the given types, returning `Err(())` on error without pushing a Diagnostic.
     ///
     /// Returns any new bindings created on success
-    fn try_unify(&mut self, actual: &Type, expected: &Type) -> Result<TypeBindings, ()> {
+    fn try_unify(&self, actual: &Type, expected: &Type) -> Result<TypeBindings, ()> {
         let mut bindings = TypeBindings::new();
         self.try_unify_with_bindings(actual, expected, &mut bindings).map(|_| bindings)
     }
@@ -604,9 +604,87 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                     _ => Err(()),
                 }
             },
+            (Type::Effects(actual), Type::Effects(expected)) => {
+                // Allow `expected` to be potentially larger than `actual`
+                let (mut actual_effects, actual_var) = self.collect_effects_in_types(actual, new_bindings);
+                let (mut expected_effects, expected_var) = self.collect_effects_in_types(expected, new_bindings);
+
+                // 1: Every member of `actual_effects` must be within `expected_effects`
+                // Filter out each element of `actual` in `expected`
+                actual_effects.retain(|actual| {
+                    let actual = actual.follow_all(new_bindings);
+
+                    for (i, expected) in expected_effects.iter().enumerate() {
+                        let expected = expected.follow_all(new_bindings);
+
+                        if let Ok(bindings) = self.try_unify(&actual, &expected) {
+                            new_bindings.extend(bindings);
+                            // Remove the matching effect from both sets
+                            expected_effects.remove(i);
+                            return false;
+                        }
+                    }
+
+                    // Went through all of `expected` but this was not found
+                    true
+                });
+
+                // By this point `actual_effects` contains only the actual effects not in `expected_effects`
+                // and `execpected_effects` contains only the effects not in `actual_effects`.
+
+                if !actual_effects.is_empty() {
+                    if let Some(id) = expected_var {
+                        // Add a type variable to keep it extensible
+                        actual_effects.push(self.next_type_variable());
+                        new_bindings.insert(id, Type::Effects(Arc::new(actual_effects)));
+                    } else {
+                        // `actual` has effects that weren't expected
+                        return Err(());
+                    }
+                }
+
+                if let Some(id) = actual_var
+                    && !expected_effects.is_empty()
+                {
+                    // Add a type variable to keep this set extensible
+                    expected_effects.push(self.next_type_variable());
+                    new_bindings.insert(id, Type::Effects(Arc::new(expected_effects)));
+                }
+
+                Ok(())
+            },
             (actual, other) if actual == other => Ok(()),
             _ => Err(()),
         }
+    }
+
+    /// Collect all the effects in this type, returning the set of concrete effects
+    /// along with the type variable marking it open to extension, if present.
+    fn collect_effects_in_type(&self, typ: &Type, bindings: &TypeBindings) -> (Vec<Type>, Option<TypeVariableId>) {
+        match typ.follow_two(&self.bindings, bindings) {
+            Type::Variable(id) => (Vec::new(), Some(id)),
+            Type::Effects(effects) => self.collect_effects_in_types(&effects, bindings),
+            other => (vec![other], None),
+        }
+    }
+
+    /// Collect all the effects in this type, returning the set of concrete effects
+    /// along with the type variable marking it open to extension, if present.
+    fn collect_effects_in_types(&self, types: &[Type], bindings: &TypeBindings) -> (Vec<Type>, Option<TypeVariableId>) {
+        let mut collected = Vec::new();
+        let mut variable = None;
+
+        for typ in types {
+            let (found, found_variable) = self.collect_effects_in_type(typ, bindings);
+            collected.extend(found);
+
+            // TODO: How to type check sets with multiple unbound type variables?
+            if variable.is_none() {
+                variable = found_variable;
+            }
+        }
+
+        (collected, variable)
     }
 
     /// Try to bind a type variable, possibly erroring instead if the binding would lead
@@ -653,7 +731,9 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                     || args.iter().any(|arg| self.occurs(arg, variable, new_bindings))
             },
             Type::Forall(_, typ) => self.occurs(typ, variable, new_bindings),
-            Type::Tuple(elements) => elements.iter().any(|element| self.occurs(element, variable, new_bindings)),
+            Type::Tuple(elements) | Type::Effects(elements) => {
+                elements.iter().any(|element| self.occurs(element, variable, new_bindings))
+            },
         }
     }
 
@@ -665,7 +745,10 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     }
 
     fn from_cst_type(&mut self, typ: &cst::Type) -> Type {
-        Type::from_cst_type(typ, self.current_resolve(), self.compiler, &mut self.next_type_variable_id)
+        let next_id = &mut self.next_type_variable_id.get();
+        let typ = Type::from_cst_type(typ, self.current_resolve(), self.compiler, next_id);
+        self.next_type_variable_id.set(*next_id);
+        typ
     }
 
     /// Try to retrieve the types of each field of the given type.

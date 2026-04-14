@@ -101,6 +101,9 @@ where
                 let elements = mapvec(elements.iter(), |t| self.convert_type(t, None));
                 Type::Tuple(Arc::new(elements))
             },
+            TCType::Effects(_effects) => {
+                todo!("mir convert type called on Effects")
+            },
         }
     }
 

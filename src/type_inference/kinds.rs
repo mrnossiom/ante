@@ -32,6 +32,9 @@ pub enum Kind {
     /// A type-level `U32` used (for example) as an array length.
     U32,
 
+    /// An effect such as `IO`, `Throw a`, or `IO, Throw a, rest`
+    Effect,
+
     /// An error occurred while resolving the type this kind belongs to
     Error,
 }
@@ -103,7 +106,14 @@ impl Kind {
                     Ok(())
                 } else {
                     let actual = Kind::from_args(args);
-                    Err(Diagnostic::ExpectedTypeKind { actual, location })
+                    Err(Diagnostic::ExpectedKind { actual, expected: self, location })
+                }
+            },
+            Kind::Effect => {
+                if args.is_empty() {
+                    Ok(())
+                } else {
+                    Err(Diagnostic::ExpectedKind { actual: Kind::from_args(args), expected: self, location })
                 }
             },
             Kind::Error => Ok(()),
@@ -167,6 +177,7 @@ impl Kind {
             Kind::TypeConstructorComplex(kinds) => kinds.len(),
             Kind::TraitConstructor(kinds) => kinds.len(),
             Kind::U32 => 0,
+            Kind::Effect => 0,
             Kind::Error => 0,
         }
     }
@@ -179,6 +190,7 @@ impl Kind {
             Kind::TypeConstructorComplex(kinds) => n == kinds.len(),
             Kind::TraitConstructor(kinds) => n == kinds.len() || n == kinds.len() + 1,
             Kind::U32 => n == 0,
+            Kind::Effect => n == 0,
             Kind::Error => true,
         }
     }
@@ -198,6 +210,7 @@ impl Kind {
                 if n == kinds.len() { Kind::Type } else { kinds[n].clone() }
             },
             Kind::U32 => panic!("Kind::U32 has no parameters"),
+            Kind::Effect => panic!("Kind::Effect has no parameters"),
             Kind::Error => Kind::Error, // Try to avoid further errors
         }
     }
@@ -212,6 +225,7 @@ impl std::fmt::Display for Kind {
             Kind::TraitConstructor(args) => !args.is_empty(),
             Kind::U32 => false,
             Kind::Error => false,
+            Kind::Effect => false,
         };
 
         match self {
@@ -233,6 +247,7 @@ impl std::fmt::Display for Kind {
                 write!(f, "*")
             },
             Kind::U32 => write!(f, "U32"),
+            Kind::Effect => write!(f, "effect"),
             Kind::Error => write!(f, "<Error>"),
         }
     }

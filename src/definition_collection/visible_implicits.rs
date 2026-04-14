@@ -66,9 +66,10 @@ struct ImplicitImpls {
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 enum TypeKey {
     Primitive(PrimitiveType),
+    UserDefined(Origin),
     Function,
     Tuple,
-    UserDefined(Origin),
+    Effects,
 }
 
 impl TypeKey {
@@ -85,6 +86,7 @@ impl TypeKey {
             // TODO: Is this correct?
             Type::Forall(_, typ) => return TypeKey::from_type(typ),
             Type::Tuple(_) => TypeKey::Tuple,
+            Type::Effects(_) => TypeKey::Effects,
         })
     }
 }

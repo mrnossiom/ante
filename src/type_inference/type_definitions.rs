@@ -108,7 +108,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 parameters,
                 environment: Type::NO_CLOSURE_ENV,
                 return_type: result,
-                effects: Type::UNIT,
+                effects: Type::no_effects(),
             }));
         }
 

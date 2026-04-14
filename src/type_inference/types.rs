@@ -47,6 +47,17 @@ pub enum Type {
     /// could use this type instead, using a UserDefinedType for them lets us reuse the existing
     /// mechanisms to automatically define their constructor and retrieve their fields.
     Tuple(Arc<Vec<Type>>),
+
+    /// Zero or more effects.
+    ///   pure = an empty Vec
+    ///   IO, Throw a = vec![IO, Throw a]
+    ///
+    /// Unlike a `Type::Tuple`, an effect set is flat and can be made extensible by adding a type variable.
+    /// Thus `Effects([A, Effects(vec![B])])` is equal to `Effects([A, B])`
+    ///
+    /// Effect sets containing only a single type variable and no concrete
+    /// effects should just be represented as a Type::Variable variant directly instead.
+    Effects(Arc<Vec<Type>>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -157,6 +168,13 @@ impl Type {
 
     pub fn reference(kind: ReferenceKind) -> Type {
         Type::Primitive(PrimitiveType::Reference(kind))
+    }
+
+    /// An empty effect set (non-extensible)
+    ///
+    /// For an empty but extensible effect set, just use a regular type variable
+    pub fn no_effects() -> Type {
+        Type::Effects(Arc::new(Vec::new()))
     }
 
     /// Convert this type to a string (without any coloring)
@@ -273,6 +291,9 @@ impl Type {
             Type::Tuple(elements) => {
                 Type::Tuple(Arc::new(mapvec(elements.iter(), |t| t.follow_all_two(bindings, more_bindings))))
             },
+            Type::Effects(effects) => {
+                Type::Effects(Arc::new(mapvec(effects.iter(), |t| t.follow_all_two(bindings, more_bindings))))
+            },
         }
     }
 
@@ -322,6 +343,9 @@ impl Type {
                 typ.substitute(&bindings, bindings_in_scope)
             },
             Type::Tuple(elements) => Type::Tuple(Arc::new(mapvec(elements.iter(), |t| {
+                t.substitute(bindings_to_substitute, bindings_in_scope)
+            }))),
+            Type::Effects(effects) => Type::Effects(Arc::new(mapvec(effects.iter(), |t| {
                 t.substitute(bindings_to_substitute, bindings_in_scope)
             }))),
         }
@@ -457,8 +481,18 @@ impl Type {
                     Type::NO_CLOSURE_ENV
                 };
                 let return_type = Self::from_cst_type(&function.return_type, resolve, db, next_id);
-                // TODO: Effects
-                let effects = Type::UNIT;
+
+                let effects = match &function.effects {
+                    Some(effects) => Type::Effects(Arc::new(mapvec(effects, |effect| {
+                        Self::from_cst_effect(effect, &typ.location, resolve, db, next_id)
+                    }))),
+                    None => {
+                        let any = Type::Variable(TypeVariableId(*next_id));
+                        *next_id += 1;
+                        any
+                    },
+                };
+
                 let f = Type::Function(Arc::new(FunctionType { parameters, environment, return_type, effects }));
                 (f, Kind::Type)
             },
@@ -506,6 +540,25 @@ impl Type {
                 *next_id += 1;
                 (typ, Kind::Type)
             },
+        }
+    }
+
+    /// Converts a [cst::EffectType] into a [Type::Effects] holding the relevant set of effects.
+    /// An empty set of effects corresponds to the `pure` keyword.
+    fn from_cst_effect(
+        effect: &cst::EffectType, location: &Location, resolve: &crate::name_resolution::ResolutionResult,
+        db: &DbHandle, next_id: &mut u32,
+    ) -> Type {
+        match effect {
+            cst::EffectType::Known(path, arguments) => {
+                let constructor = cst::Type::new(cst::TypeKind::Named(*path), location.clone());
+                let application = cst::Type::new(
+                    cst::TypeKind::Application(Box::new(constructor), arguments.clone()),
+                    location.clone(),
+                );
+                Self::from_cst_type_with_kind(&application, Kind::Effect, resolve, db, next_id)
+            },
+            cst::EffectType::Variable(name) => Type::Generic(Generic::Named(Origin::Local(*name))),
         }
     }
 
@@ -593,6 +646,11 @@ impl Type {
                 },
                 Type::Tuple(elements) => {
                     for element in elements.iter() {
+                        free_vars_helper(element, bindings, free_vars);
+                    }
+                },
+                Type::Effects(effects) => {
+                    for element in effects.iter() {
                         free_vars_helper(element, bindings, free_vars);
                     }
                 },
@@ -707,7 +765,7 @@ where
                 self.fmt_type(&function.return_type, false, f)?;
 
                 let effects = function.effects.follow(self.bindings);
-                if matches!(effects, &Type::Primitive(PrimitiveType::Unit)) {
+                if effects == &Type::no_effects() {
                     write!(f, " pure")
                 } else {
                     write!(f, " can ")?;
@@ -754,7 +812,7 @@ where
                 write!(f, ". ")?;
                 self.fmt_type(typ, parenthesize, f)
             }),
-            Type::Tuple(elements) => try_parenthesize(parenthesize, f, |f| {
+            Type::Tuple(elements) | Type::Effects(elements) => try_parenthesize(parenthesize, f, |f| {
                 for (i, element) in elements.iter().enumerate() {
                     if i != 0 {
                         write!(f, ", ")?;

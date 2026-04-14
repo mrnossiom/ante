@@ -21,8 +21,7 @@ impl TypeChecker<'_, '_> {
     /// environment type found but will not actually perform closure conversion. Closure conversion
     /// is instead done while building the initial [crate::mir::Mir].
     pub(super) fn check_for_closure(
-        &mut self, id: ExprId, expected_environment_type: &Type, self_name: Option<NameId>,
-        is_move: bool,
+        &mut self, id: ExprId, expected_environment_type: &Type, self_name: Option<NameId>, is_move: bool,
     ) {
         let mut context = FreeVars::default();
         if let Some(name) = self_name {

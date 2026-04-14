@@ -7,7 +7,8 @@ use crate::{
     incremental::{AllDefinitions, CheckAll, Db, DbHandle, GetCrateGraph, Parse, SourceFile, TypeCheck},
     iterator_extensions::mapvec,
     lexer::{
-        token::{lookup_keyword, IntegerKind, Token}, Lexer
+        Lexer,
+        token::{IntegerKind, Token, lookup_keyword},
     },
     name_resolution::namespace::CrateId,
     parser::cst::Name,

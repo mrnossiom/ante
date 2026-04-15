@@ -38,23 +38,23 @@ implicit_call () =
 // 
 // (requires_bool: fn {Bool} Unit -> Unit pure) {(b: Bool)} () : Unit = ()
 // 
-// (zero_matching: fn Unit -> Unit can _) () =
+// (zero_matching: fn Unit -> Unit pure) () =
 //     (requires_string: fn {String} Unit -> Unit pure) {(error)} ()
 // 
-// (one_matching: fn Unit -> Unit can _) () =
+// (one_matching: fn Unit -> Unit pure) () =
 //     implicit (hello: String) = "hello"
 //     (requires_string: fn {String} Unit -> Unit pure) {(hello: String)} ()
 // 
-// (multiple_matching: fn Unit -> Unit can _) () =
+// (multiple_matching: fn Unit -> Unit pure) () =
 //     implicit (empty: String) = ""
 //     implicit (spaces: String) = "  "
 //     implicit (greeting: String) = "hi!"
 //     (requires_string: fn {String} Unit -> Unit pure) {(error)} ()
 // 
-// (one_matching_global: fn Unit -> Unit can _) () =
+// (one_matching_global: fn Unit -> Unit pure) () =
 //     (requires_bool: fn {Bool} Unit -> Unit pure) {(false_: Bool)} ()
 // 
-// (multiple_matching_with_global: fn Unit -> Unit can _) () =
+// (multiple_matching_with_global: fn Unit -> Unit pure) () =
 //     implicit (zero: U32) = 0_U32
 //     (requires_u32: fn {U32} Unit -> Unit pure) {(error)} ()
 // 
@@ -62,9 +62,9 @@ implicit_call () =
 // 
 // implicit (one: U32) = 1_U32
 // 
-// (implicit_call: fn Unit -> Unit can _) () =
-//     implicit (make_string: fn {Bool} -> String can _) {(_: Bool)} = ""
-//     (requires_string: fn {String} Unit -> Unit pure) {(make_string: fn {Bool} -> String can _) {(false_: Bool)}} ()
+// (implicit_call: fn Unit -> Unit pure) () =
+//     implicit (make_string: fn {Bool} -> String pure) {(_: Bool)} = ""
+//     (requires_string: fn {String} Unit -> Unit pure) {(make_string: fn {Bool} -> String pure) {(false_: Bool)}} ()
 
 // expected stderr:
 // examples/typechecking/implicit.an:6:5

@@ -19,11 +19,11 @@ handle_count foo
 // effect Count with
 //     (count: (error)): fn Unit -> Unit
 // 
-// (foo: fn Unit -> Unit can _) () =
+// (foo: fn Unit -> Unit pure) () =
 //     (count: (error)) ()
 //     (repeat: fn Usz (fn Usz -> Unit pure) -> Unit pure) 10 (fn (_: Usz) -> (count: (error)) ())
 // 
-// (handle_count: fn _ -> _ can _) (f: _) =
+// (handle_count: fn _ -> _ pure) (f: _) =
 //     handle 
 //         (f: (error)) ()
 //         0

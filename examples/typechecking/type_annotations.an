@@ -30,11 +30,11 @@ main () =
 // (baz: fn Usz -> Ptr a pure) ((a: Usz)) : Ptr a =
 //     (transmute: fn Usz -> Ptr a pure) (a: Usz)
 // 
-// (main: fn Unit -> fn String -> I32 pure can _) () =
+// (main: fn Unit -> fn String -> I32 can _ pure) () =
 //     (exit2: fn I32 -> Unit pure) = (exit: fn I32 -> Unit pure)
-//     (puts2: fn String -> I32 pure) = (puts: fn String -> I32 pure)
+//     (puts2: fn String -> I32 can _) = (puts: fn String -> I32 can _)
 //     (exit2: fn I32 -> Unit pure) "test"
-//     (puts2: fn String -> I32 pure)
+//     (puts2: fn String -> I32 can _)
 
 // expected stderr:
 // examples/typechecking/type_annotations.an:7:15

@@ -31,16 +31,16 @@ does_use x =
 //     (get: (error)): fn Unit -> a
 //     (set: (error)): fn a -> Unit
 // 
-// (handle_basic: fn Unit -> _ can _) () =
+// (handle_basic: fn Unit -> _ pure) () =
 //     handle (log: (error)) "test1"
 //     | (log: (error)) (v: (error)) -> (set: (error)) (v: (error))
 // 
-// (use_resume: fn Unit -> _ can _) () =
+// (use_resume: fn Unit -> _ pure) () =
 //     handle ()
 //     | (get: (error)) () -> (resume: (error)) 3_I32
 //     | (set: (error)) (_: (error)) -> (resume: (error)) ()
 // 
-// (does_use: fn _ -> _ can _) (x: _) =
+// (does_use: fn _ -> _ pure) (x: _) =
 //     (y: _) = (get: (error)) ()
 //     (set: (error)) ((+: fn _ _ {Add _} -> _ pure) (y: _) (x: _) {(error)})
 

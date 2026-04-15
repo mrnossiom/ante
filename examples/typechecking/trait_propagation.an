@@ -18,7 +18,7 @@ foo () = baz bar
 // type Baz a [env] =
 //     baz: fn a [[env]] -> Unit
 // 
-// (foo: fn Unit -> _ can _) () = (baz: (error)) (bar: _)
+// (foo: fn Unit -> _ pure) () = (baz: (error)) (bar: _)
 
 // expected stderr:
 // examples/typechecking/trait_propagation.an:6:10

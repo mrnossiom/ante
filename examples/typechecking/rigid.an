@@ -15,7 +15,7 @@ main () = ()
 // (ex2: fn a -> b pure) =
 //     fn (x: a) -> (x: a)
 // 
-// (main: fn Unit -> Unit can _) () = ()
+// (main: fn Unit -> Unit pure) () = ()
 
 // expected stderr:
 // examples/typechecking/rigid.an:2:17

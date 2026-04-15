@@ -31,12 +31,12 @@ ex2c (a: v) b =
 // args: -e ast-t --no-color
 // expected exit status: 1
 // expected stdout:
-// (ex1a: fn t _ -> U32 can _) ((a: t)) (b: _) =
-//     (ex1b: fn t _ -> U32 can _) (a: t) (b: _)
+// (ex1a: fn t _ -> U32 pure) ((a: t)) (b: _) =
+//     (ex1b: fn t _ -> U32 pure) (a: t) (b: _)
 //     0_U32
 // 
-// (ex1b: fn u _ -> U32 can _) ((a: u)) (b: _) =
-//     (ex1a: fn u _ -> U32 can _) (a: u) (b: _)
+// (ex1b: fn u _ -> U32 pure) ((a: u)) (b: _) =
+//     (ex1a: fn u _ -> U32 pure) (a: u) (b: _)
 //     1_U32
 // 
 // type T1 a [env] =
@@ -45,16 +45,16 @@ ex2c (a: v) b =
 // type T2 a [env] =
 //     trait2: fn a [[env]] -> Unit
 // 
-// (ex2a: fn t (error) -> _ can _) ((a: (error))) (b: (error)) {(_: (error))} =
-//     (ex2b: fn t (error) {Copy t} -> _ can _) (a: (error)) (b: (error)) {(error)}
+// (ex2a: fn t (error) -> _ pure) ((a: (error))) (b: (error)) {(_: (error))} =
+//     (ex2b: fn t (error) {Copy t} -> _ pure) (a: (error)) (b: (error)) {(error)}
 //     (trait1: (error)) (a: (error))
 // 
-// (ex2b: fn u (error) {Copy u} -> _ can _) ((a: u)) (b: (error)) {(_: Copy u)} =
-//     (ex2c: fn u (error) -> _ can _) (a: u) (b: (error))
+// (ex2b: fn u (error) {Copy u} -> _ pure) ((a: u)) (b: (error)) {(_: Copy u)} =
+//     (ex2c: fn u (error) -> _ pure) (a: u) (b: (error))
 //     (trait2: (error)) (a: u)
 // 
-// (ex2c: fn v (error) -> _ can _) ((a: v)) (b: (error)) =
-//     (ex2a: fn v (error) -> _ can _) (a: v) (b: (error))
+// (ex2c: fn v (error) -> _ pure) ((a: v)) (b: (error)) =
+//     (ex2a: fn v (error) -> _ pure) (a: v) (b: (error))
 
 // expected stderr:
 // examples/typechecking/mutual_recursion_rigid.an:20:1

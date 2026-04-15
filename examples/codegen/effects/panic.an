@@ -19,11 +19,29 @@ main () = ()
 
 // expected exit status: 1
 // expected stderr:
+// examples/codegen/effects/panic.an:7:18
+//   | // error: Expected 0 arguments but found 1
+// 7 | read_or_none (f: fn Unit -> Unit can Read a, Fail): Maybe a =
+// 8 |     /*test*/handle Some (f ())
+// 
+// examples/codegen/effects/panic.an:7:18
+//   | // error: Expected a type constructor of kind effect, but found one of kind *
+// 7 | read_or_none (f: fn Unit -> Unit can Read a, Fail): Maybe a =
+// 8 |     /*test*/handle Some (f ())
+// 
+// examples/codegen/effects/panic.an:7:18
+// 7 | read_or_none (f: fn Unit -> Unit can Read a, Fail): Maybe a =	// error: Fail is not a type
+// 8 |     /*test*/handle Some (f ())
+// 
+// examples/codegen/effects/panic.an:7:18
+// 7 | read_or_none (f: fn Unit -> Unit can Read a, Fail): Maybe a =	// error: Read is not a type
+// 8 |     /*test*/handle Some (f ())
+// 
 // examples/codegen/effects/panic.an:8:13
 //  7 | read_or_none (f: fn Unit -> Unit can Read a, Fail): Maybe a =
 //    |     // error: Effects and handle expressions are currently unimplemented
 //  8 |     /*test*/handle Some (f ())
 //  9 |     | fail () -> None
 // 
-// Found 1 error and 0 warnings
+// Found 5 errors and 0 warnings
 

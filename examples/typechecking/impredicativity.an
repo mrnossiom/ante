@@ -31,32 +31,32 @@ a7 = choose id auto
 // args: -e ast-t --no-color
 // expected exit status: 1
 // expected stdout:
-// (id: fn _ -> _ can _) (x: _) = (x: _)
+// (id: fn _ -> _ pure) (x: _) = (x: _)
 // 
 // (ids: _) = (error)
 // 
-// (auto: fn (error) -> _ can _) ((x: (error))) = (x: (error)) (error)
+// (auto: fn (error) -> _ pure) ((x: (error))) = (x: (error)) (error)
 // 
-// (auto_prime: fn (error) -> _ can _) ((x: (error))) = (x: (error)) (x: (error))
+// (auto_prime: fn (error) -> _ pure) ((x: (error))) = (x: (error)) (x: (error))
 // 
-// (f5: _) = (auto: fn (error) -> _ can _) (error)
+// (f5: _) = (auto: fn (error) -> _ pure) (error)
 // 
-// (poly: fn (error) -> _, _ can _) ((f: (error))) =
+// (poly: fn (error) -> _, _ pure) ((f: (error))) =
 //     (f: (error)) 42 (,: fn _ _ -> _, _ pure) (f: (error)) true
 // 
 // (f9: _) =
-//     (f: fn (fn (error) -> _, _ can _) [_] -> _ can _) = (revapp: (error)) (error)
-//     (f: fn (fn (error) -> _, _ can _) [_] -> _ can _) (poly: fn (error) -> _, _ can _)
+//     (f: fn (fn (error) -> _, _ pure) [_] -> _ pure) = (revapp: (error)) (error)
+//     (f: fn (fn (error) -> _, _ pure) [_] -> _ pure) (poly: fn (error) -> _, _ pure)
 // 
-// (choose: fn a a -> a can _) ((x: a)) ((y: a)) = (x: a)
+// (choose: fn a a -> a pure) ((x: a)) ((y: a)) = (x: a)
 // 
-// (a5: fn (error) -> _ can _) = (id: fn (fn (error) -> _ can _) -> fn (error) -> _ can _ can _) (auto: fn (error) -> _ can _)
+// (a5: fn (error) -> _ pure) = (id: fn (fn (error) -> _ pure) -> fn (error) -> _ pure pure) (auto: fn (error) -> _ pure)
 // 
-// (a6: fn (error) -> _ can _) = (id: fn (fn (error) -> _ can _) -> fn (error) -> _ can _ can _) (auto_prime: fn (error) -> _ can _)
+// (a6: fn (error) -> _ pure) = (id: fn (fn (error) -> _ pure) -> fn (error) -> _ pure pure) (auto_prime: fn (error) -> _ pure)
 // 
-// (a6_: _) = (id: fn _ -> _ can _) (error)
+// (a6_: _) = (id: fn _ -> _ pure) (error)
 // 
-// (a7: fn (error) -> (error) can _) = (choose: fn (fn (error) -> (error) can _) (fn (error) -> (error) can _) -> fn (error) -> (error) can _ can _) (id: fn (error) -> (error) can _) (auto: fn (error) -> (error) can _)
+// (a7: fn (error) -> (error) pure) = (choose: fn (fn (error) -> (error) pure) (fn (error) -> (error) pure) -> fn (error) -> (error) pure pure) (id: fn (error) -> (error) pure) (auto: fn (error) -> (error) pure)
 
 // expected stderr:
 // examples/typechecking/impredicativity.an:4:7

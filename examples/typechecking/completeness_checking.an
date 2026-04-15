@@ -29,7 +29,7 @@ main () =
 // args: -e ast-t --no-color
 // expected exit status: 1
 // expected stdout:
-// (main: fn Unit -> I32 can _) () =
+// (main: fn Unit -> I32 pure) () =
 //     (match_var27: (error)) = (Maybe.None: Maybe _)
 //     switch (match_var27: Maybe _)
 //     | 0 -> 1

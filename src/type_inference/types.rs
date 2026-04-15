@@ -728,6 +728,33 @@ impl Type {
         }
     }
 
+    /// `true` if this type is the `Pointer` primitive constructor.
+    fn pointer_constructor(&self, bindings: &TypeBindings) -> bool {
+        matches!(self.follow(bindings), Type::Primitive(PrimitiveType::Pointer))
+    }
+
+    /// If this is `Ptr t`, return its element type `t`.
+    pub fn pointer_element(&self, bindings: &TypeBindings) -> Option<Type> {
+        match self.follow(bindings) {
+            Type::Application(constructor, args) if !args.is_empty() && constructor.pointer_constructor(bindings) => {
+                Some(args[0].clone())
+            },
+            _ => None,
+        }
+    }
+
+    pub fn reference_or_pointer_element<'a>(&'a self, bindings: &'a TypeBindings) -> Option<&'a Type> {
+        match self.follow(bindings) {
+            Type::Application(constructor, args)
+                if constructor.pointer_constructor(bindings)
+                    || constructor.reference_constructor(bindings).is_some() =>
+            {
+                args.get(0)
+            },
+            _ => None,
+        }
+    }
+
     /// If this type is an effect set which is open to extension, return the row variable
     /// representing the rest of the effect set.
     pub fn effect_row(&self, bindings: &TypeBindings) -> Option<TypeVariableId> {

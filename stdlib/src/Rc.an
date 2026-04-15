@@ -9,8 +9,7 @@ type Rc t =
 
 Rc.of (value: t): Rc t =
     size = size_of (MkType: Type (U32, t))
-    ptr: Ptr (U32, t) = malloc size
-    Rc ptr
+    Rc (malloc size)
 
 /// Returns a shared reference into the inner element. Since other Rc clones of
 /// the same value may exist and may mutate the element via [Rc.as_mut], this

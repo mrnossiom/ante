@@ -415,23 +415,15 @@ where
 
     fn member_access(&mut self, member_access: &cst::MemberAccess, expr: ExprId) -> Value {
         let index = self.context().member_access_index(expr).unwrap_or(u32::MAX);
-        // If the object has a reference type (e.g. `p: mut Point`), the MIR value is a pointer.
+
+        // If the object has a reference or pointer type (e.g. `p: mut Point`), the MIR value is a pointer.
         // Use GetFieldPtr to produce a pointer to the field (MIR rep of e.g. `mut I32`).
         let object_expr = member_access.object;
-        let inner_struct_type: Option<Type> = {
-            let object_tc = self.types.result.maps.expr_types[&object_expr].follow(&self.types.bindings);
-            if let TCType::Application(constructor, args) = object_tc
-                && matches!(
-                    constructor.as_ref().follow(&self.types.bindings),
-                    TCType::Primitive(type_inference::types::PrimitiveType::Reference(_))
-                )
-            {
-                Some(self.convert_type(&args[0], None))
-            } else {
-                None
-            }
-        };
-        if let Some(struct_type) = inner_struct_type {
+        let object_type = self.types.result.maps.expr_types[&object_expr].follow(&self.types.bindings);
+        let reference_element =
+            object_type.reference_or_pointer_element(&self.types.bindings).map(|typ| self.convert_type(typ, None));
+
+        if let Some(struct_type) = reference_element {
             let struct_ptr = self.expression(object_expr);
             self.push_instruction(Instruction::GetFieldPtr { struct_ptr, struct_type, index }, Type::POINTER)
         } else {
@@ -899,12 +891,9 @@ where
 
                 // If the object has a reference type, use the inner type for GEP.
                 let struct_type = self.types.result.maps.expr_types[&object_expr].follow(&self.types.bindings);
-                let struct_type = if let TCType::Application(constructor, args) = struct_type
-                    && matches!(
-                        constructor.as_ref().follow(&self.types.bindings),
-                        TCType::Primitive(type_inference::types::PrimitiveType::Reference(_))
-                    ) {
-                    self.convert_type(&args[0], None)
+                let struct_type = if let Some(element) = struct_type.reference_or_pointer_element(&self.types.bindings)
+                {
+                    self.convert_type(element, None)
                 } else {
                     self.convert_type(struct_type, None)
                 };

@@ -107,7 +107,7 @@ HashMap.get_entry (map: ref HashMap k v) (key: k) {Hash k} {Eq k} : Maybe (Ptr (
 
 HashMap.get (map: ref HashMap k v) (key: k) {Hash k} {Eq k} : Maybe v =
     match map.get_entry key
-    | Some entry -> Some (deref_ptr entry).value
+    | Some entry -> Some (deref_ptr entry.value)
     | None -> None
 
 HashMap.remove (map: mut HashMap k v) (key: k) {Hash k} {Eq k} : Maybe v =

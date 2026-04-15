@@ -500,9 +500,9 @@ trait Extract collection index elem with
 
 (.[) = Extract.(.[)
 
+// TODO: Remove. This breaks ownership
 impl extract_ptr_usz: Extract (Ptr t) Usz t with
     (.[) ptr index = deref_ptr <| offset ptr index
-
 
 // Bitwise functions
 // TODO: Move these to separate module

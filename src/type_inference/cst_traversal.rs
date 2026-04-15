@@ -602,15 +602,16 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             let field_index = *field_index;
             self.current_extended_context_mut().push_member_access_index(expr, field_index);
 
-            // If the struct is a reference, field types are wrapped in the same reference.
-            // Auto-deref the field unless the expected type is known to be a reference.
+            // If the struct is a reference or pointer, field types are wrapped in the same reference/pointer.
+            //
+            // If it is a reference (and not a pointer), auto-deref the field unless the expected type is known to be a reference.
             let struct_is_ref = struct_type.reference_element(&self.bindings).is_some();
-            let expected_is_ref = expected.reference_element(&self.bindings).is_some();
+            let struct_is_indirect = struct_is_ref || struct_type.pointer_element(&self.bindings).is_some();
 
             // Track partial moves only when:
-            // - The struct is NOT behind a reference (accessing through a ref doesn't move)
+            // - The struct is NOT behind a reference or pointer (accessing through one doesn't move)
             // - We're not ourselves an intermediate object of a deeper member access chain
-            if !struct_is_ref && !old_suppress {
+            if !struct_is_indirect && !old_suppress {
                 if let Some(parent_path) = self.try_build_move_path(member_access.object) {
                     let move_path = super::affine::MovePath::Field(Box::new(parent_path), member_access.member.clone());
                     self.check_use_of_move_path(&move_path, expr);
@@ -620,6 +621,8 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                     }
                 }
             }
+
+            let expected_is_ref = expected.reference_element(&self.bindings).is_some();
 
             if struct_is_ref && !expected_is_ref {
                 if let Some((_, inner_field_type)) = field.reference_element(&self.bindings) {

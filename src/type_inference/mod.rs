@@ -768,16 +768,20 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 // TODO: Error if `generic_args` is non-empty
                 let constructor = constructor.clone();
                 let arguments = arguments.clone();
-                // If the constructor is a reference kind (mut, ref, imm, uniq), look up the
-                // fields of the inner type and wrap each field type in the same reference.
-                if matches!(self.follow_type(&constructor), Type::Primitive(PrimitiveType::Reference(_))) {
+                // If the constructor is a reference kind (mut, ref, imm, uniq) or `Ptr`,
+                // look up the fields of the inner type and wrap each field type in the
+                // same constructor (so the field is accessible as an offset).
+                if matches!(
+                    self.follow_type(&constructor),
+                    Type::Primitive(PrimitiveType::Reference(_)) | Type::Primitive(PrimitiveType::Pointer),
+                ) {
                     let inner = arguments[0].clone();
                     let inner_fields = self.get_field_types(&inner, None);
                     return inner_fields
                         .into_iter()
                         .map(|(name, (field_type, index))| {
-                            let ref_field = Type::Application(constructor.clone(), Arc::new(vec![field_type]));
-                            (name, (ref_field, index))
+                            let wrapped = Type::Application(constructor.clone(), Arc::new(vec![field_type]));
+                            (name, (wrapped, index))
                         })
                         .collect();
                 }

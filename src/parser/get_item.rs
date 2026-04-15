@@ -411,6 +411,11 @@ enum ExprDesugar {
         is_or: bool,
     },
 
+    /// `a with b` desugars to `b (fn () -> a)`
+    TildeArrow {
+        call: ExprId,
+    },
+
     /// `U8 x` desugars to `cast x : U8`
     TypeCast {
         call: ExprId,
@@ -448,6 +453,7 @@ fn classify_call(call: &cst::Call, expr: ExprId, context: &DesugarContext) -> Op
         "<|" => Some(ExprDesugar::Pipe { call: expr, pipe_right: false }),
         "or" => Some(ExprDesugar::LogicalOperator { call: expr, is_or: true }),
         "and" => Some(ExprDesugar::LogicalOperator { call: expr, is_or: false }),
+        "~>" => Some(ExprDesugar::TildeArrow { call: expr }),
         _ => None,
     }
 }
@@ -480,6 +486,7 @@ impl ExprDesugar {
             ExprDesugar::CallWildcards(expr) => desugar_call_wildcards(expr, context),
             ExprDesugar::Pipe { call, pipe_right } => desugar_pipeline(call, context, pipe_right),
             ExprDesugar::LogicalOperator { call, is_or } => desugar_logical_operators(call, context, is_or),
+            ExprDesugar::TildeArrow { call } => desugar_tilde_arrow(call, context),
             ExprDesugar::TypeCast { call, target_type } => desugar_type_cast(call, target_type, context),
             ExprDesugar::Loop(expr) => desugar_loop(expr, context),
         }
@@ -554,4 +561,36 @@ fn desugar_logical_operators(expr: ExprId, context: &mut DesugarContext, is_or: 
             Expr::If(If { condition: a, then: b, else_: Some(boolean) })
         },
     );
+}
+
+/// Desugars `a ~> b` into `b (fn () -> a)`
+///
+/// If `b` is itself a call, `a` is prepended to its arguments directly:
+/// `a ~> b c d` desugars to `b (fn () -> a) c d`
+fn desugar_tilde_arrow(expr: ExprId, context: &mut DesugarContext) {
+    let Expr::Call(call) = &context[expr] else { unreachable!() };
+
+    let a = call.arguments[0].expr;
+    let b = call.arguments[1].expr;
+    let location = context.expr_location(expr).clone();
+
+    let pattern = context.push_pattern(cst::Pattern::Literal(Literal::Unit), location.clone());
+    let lambda = Expr::Lambda(cst::Lambda {
+        parameters: vec![cst::Parameter { is_implicit: false, is_mutable: false, pattern }],
+        return_type: None,
+        effects: None,
+        body: a,
+        is_move: false,
+    });
+    let lambda = context.push_expr(lambda, location);
+
+    let new_call = if let Expr::Call(inner_call) = &context[b] {
+        // Prepend value as the first argument: foo b c => foo(value, b, c)
+        let new_args = std::iter::once(Argument::explicit(a)).chain(inner_call.arguments.iter().copied()).collect();
+        cst::Call { function: inner_call.function, arguments: new_args }
+    } else {
+        // Create a new call
+        cst::Call { function: b, arguments: vec![Argument::explicit(lambda)] }
+    };
+    context.set_expr(expr, Expr::Call(new_call));
 }

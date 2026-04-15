@@ -9,27 +9,21 @@ use_state (y: I32) =
     print "Ending state = ${state}"
     state
 
-state (f: Unit -> a can Use s) (initial: s): a =
-    mut state0 = initial
-    mut state = !state0
+state (f: fn Unit -> a can Use s) (initial: s) {Copy s}: a =
+    var state = initial
     handle f ()
-    | get () -> resume @state
+    | get () -> resume state
     | set new_state ->
-        // Set is inferred incorrectly without this type hint
-        state := new_state : s
+        state := new_state
         resume ()
 
-use_state 10_i32 with state 1
-use_state 20_u64 with state 2
+main () =
+    use_state 10_i32 ~> state 1
+    use_state 20_u64 ~> state 2
 
 // args: --delete-binary --no-color
 // expected exit status: 1
 // expected stderr:
-// examples/codegen/effects/state.an:1:1
-// 1 | effect Use a with	// error: This program has no `main` function
-//   | 
-// 2 |     get: Unit -> a
-// 
 // examples/codegen/effects/state.an:2:15
 // 1 | effect Use a with
 // 2 |     get: Unit -> a	// error: Expected the end of this block but found `->`
@@ -60,23 +54,41 @@ use_state 20_u64 with state 2
 //    |                           ^^
 // 10 |     state
 // 
-// examples/codegen/effects/state.an:12:7
-//    | // error: Expected `=` to begin the function body but found `(`
-// 12 | state (f: Unit -> a can Use s) (initial: s): a =
-//    |       ^
-// 13 |     mut state0 = initial
+// examples/codegen/effects/state.an:12:11
+//    | // error: Expected 0 arguments but found 1
+// 12 | state (f: fn Unit -> a can Use s) (initial: s) {Copy s}: a =
+//    |           ^^^^^^^^^^^^^^^^^^^^^^
+// 13 |     var state = initial
 // 
-// examples/codegen/effects/state.an:22:11
-//    | // error: Expected `=` to begin the function body but found `10_I32`
-// 22 | use_state 10_i32 with state 1
-//    |           ^^^
-// 23 | use_state 20_u64 with state 2
+// examples/codegen/effects/state.an:12:11
+//    | // error: Expected a type constructor of kind effect, but found one of kind *
+// 12 | state (f: fn Unit -> a can Use s) (initial: s) {Copy s}: a =
+//    |           ^^^^^^^^^^^^^^^^^^^^^^
+// 13 |     var state = initial
 // 
-// examples/codegen/effects/state.an:23:11
-// 22 | use_state 10_i32 with state 1
-//    | // error: Expected `=` to begin the function body but found `20_U64`
-// 23 | use_state 20_u64 with state 2
-//    |           ^^^
+// examples/codegen/effects/state.an:12:11
+// 12 | state (f: fn Unit -> a can Use s) (initial: s) {Copy s}: a =	// error: Use is not a type
+//    |           ^^^^^^^^^^^^^^^^^^^^^^
+// 13 |     var state = initial
 // 
-// Found 9 errors and 0 warnings
+// examples/codegen/effects/state.an:14:5
+// 13 |     var state = initial
+// 14 |     handle f ()	// error: Effects and handle expressions are currently unimplemented
+//    |     ^^^^^^^^^^^
+// 15 |     | get () -> resume state
+// 
+// examples/codegen/effects/state.an:21:5
+// 20 | main () =
+//    |     // error: Expected fn _ [_] -> fn Unit -> _ can (error) can _ but found fn I32 -> Unit pure
+// 21 |     use_state 10_i32 ~> state 1
+//    |     ^^^^^^^^^
+// 22 |     use_state 20_u64 ~> state 2
+// 
+// examples/codegen/effects/state.an:22:5
+// 21 |     use_state 10_i32 ~> state 1
+//    |     // error: Expected fn _ [_] -> fn Unit -> _ can (error) can _ but found fn I32 -> Unit pure
+// 22 |     use_state 20_u64 ~> state 2
+//    |     ^^^^^^^^^
+// 
+// Found 11 errors and 0 warnings
 

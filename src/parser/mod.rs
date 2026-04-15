@@ -1348,7 +1348,7 @@ impl<'tokens> Parser<'tokens> {
     fn precedence(token: &Token) -> Option<(i8, bool)> {
         match token {
             Token::Semicolon => Some((0, false)),
-            Token::ApplyRight => Some((1, false)),
+            Token::ApplyRight | Token::TildeArrow => Some((1, false)),
             Token::ApplyLeft => Some((2, true)),
             Token::Comma => Some((3, true)),
             Token::Or => Some((4, false)),

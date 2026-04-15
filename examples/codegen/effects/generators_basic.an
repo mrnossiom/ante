@@ -6,13 +6,13 @@ iota (n: U32) = loop (i = 0) ->
         emit i
         recur (i + 1)
 
-for stream f =
+for_ stream f =
     handle stream ()
     | emit x ->
         f x
         resume ()
 
-for (fn () -> iota 10) print
+for_ (fn () -> iota 10) print
 
 // args: --delete-binary --no-color
 // expected exit status: 1
@@ -33,14 +33,16 @@ for (fn () -> iota 10) print
 //   |         ^^^^
 // 7 |         recur (i + 1)
 // 
-// examples/codegen/effects/generators_basic.an:9:1
-//  9 | for stream f =	// error: Expected a top-level item but found `for`
-//    | ^^^
-// 10 |     handle stream ()
+// examples/codegen/effects/generators_basic.an:10:5
+//  9 | for_ stream f =
+// 10 |     handle stream ()	// error: Effects and handle expressions are currently unimplemented
+//    |     ^^^^^^^^^^^^^^^^
+// 11 |     | emit x ->
 // 
-// examples/codegen/effects/generators_basic.an:15:1
-// 15 | for (fn () -> iota 10) print	// error: Expected a top-level item but found `for`
-//    | ^^^
+// examples/codegen/effects/generators_basic.an:15:6
+//    | // error: Expected `=` to begin the function body but found `(`
+// 15 | for_ (fn () -> iota 10) print
+//    |      ^
 // 
 // Found 5 errors and 0 warnings
 

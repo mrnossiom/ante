@@ -22,8 +22,8 @@ for_ stream f =
 
 main () =
     iota 10
-        with filter (fn x -> x % 2 == 0)
-        with for_ print
+        ~> filter (fn x -> x % 2 == 0)
+        ~> for_ print
 
 // args: -e ast-t --no-color
 // expected exit status: 1
@@ -51,8 +51,8 @@ main () =
 //         (f: (error)) (x: (error))
 //         (resume: (error)) ()
 // 
-// (main: fn Unit -> Unit pure) () =
-//     (iota: fn U32 -> Unit pure) 10
+// (main: fn Unit -> _ pure) () =
+//     (for_: fn _ (fn _ {Print _} -> Unit pure) -> _ pure) ((filter: fn Unit (fn I32 -> Bool pure) -> _ pure) ((iota: fn U32 -> Unit pure) 10) (fn (x: I32) -> (==: fn I32 I32 {Eq I32} -> Bool pure) ((%: fn I32 I32 {Mod I32} -> I32 pure) (x: I32) 2 {(mod_i32: Mod I32)}) 0 {(eq_i32: Eq I32)})) (print: fn _ {Print _} -> Unit pure)
 
 // expected stderr:
 // examples/typechecking/effects_subset.an:7:9
@@ -73,12 +73,5 @@ main () =
 //    |     ^^^^^^^^^^^^^^^^
 // 19 |     | emit x ->
 // 
-// examples/typechecking/effects_subset.an:25:9
-// 24 |     iota 10
-//    |         // error: Expected the end of this block but found `with`
-// 25 |         with filter (fn x -> x % 2 == 0)
-//    |         ^^^^
-// 26 |         with for_ print
-// 
-// Found 4 errors and 0 warnings
+// Found 3 errors and 0 warnings
 

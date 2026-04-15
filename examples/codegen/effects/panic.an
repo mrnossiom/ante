@@ -5,7 +5,7 @@ effect Read a with
     read: fn Unit -> a
 
 read_or_none (f: fn Unit -> Unit can Read a, Fail): Maybe a =
-    /*test*/handle Some (f ())
+    handle Some (f ())
     | fail () -> None
     | read () -> resume ()
 
@@ -22,25 +22,24 @@ main () = ()
 // examples/codegen/effects/panic.an:7:18
 //   | // error: Expected 0 arguments but found 1
 // 7 | read_or_none (f: fn Unit -> Unit can Read a, Fail): Maybe a =
-// 8 |     /*test*/handle Some (f ())
+// 8 |     handle Some (f ())
 // 
 // examples/codegen/effects/panic.an:7:18
 //   | // error: Expected a type constructor of kind effect, but found one of kind *
 // 7 | read_or_none (f: fn Unit -> Unit can Read a, Fail): Maybe a =
-// 8 |     /*test*/handle Some (f ())
+// 8 |     handle Some (f ())
 // 
 // examples/codegen/effects/panic.an:7:18
 // 7 | read_or_none (f: fn Unit -> Unit can Read a, Fail): Maybe a =	// error: Fail is not a type
-// 8 |     /*test*/handle Some (f ())
+// 8 |     handle Some (f ())
 // 
 // examples/codegen/effects/panic.an:7:18
 // 7 | read_or_none (f: fn Unit -> Unit can Read a, Fail): Maybe a =	// error: Read is not a type
-// 8 |     /*test*/handle Some (f ())
+// 8 |     handle Some (f ())
 // 
-// examples/codegen/effects/panic.an:8:13
+// examples/codegen/effects/panic.an:8:5
 //  7 | read_or_none (f: fn Unit -> Unit can Read a, Fail): Maybe a =
-//    |     // error: Effects and handle expressions are currently unimplemented
-//  8 |     /*test*/handle Some (f ())
+//  8 |     handle Some (f ())	// error: Effects and handle expressions are currently unimplemented
 //  9 |     | fail () -> None
 // 
 // Found 5 errors and 0 warnings

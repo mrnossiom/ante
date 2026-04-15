@@ -744,10 +744,17 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         typ.follow(&self.bindings)
     }
 
-    fn from_cst_type(&mut self, typ: &cst::Type) -> Type {
-        let next_id = &mut self.next_type_variable_id.get();
-        let typ = Type::from_cst_type(typ, self.current_resolve(), self.compiler, next_id);
-        self.next_type_variable_id.set(*next_id);
+    /// Convert a [cst::Type] into a [Type]. If `allow_implicit_type_vars` is true, we'll
+    /// insert type variables to make functions automatically polymorphic over effects or
+    /// their closure environment. If false, we'll assume these to be pure or empty.
+    ///
+    /// Generally, `allow_implicit_type_vars` should be false in type definitions and true
+    /// in function signatures or expressions.
+    fn from_cst_type(&mut self, typ: &cst::Type, allow_implicit_type_vars: bool) -> Type {
+        let mut next_id = self.next_type_variable_id.get();
+        let typ =
+            Type::from_cst_type(typ, self.current_resolve(), self.compiler, &mut next_id, allow_implicit_type_vars);
+        self.next_type_variable_id.set(next_id);
         typ
     }
 

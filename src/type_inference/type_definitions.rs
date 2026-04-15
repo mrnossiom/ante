@@ -3,7 +3,7 @@ use std::{borrow::Cow, sync::Arc};
 use rustc_hash::FxHashMap;
 
 use crate::{
-    diagnostics::UnimplementedItem,
+    diagnostics::{Diagnostic, UnimplementedItem},
     iterator_extensions::mapvec,
     name_resolution::Origin,
     parser::{
@@ -99,7 +99,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         assert!(substitutions.is_empty());
 
         let parameters = mapvec(variant_args, |arg| {
-            let param = self.from_cst_type(arg);
+            let param = self.from_cst_type(arg, false);
             types::ParameterType::explicit(param)
         });
 
@@ -116,8 +116,17 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             result = Type::Forall(Arc::new(generics.to_vec()), Arc::new(result));
         }
 
-        if !result.free_vars(&self.bindings).is_empty() {
-            // TODO: Error: type contains unbound variable, suggest adding a generic
+        // This should be prevented by the `false` flag in `from_cst_type` above but is included
+        // as a sanity check to prevent things from going very wrong.
+        let free_vars = result.free_vars(&self.bindings);
+        if !free_vars.is_empty() {
+            let location = self.current_context().name_location(type_name.local_name_id).clone();
+            self.compiler.accumulate(Diagnostic::FreeVarsInTypeConstructor { location });
+
+            for var in free_vars {
+                let Generic::Inferred(id) = var else { unreachable!() };
+                self.bindings.insert(id, Type::ERROR);
+            }
         }
 
         result
@@ -140,11 +149,8 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         for (method_name, method_type) in fields.iter() {
             let (implicit_arg, substitutions) = self.type_definition_type(type_name, definition, false);
             assert!(substitutions.is_empty());
-            let mut method_type = self.from_cst_type(&method_type);
+            let mut method_type = self.from_cst_type(&method_type, false);
 
-            // Strip the closure environment from function-typed trait method fields.
-            // define_trait_methods creates free-function wrappers (not closures), so the
-            // method type must also be a free function to stay consistent.
             if let Type::Function(fn_arc) = method_type {
                 let mut fn_type = Arc::unwrap_or_clone(fn_arc);
                 fn_type.environment = Type::NO_CLOSURE_ENV;

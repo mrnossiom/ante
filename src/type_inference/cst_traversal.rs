@@ -104,7 +104,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             Expr::Match(match_) => self.check_match(match_, expected, expected_effect, id),
             Expr::Reference(reference) => self.check_reference(reference, expected, expected_effect, id),
             Expr::TypeAnnotation(type_annotation) => {
-                let annotation = self.from_cst_type(&type_annotation.rhs);
+                let annotation = self.from_cst_type(&type_annotation.rhs, true);
                 self.unify(expected, &annotation, TypeErrorKind::TypeAnnotationMismatch, id);
                 self.check_expr(type_annotation.lhs, &annotation, expected_effect);
             },
@@ -190,7 +190,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 }
             },
             Pattern::TypeAnnotation(inner_pattern, typ) => {
-                let annotated = self.from_cst_type(typ);
+                let annotated = self.from_cst_type(typ, true);
                 self.unify(expected, &annotated, TypeErrorKind::TypeAnnotationMismatch, id);
                 self.check_pattern(*inner_pattern, expected, expected_effect);
             },
@@ -507,7 +507,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         }
 
         let return_type = if let Some(return_type) = lambda.return_type.as_ref() {
-            let return_type = self.from_cst_type(return_type);
+            let return_type = self.from_cst_type(return_type, true);
             self.unify(&return_type, &function_type.return_type, TypeErrorKind::TypeAnnotationMismatch, expr);
             Cow::Owned(return_type)
         } else {
@@ -862,7 +862,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     fn check_constructor(
         &mut self, constructor: &cst::Constructor, expected: &Type, expected_effect: &Type, id: ExprId,
     ) {
-        let typ = self.from_cst_type(&constructor.typ);
+        let typ = self.from_cst_type(&constructor.typ, true);
         self.unify(&typ, expected, TypeErrorKind::Constructor, id);
 
         // Map each field name to its index in the type's declaration order.

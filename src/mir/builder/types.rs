@@ -102,7 +102,8 @@ where
                 Type::Tuple(Arc::new(elements))
             },
             TCType::Effects(_effects) => {
-                todo!("mir convert type called on Effects")
+                // TODO: todo!("mir convert type called on Effects")
+                Type::ERROR
             },
         }
     }

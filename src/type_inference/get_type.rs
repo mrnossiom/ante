@@ -55,7 +55,7 @@ pub(super) fn try_get_generalized_type(
     definition: &Definition, context: &DesugarContext, resolve: &ResolutionResult, compiler: &DbHandle,
 ) -> Option<Type> {
     if let Pattern::TypeAnnotation(_, typ) = &context[definition.pattern] {
-        return Some(Type::from_cst_type_generalized(typ, resolve, compiler));
+        return Some(Type::from_cst_type_generalized(typ, resolve, compiler, true));
     }
 
     if let Expr::Lambda(lambda) = &context[definition.rhs] {
@@ -85,25 +85,25 @@ pub(super) fn try_get_generalized_type(
         let lambda_location = context.expr_location(definition.rhs).clone();
         let cst_fn_type = cst::Type::new(TypeKind::Function(cst_function_type), lambda_location);
 
-        Some(Type::from_cst_type_generalized(&cst_fn_type, resolve, compiler))
+        Some(Type::from_cst_type_generalized(&cst_fn_type, resolve, compiler, true))
 
     // The body being a type annotation is common for `extern` declarations: `puts = extern "puts": fn ...`
     } else if let Expr::TypeAnnotation(annotation) = &context[definition.rhs] {
-        Some(Type::from_cst_type_generalized(&annotation.rhs, resolve, compiler))
+        Some(Type::from_cst_type_generalized(&annotation.rhs, resolve, compiler, true))
     } else {
         None
     }
 }
 
 /// Like `try_get_generalized_type` but allows the resulting type to contain fresh type variables
-/// for trait closure environments. The caller passes a `next_id` counter so that
+/// for trait closure environments or effects. The caller passes a `next_id` counter so that
 /// fresh IDs don't collide with other type variables.
 pub fn try_get_partial_type(
     definition: &Definition, context: &DesugarContext, resolve: &ResolutionResult, compiler: &DbHandle,
     next_id: &mut u32,
 ) -> Option<Type> {
     if let Pattern::TypeAnnotation(_, typ) = &context[definition.pattern] {
-        return Some(Type::from_cst_type(typ, resolve, compiler, next_id));
+        return Some(Type::from_cst_type(typ, resolve, compiler, next_id, true));
     }
 
     if let Expr::Lambda(lambda) = &context[definition.rhs] {
@@ -129,9 +129,9 @@ pub fn try_get_partial_type(
             cst::FunctionType { parameters, environment, return_type, effects: lambda.effects.clone() };
 
         let cst_fn_type = cst::Type::new(TypeKind::Function(cst_function_type), lambda_location);
-        Some(Type::from_cst_type(&cst_fn_type, resolve, compiler, next_id))
+        Some(Type::from_cst_type(&cst_fn_type, resolve, compiler, next_id, true))
     } else if let Expr::TypeAnnotation(annotation) = &context[definition.rhs] {
-        Some(Type::from_cst_type(&annotation.rhs, resolve, compiler, next_id))
+        Some(Type::from_cst_type(&annotation.rhs, resolve, compiler, next_id, true))
     } else {
         None
     }

@@ -206,6 +206,13 @@ pub enum Diagnostic {
         location: Location,
         moved_in: Location,
     },
+    TraitTypeCantBeUsed {
+        location: Location,
+    },
+    HoleCantBeUsed {
+        location: Location,
+    },
+    FreeVarsInTypeConstructor { location: Location },
 }
 
 impl Ord for Diagnostic {
@@ -441,6 +448,15 @@ impl Diagnostic {
             Diagnostic::UseOfMovedValue { name, location: _, moved_in: _ } => {
                 format!("Use of moved value {}", name.purple())
             },
+            Diagnostic::TraitTypeCantBeUsed { location: _ } => {
+                format!("Trait types can't be used in this position")
+            }
+            Diagnostic::HoleCantBeUsed { location: _ } => {
+                format!("A type hole can't be used in this position")
+            }
+            Diagnostic::FreeVarsInTypeConstructor { location: _ } => {
+                format!("Internal compiler error: there are free variables in this type constructor")
+            }
         }
     }
 
@@ -488,6 +504,9 @@ impl Diagnostic {
             | Diagnostic::TypeAnnotationNeeded { location, .. }
             | Diagnostic::NotAType { location, .. }
             | Diagnostic::UseOfMovedValue { location, .. }
+            | Diagnostic::TraitTypeCantBeUsed { location, .. }
+            | Diagnostic::HoleCantBeUsed { location, .. }
+            | Diagnostic::FreeVarsInTypeConstructor { location, .. }
             | Diagnostic::NoMainFunction { location } => location,
         }
     }

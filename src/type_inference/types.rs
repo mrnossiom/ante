@@ -398,8 +398,9 @@ impl Type {
     /// - A name [Origin] was used which does not point to a type
     pub(crate) fn from_cst_type(
         typ: &cst::Type, resolve: &crate::name_resolution::ResolutionResult, db: &DbHandle, next_id: &mut u32,
+        insert_implicit_type_vars: bool,
     ) -> Type {
-        Self::from_cst_type_with_kind(typ, Kind::Type, resolve, db, next_id)
+        Self::from_cst_type_with_kind(typ, Kind::Type, resolve, db, next_id, insert_implicit_type_vars)
     }
 
     /// Converts an ast type to a generalized Type, with any free type variables
@@ -407,9 +408,10 @@ impl Type {
     /// will not be wrapped in a `forall`.
     pub(crate) fn from_cst_type_generalized(
         typ: &cst::Type, resolve: &crate::name_resolution::ResolutionResult, db: &DbHandle,
+        insert_implicit_type_vars: bool,
     ) -> Type {
         let mut next_id = 0;
-        let typ = Self::from_cst_type_with_kind(typ, Kind::Type, resolve, db, &mut next_id);
+        let typ = Self::from_cst_type_with_kind(typ, Kind::Type, resolve, db, &mut next_id, insert_implicit_type_vars);
 
         if next_id == 0 {
             // fast track - if no type variables were created, we have nothing to replace
@@ -423,10 +425,10 @@ impl Type {
     /// Error if the converted [Kind] does not match the expected [Kind].
     fn from_cst_type_with_kind(
         typ: &cst::Type, expected: Kind, resolve: &crate::name_resolution::ResolutionResult, db: &DbHandle,
-        next_id: &mut u32,
+        next_id: &mut u32, insert_implicit_type_vars: bool,
     ) -> Type {
         let location = typ.location.clone();
-        let (typ, kind) = Type::from_cst_type_helper(typ, resolve, db, next_id);
+        let (typ, kind) = Type::from_cst_type_helper(typ, resolve, db, next_id, insert_implicit_type_vars);
         if !expected.unifies(&kind) {
             db.accumulate(Diagnostic::ExpectedKind { actual: kind, expected, location });
         }
@@ -440,6 +442,7 @@ impl Type {
     /// Does not error if the returned type is not of kind [Kind::Type]
     fn from_cst_type_helper(
         typ: &cst::Type, resolve: &crate::name_resolution::ResolutionResult, db: &DbHandle, next_id: &mut u32,
+        insert_implicit_type_vars: bool,
     ) -> (Type, Kind) {
         match &typ.kind {
             crate::parser::cst::TypeKind::Integer(kind) => {
@@ -472,25 +475,27 @@ impl Type {
             },
             crate::parser::cst::TypeKind::Function(function) => {
                 let parameters = mapvec(&function.parameters, |param| {
-                    let typ = Self::from_cst_type(&param.typ, resolve, db, next_id);
+                    let typ = Self::from_cst_type(&param.typ, resolve, db, next_id, insert_implicit_type_vars);
                     ParameterType::new(typ, param.is_implicit)
                 });
                 let environment = if let Some(environment) = function.environment.as_ref() {
-                    Self::from_cst_type(environment, resolve, db, next_id)
+                    Self::from_cst_type(environment, resolve, db, next_id, insert_implicit_type_vars)
                 } else {
                     Type::NO_CLOSURE_ENV
                 };
-                let return_type = Self::from_cst_type(&function.return_type, resolve, db, next_id);
+                let return_type =
+                    Self::from_cst_type(&function.return_type, resolve, db, next_id, insert_implicit_type_vars);
 
                 let effects = match &function.effects {
                     Some(effects) => Type::Effects(Arc::new(mapvec(effects, |effect| {
-                        Self::from_cst_effect(effect, &typ.location, resolve, db, next_id)
+                        Self::from_cst_effect(effect, &typ.location, resolve, db, next_id, insert_implicit_type_vars)
                     }))),
-                    None => {
+                    None if insert_implicit_type_vars => {
                         let any = Type::Variable(TypeVariableId(*next_id));
                         *next_id += 1;
                         any
                     },
+                    None => Type::no_effects(),
                 };
 
                 let f = Type::Function(Arc::new(FunctionType { parameters, environment, return_type, effects }));
@@ -499,7 +504,7 @@ impl Type {
             crate::parser::cst::TypeKind::Error => (Type::ERROR, Kind::Error),
             crate::parser::cst::TypeKind::Unit => (Type::UNIT, Kind::Type),
             crate::parser::cst::TypeKind::Application(f, args) => {
-                let (f, f_kind) = Self::from_cst_type_helper(f, resolve, db, next_id);
+                let (f, f_kind) = Self::from_cst_type_helper(f, resolve, db, next_id, insert_implicit_type_vars);
 
                 if !f_kind.accepts_n_arguments(args.len()) {
                     let expected = f_kind.required_argument_count();
@@ -510,16 +515,21 @@ impl Type {
 
                 let mut converted_args = mapvec(args.iter().enumerate(), |(i, arg)| {
                     let expected_kind = f_kind.get_nth_parameter_kind(i);
-                    Self::from_cst_type_with_kind(arg, expected_kind, resolve, db, next_id)
+                    Self::from_cst_type_with_kind(arg, expected_kind, resolve, db, next_id, insert_implicit_type_vars)
                 });
 
                 // Automatically insert a fresh type variable for the implicit env parameter
                 // when a TraitConstructor is applied without the optional env argument.
                 if let Kind::TraitConstructor(kinds) = &f_kind {
                     if converted_args.len() == kinds.len() {
-                        let fresh_env = Type::Variable(TypeVariableId(*next_id));
-                        *next_id += 1;
-                        converted_args.push(fresh_env);
+                        if insert_implicit_type_vars {
+                            let fresh_env = Type::Variable(TypeVariableId(*next_id));
+                            *next_id += 1;
+                            converted_args.push(fresh_env);
+                        } else {
+                            db.accumulate(Diagnostic::TraitTypeCantBeUsed { location: typ.location.clone() });
+                            converted_args.push(Type::ERROR);
+                        }
                     }
                 }
 
@@ -532,13 +542,18 @@ impl Type {
             ),
             crate::parser::cst::TypeKind::NoClosureEnv => (Type::NO_CLOSURE_ENV, Kind::Type),
             crate::parser::cst::TypeKind::Tuple(elements) => {
-                let elements = mapvec(elements, |t| Self::from_cst_type(t, resolve, db, next_id));
+                let elements =
+                    mapvec(elements, |t| Self::from_cst_type(t, resolve, db, next_id, insert_implicit_type_vars));
                 (Type::Tuple(Arc::new(elements)), Kind::Type)
             },
-            crate::parser::cst::TypeKind::Hole => {
+            crate::parser::cst::TypeKind::Hole if insert_implicit_type_vars => {
                 let typ = Type::Variable(TypeVariableId(*next_id));
                 *next_id += 1;
                 (typ, Kind::Type)
+            },
+            crate::parser::cst::TypeKind::Hole => {
+                db.accumulate(Diagnostic::HoleCantBeUsed { location: typ.location.clone() });
+                (Type::ERROR, Kind::Error)
             },
         }
     }
@@ -547,7 +562,7 @@ impl Type {
     /// An empty set of effects corresponds to the `pure` keyword.
     fn from_cst_effect(
         effect: &cst::EffectType, location: &Location, resolve: &crate::name_resolution::ResolutionResult,
-        db: &DbHandle, next_id: &mut u32,
+        db: &DbHandle, next_id: &mut u32, insert_implicit_type_vars: bool,
     ) -> Type {
         match effect {
             cst::EffectType::Known(path, arguments) => {
@@ -556,7 +571,14 @@ impl Type {
                     cst::TypeKind::Application(Box::new(constructor), arguments.clone()),
                     location.clone(),
                 );
-                Self::from_cst_type_with_kind(&application, Kind::Effect, resolve, db, next_id)
+                Self::from_cst_type_with_kind(
+                    &application,
+                    Kind::Effect,
+                    resolve,
+                    db,
+                    next_id,
+                    insert_implicit_type_vars,
+                )
             },
             cst::EffectType::Variable(name) => Type::Generic(Generic::Named(Origin::Local(*name))),
         }

@@ -38,7 +38,7 @@ does_use x =
 // (use_resume: fn Unit -> Unit pure) () =
 //     handle ()
 //     | (get: fn Unit -> I32 can (Use I32)) () -> (resume: fn I32 -> Unit pure) 3_I32
-//     | (set: fn _ -> Unit can (Use _)) (_: _) -> (resume: fn Unit -> Unit pure) ()
+//     | (set: fn I32 -> Unit can (Use I32)) (_: I32) -> (resume: fn Unit -> Unit pure) ()
 // 
 // (does_use: fn _ -> Unit can (Use _)) (x: _) =
 //     (y: _) = (get: fn Unit -> _ can (Use _)) ()

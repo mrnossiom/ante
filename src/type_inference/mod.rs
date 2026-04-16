@@ -626,7 +626,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 let (mut actual_effects, actual_var) = self.collect_effects_in_types(actual, new_bindings);
                 let (mut expected_effects, expected_var) = self.collect_effects_in_types(expected, new_bindings);
 
-                // 1: Every member of `actual_effects` must be within `expected_effects`
+                // Every member of `actual_effects` must be within `expected_effects`
                 // Filter out each element of `actual` in `expected`
                 actual_effects.retain(|actual| {
                     let actual = actual.follow_all(new_bindings);

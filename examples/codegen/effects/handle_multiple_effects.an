@@ -5,6 +5,8 @@ effect Fail with
 effect Read a with
     read: fn Unit -> a
 
+// read_or_zero (f: fn Unit -> a can Fail, Read U32) : Maybe a pure =
+// TODO: This fails to type check without an annotation
 read_or_zero f =
     handle Maybe.Some <| f ()
     | fail () -> Maybe.None

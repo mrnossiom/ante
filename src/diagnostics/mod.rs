@@ -629,7 +629,7 @@ fn write_syntax_highlighted(text: &str, show_color: bool, f: &mut Formatter) -> 
             continue;
         }
         let start = span.start.byte_index;
-        let end = span.end.byte_index;
+        let end = span.end.byte_index.min(text.len());
         // Gaps between tokens are whitespace (or comments)
         if start > last_end {
             let text = &text[last_end..start];

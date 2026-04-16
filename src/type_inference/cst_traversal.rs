@@ -890,7 +890,55 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     }
 
     fn check_handle(&mut self, handle: &cst::Handle, expected: &Type, expected_effect: &Type, expr: ExprId) {
-        todo!()
+        // expression: expected can expected_effect, e
+        // where `e` is the handled effect
+        let expected_and_e = self.next_type_variable();
+        self.check_expr(handle.expression, expected, &expected_and_e);
+
+        // For each case:
+        // - function: fn args.. -> r can e
+        // - resume: fn r -> expected can expected_effect
+        // - branch: expected can expected_effect
+        //
+        // Note that `resume` doesn't emit the handled effect `e` because Ante uses deep handlers
+        for (pattern, branch) in &handle.cases {
+            let parameter_types = mapvec(&pattern.args, |_| ParameterType::explicit(self.next_type_variable()));
+            let r = self.next_type_variable();
+            let e = self.next_type_variable();
+
+            let function_type = Type::Function(Arc::new(FunctionType {
+                parameters: parameter_types.clone(),
+                environment: Type::NO_CLOSURE_ENV,
+                return_type: r.clone(),
+                effects: e.clone(),
+            }));
+            self.check_path(pattern.function, &function_type, expected_effect, None, None);
+
+            self.unify(&e, &expected_and_e, TypeErrorKind::General, pattern.function);
+
+            for (arg, parameter) in pattern.args.iter().zip(parameter_types) {
+                self.check_pattern(*arg, &parameter.typ, &Type::no_effects());
+            }
+
+            let resume_type = Type::Function(Arc::new(FunctionType {
+                parameters: vec![ParameterType::explicit(r)],
+                environment: Type::NO_CLOSURE_ENV,
+                return_type: expected.clone(),
+                effects: expected_effect.clone(),
+            }));
+            self.check_name(pattern.resume_name, &resume_type);
+
+            self.push_implicits_scope();
+            self.check_expr(*branch, expected, expected_effect);
+            self.pop_implicits_scope();
+        }
+
+        // Link expected_effect to the unhandled effects remaining in expected_and_e.
+        // The per-case unify calls extracted each handled effect, so the row tail
+        // represents effects the handler does not handle.
+        if let Some(row_id) = expected_and_e.effect_row(&self.bindings) {
+            self.unify(expected_effect, &Type::Variable(row_id), TypeErrorKind::General, expr);
+        }
     }
 
     fn check_assignment(&mut self, assignment: &cst::Assignment, expected: &Type, expected_effect: &Type, id: ExprId) {

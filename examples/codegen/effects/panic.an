@@ -4,7 +4,7 @@ effect Fail with
 effect Read a with
     read: fn Unit -> a
 
-read_or_none (f: fn Unit -> Unit can Read a, Fail): Maybe a =
+read_or_none (f: fn Unit -> a can Read Unit, Fail): Maybe a =
     handle Maybe.Some (f ())
     | fail () -> None
     | read () -> resume ()
@@ -17,12 +17,9 @@ main () = ()
 // note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 // exit 101
 
-// expected exit status: 1
+// expected exit status: 101
 // expected stderr:
-// examples/codegen/effects/panic.an:8:5
-//  7 | read_or_none (f: fn Unit -> Unit can Read a, Fail): Maybe a =
-//  8 |     handle Maybe.Some (f ())	// error: Expected Maybe a but found Maybe Unit
-//  9 |     | fail () -> None
-// 
-// Found 1 error and 0 warnings
+// thread '<unnamed>' panicked at src/mir/builder/mod.rs:840:9:
+// not yet implemented: mir handle
+// note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 

@@ -6,7 +6,7 @@ iota (n: U32) = loop (i = 0) ->
         emit i
         recur (i + 1)
 
-filter (stream: fn Unit -> Unit can Emit a) (f: fn a -> Bool pure) =
+filter (stream: fn Unit -> Unit can Emit a) {Copy a} (f: fn a -> Bool pure) =
     handle stream ()
     | emit x ->
         if f x then
@@ -34,9 +34,9 @@ for_ (stream: fn Unit -> Unit can Emit a) (f: fn a -> Unit pure) =
         resume ()
 
 my_print (x1: (U32, U32)) =
-    x = first x1
-    y = second x1
-    print "${x}, ${y}"
+    print (first x1)
+    print ", "
+    print (second x1)
 
 main () =
     iota 10
@@ -46,12 +46,18 @@ main () =
         ~> for_ my_print
 
 // args: --delete-binary --no-color
-// expected exit status: 1
+// expected exit status: 101
 // expected stderr:
-// examples/codegen/effects/generators_complex.an:39:12
-// 38 |     y = second x1
-// 39 |     print "${x}, ${y}"	// error: Expected the end of this block but found `${`
-//    |            ^^
+// thread '<unnamed>' panicked at src/mir/builder/mod.rs:840:9:
+// not yet implemented: mir handle
+// note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 // 
-// Found 1 error and 0 warnings
+// thread '<unnamed>' panicked at src/mir/builder/mod.rs:840:9:
+// not yet implemented: mir handle
+// 
+// thread '<unnamed>' panicked at src/mir/builder/mod.rs:840:9:
+// not yet implemented: mir handle
+// 
+// thread '<unnamed>' panicked at src/mir/builder/mod.rs:840:9:
+// not yet implemented: mir handle
 

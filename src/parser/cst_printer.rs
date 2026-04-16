@@ -995,7 +995,7 @@ impl<'a> CstDisplay<'a> {
     fn fmt_handle_pattern(
         &mut self, pattern: &HandlePattern, context: &impl IdStore, f: &mut Formatter,
     ) -> std::fmt::Result {
-        self.fmt_name(pattern.function, context, f)?;
+        self.fmt_path(pattern.function, context, f)?;
         for arg in pattern.args.iter() {
             write!(f, " ")?;
             self.fmt_pattern_atom(*arg, context, f)?;

@@ -1,60 +1,26 @@
 
 effect Fail with
-    fail: Unit -> a
+    fail: fn Unit -> a
 
 effect Read a with
-    read: Unit -> a
+    read: fn Unit -> a
 
 read_or_zero f =
-    handle Some <| f ()
-    | fail () -> None
+    handle Maybe.Some <| f ()
+    | fail () -> Maybe.None
     | read () -> resume 5u32
 
 foo () =
     if false then fail ()
     read ()
 
-print <| read_or_zero foo
+main () =
+    print <| read_or_zero foo
 
 // args: --delete-binary --no-color
-// expected exit status: 1
+// expected exit status: 101
 // expected stderr:
-// examples/codegen/effects/handle_multiple_effects.an:1:1
-// 1 | 	// error: This program has no `main` function
-//   | 
-// 2 | effect Fail with
-// 
-// examples/codegen/effects/handle_multiple_effects.an:3:16
-// 2 | effect Fail with
-// 3 |     fail: Unit -> a	// error: Expected the end of this block but found `->`
-//   |                ^^
-// 
-// examples/codegen/effects/handle_multiple_effects.an:6:16
-// 5 | effect Read a with
-// 6 |     read: Unit -> a	// error: Expected the end of this block but found `->`
-//   |                ^^
-// 
-// examples/codegen/effects/handle_multiple_effects.an:9:5
-//  8 | read_or_zero f =
-//    |     // error: Effects and handle expressions are currently unimplemented
-//  9 |     handle Some <| f ()
-//    |     ^^^^^^^^^^^^^^^^^^^
-// 10 |     | fail () -> None
-// 
-// examples/codegen/effects/handle_multiple_effects.an:14:19
-// 13 | foo () =
-// 14 |     if false then fail ()	// error: `fail` not found in scope
-//    |                   ^^^^
-// 15 |     read ()
-// 
-// examples/codegen/effects/handle_multiple_effects.an:15:5
-// 14 |     if false then fail ()
-// 15 |     read ()	// error: `read` not found in scope
-//    |     ^^^^
-// 
-// examples/codegen/effects/handle_multiple_effects.an:17:7
-// 17 | print <| read_or_zero foo	// error: Expected `=` to begin the function body but found `<|`
-//    |       ^^
-// 
-// Found 7 errors and 0 warnings
+// thread '<unnamed>' panicked at src/mir/builder/mod.rs:840:9:
+// not yet implemented: mir handle
+// note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 

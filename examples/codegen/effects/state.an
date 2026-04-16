@@ -1,6 +1,6 @@
 effect Use a with
-    get: Unit -> a
-    set: a -> Unit
+    get: fn Unit -> a
+    set: fn a -> Unit
 
 use_state (y: I32) =
     x = get () : I32
@@ -18,77 +18,17 @@ state (f: fn Unit -> a can Use s) (initial: s) {Copy s}: a =
         resume ()
 
 main () =
-    use_state 10_i32 ~> state 1
-    use_state 20_u64 ~> state 2
+    use_state 10 ~> state 1
+    use_state 20 ~> state 2
 
 // args: --delete-binary --no-color
 // expected exit status: 1
 // expected stderr:
-// examples/codegen/effects/state.an:2:15
-// 1 | effect Use a with
-// 2 |     get: Unit -> a	// error: Expected the end of this block but found `->`
-//   |               ^^
-// 3 |     set: a -> Unit
-// 
-// examples/codegen/effects/state.an:6:9
-// 5 | use_state (y: I32) =
-// 6 |     x = get () : I32	// error: `get` not found in scope
-//   |         ^^^
-// 7 |     set (x + y)
-// 
-// examples/codegen/effects/state.an:7:5
-// 6 |     x = get () : I32
-// 7 |     set (x + y)	// error: `set` not found in scope
-//   |     ^^^
-// 8 |     state = get () : I32
-// 
-// examples/codegen/effects/state.an:8:13
-//  7 |     set (x + y)
-//  8 |     state = get () : I32	// error: `get` not found in scope
-//    |             ^^^
-//  9 |     print "Ending state = ${state}"
-// 
 // examples/codegen/effects/state.an:9:27
 //  8 |     state = get () : I32
 //  9 |     print "Ending state = ${state}"	// error: Expected the end of this block but found `${`
 //    |                           ^^
 // 10 |     state
 // 
-// examples/codegen/effects/state.an:12:11
-//    | // error: Expected 0 arguments but found 1
-// 12 | state (f: fn Unit -> a can Use s) (initial: s) {Copy s}: a =
-//    |           ^^^^^^^^^^^^^^^^^^^^^^
-// 13 |     var state = initial
-// 
-// examples/codegen/effects/state.an:12:11
-//    | // error: Expected a type constructor of kind effect, but found one of kind *
-// 12 | state (f: fn Unit -> a can Use s) (initial: s) {Copy s}: a =
-//    |           ^^^^^^^^^^^^^^^^^^^^^^
-// 13 |     var state = initial
-// 
-// examples/codegen/effects/state.an:12:11
-// 12 | state (f: fn Unit -> a can Use s) (initial: s) {Copy s}: a =	// error: Use is not a type
-//    |           ^^^^^^^^^^^^^^^^^^^^^^
-// 13 |     var state = initial
-// 
-// examples/codegen/effects/state.an:14:5
-// 13 |     var state = initial
-// 14 |     handle f ()	// error: Effects and handle expressions are currently unimplemented
-//    |     ^^^^^^^^^^^
-// 15 |     | get () -> resume state
-// 
-// examples/codegen/effects/state.an:21:5
-// 20 | main () =
-//    |     // error: Expected fn _ [_] -> fn Unit -> _ can (error) can _ but found fn I32 -> Unit pure
-// 21 |     use_state 10_i32 ~> state 1
-//    |     ^^^^^^^^^
-// 22 |     use_state 20_u64 ~> state 2
-// 
-// examples/codegen/effects/state.an:22:5
-// 21 |     use_state 10_i32 ~> state 1
-//    |     // error: Expected fn _ [_] -> fn Unit -> _ can (error) can _ but found fn I32 -> Unit pure
-// 22 |     use_state 20_u64 ~> state 2
-//    |     ^^^^^^^^^
-// 
-// Found 11 errors and 0 warnings
+// Found 1 error and 0 warnings
 

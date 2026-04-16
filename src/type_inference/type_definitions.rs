@@ -137,6 +137,57 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     /// type Eq t =
     ///     eq: fn t t -> Bool
     /// ```
+    /// Check an `effect E g1 g2 with op1: ... op2: ...` definition by
+    /// assigning each operation a type of `fn P1 .. Pn -> R can E g1 g2`
+    /// (with `NoClosureEnv`). Type generalization in `generalize_all`
+    /// turns this into `forall g1 g2. fn ... can E g1 g2`.
+    pub(super) fn check_effect_definition(&mut self, effect: &cst::EffectDefinition) {
+        let id = self.current_item.unwrap();
+        let effect_name = TopLevelName::new(id, effect.name);
+
+        // The effect type itself, applied to its generics: e.g. `Use a` is
+        // `Application(UserDefined(Use), [Generic(a)])` and a bare `Fail`
+        // is just `UserDefined(Fail)`.
+        let effect_as_type = {
+            let base = Type::UserDefined(Origin::TopLevelDefinition(effect_name));
+            if effect.generics.is_empty() {
+                base
+            } else {
+                let generic_args = mapvec(&effect.generics, |g| Type::Generic(Generic::Named(Origin::Local(*g))));
+                Type::Application(Arc::new(base), Arc::new(generic_args))
+            }
+        };
+
+        for declaration in &effect.body {
+            let method_type = self.from_cst_type(&declaration.typ, false);
+
+            let method_type = if let Type::Function(fn_arc) = method_type {
+                let mut fn_type = Arc::unwrap_or_clone(fn_arc);
+                fn_type.environment = Type::NO_CLOSURE_ENV;
+
+                // Prepend this effect to whatever effects the declaration
+                // already had.
+                let existing = std::mem::replace(&mut fn_type.effects, Type::no_effects());
+                fn_type.effects = match existing {
+                    Type::Effects(existing) => {
+                        let mut v = Vec::with_capacity(existing.len() + 1);
+                        v.push(effect_as_type.clone());
+                        v.extend(existing.iter().cloned());
+                        Type::Effects(Arc::new(v))
+                    },
+                    other => Type::Effects(Arc::new(vec![effect_as_type.clone(), other])),
+                };
+
+                Type::Function(Arc::new(fn_type))
+            } else {
+                // Non-function effect operations are unusual; leave them as-is.
+                method_type
+            };
+
+            self.check_name(declaration.name, &method_type);
+        }
+    }
+
     /// The name `Eq.eq` is publically visible. We want to give it the type:
     /// `Eq.eq: fn t t {Eq t} -> Bool`
     ///

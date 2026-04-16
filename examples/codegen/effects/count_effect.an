@@ -1,5 +1,5 @@
 effect Count with
-    count: Unit -> Unit
+    count: fn Unit -> Unit
 
 foo () =
     count ()
@@ -11,41 +11,13 @@ handle_count f =
         0
     | count () -> 1 + resume ()
 
-handle_count foo |> print
+main () =
+    handle_count foo |> print
 
 // args: --delete-binary --no-color
-// expected exit status: 1
+// expected exit status: 101
 // expected stderr:
-// examples/codegen/effects/count_effect.an:1:1
-// 1 | effect Count with	// error: This program has no `main` function
-//   | 
-// 2 |     count: Unit -> Unit
-// 
-// examples/codegen/effects/count_effect.an:2:17
-// 1 | effect Count with
-// 2 |     count: Unit -> Unit	// error: Expected the end of this block but found `->`
-//   |                 ^^
-// 
-// examples/codegen/effects/count_effect.an:5:5
-// 4 | foo () =
-// 5 |     count ()	// error: `count` not found in scope
-//   |     ^^^^^
-// 6 |     repeat 10 fn _ -> count ()
-// 
-// examples/codegen/effects/count_effect.an:6:23
-// 5 |     count ()
-// 6 |     repeat 10 fn _ -> count ()	// error: `count` not found in scope
-//   |                       ^^^^^
-// 
-// examples/codegen/effects/count_effect.an:9:5
-//  8 | handle_count f =
-//  9 |     handle	// error: Effects and handle expressions are currently unimplemented
-//    |     ^^^^^^
-// 10 |         f ()
-// 
-// examples/codegen/effects/count_effect.an:14:14
-// 14 | handle_count foo |> print	// error: Expected `=` to begin the function body but found `foo`
-//    |              ^^^
-// 
-// Found 6 errors and 0 warnings
+// thread '<unnamed>' panicked at src/mir/builder/mod.rs:840:9:
+// not yet implemented: mir handle
+// note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 

@@ -586,7 +586,8 @@ fn desugar_tilde_arrow(expr: ExprId, context: &mut DesugarContext) {
 
     let new_call = if let Expr::Call(inner_call) = &context[b] {
         // Prepend value as the first argument: foo b c => foo(value, b, c)
-        let new_args = std::iter::once(Argument::explicit(a)).chain(inner_call.arguments.iter().copied()).collect();
+        let new_args =
+            std::iter::once(Argument::explicit(lambda)).chain(inner_call.arguments.iter().copied()).collect();
         cst::Call { function: inner_call.function, arguments: new_args }
     } else {
         // Create a new call

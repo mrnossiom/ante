@@ -62,7 +62,7 @@ pub fn type_check_impl(context: &TypeCheckSCC, compiler: &DbHandle) -> TypeCheck
             TopLevelItemKind::TypeDefinition(type_definition) => checker.check_type_definition(type_definition),
             TopLevelItemKind::TraitDefinition(_) => unreachable!("Traits should be desugared into types by this point"),
             TopLevelItemKind::TraitImpl(_) => unreachable!("Impls should be simplified into definitions by this point"),
-            TopLevelItemKind::EffectDefinition(_) => (), // TODO
+            TopLevelItemKind::EffectDefinition(effect) => checker.check_effect_definition(effect),
             TopLevelItemKind::Comptime(comptime) => checker.check_comptime(comptime),
         };
 
@@ -532,6 +532,23 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         &self, actual: &Type, expected: &Type, new_bindings: &mut TypeBindings,
     ) -> Result<(), ()> {
         match (actual, expected) {
+            // Treat a bare unbound variable paired with an Effects set as an open empty effect
+            // row: wrap the variable as `Effects([Variable])` and delegate to the row-subsumption
+            // arm below. Without this, unifying a fresh effect-row variable against a concrete
+            // effect set (e.g. `pure = Effects([])`) via the generic Variable arm would bind the
+            // variable to that concrete set, closing the row and rejecting later effectful calls.
+            (Type::Variable(actual_id), Type::Effects(_))
+                if self.bindings.get(actual_id).is_none() && new_bindings.get(actual_id).is_none() =>
+            {
+                let wrapped = Type::Effects(Arc::new(vec![Type::Variable(*actual_id)]));
+                self.try_unify_with_bindings(&wrapped, expected, new_bindings)
+            },
+            (Type::Effects(_), Type::Variable(expected_id))
+                if self.bindings.get(expected_id).is_none() && new_bindings.get(expected_id).is_none() =>
+            {
+                let wrapped = Type::Effects(Arc::new(vec![Type::Variable(*expected_id)]));
+                self.try_unify_with_bindings(actual, &wrapped, new_bindings)
+            },
             (Type::Variable(actual_id), expected) => {
                 if let Some(actual) = self.bindings.get(actual_id).cloned() {
                     self.try_unify_with_bindings(&actual, &expected, new_bindings)

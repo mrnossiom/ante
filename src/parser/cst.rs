@@ -467,8 +467,11 @@ impl ErrorDefault for Pattern {
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
 pub struct HandlePattern {
-    pub function: NameId,
+    pub function: PathId,
     pub args: Vec<PatternId>,
+
+    /// Synthetic `resume` binding for this branch
+    pub resume_name: NameId,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]

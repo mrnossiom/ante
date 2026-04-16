@@ -4,13 +4,16 @@ use crate::{
     diagnostics::{Diagnostic, Location, UnimplementedItem},
     incremental::{ExportedDefinitions, GetItemRaw, GetType, Resolve},
     iterator_extensions::mapvec,
-    name_resolution::{builtin::Builtin, namespace::SourceFileId, Origin},
+    name_resolution::{Origin, builtin::Builtin, namespace::SourceFileId},
     parser::{
         cst::{self, Definition, Expr, Literal, Pattern},
         ids::{ExprId, NameId, PathId, PatternId, TopLevelId, TopLevelName},
     },
     type_inference::{
-        errors::TypeErrorKind, get_type::try_get_partial_type, types::{self, FunctionType, ParameterType, Type, TypeBindings}, Locateable, TypeChecker
+        Locateable, TypeChecker,
+        errors::TypeErrorKind,
+        get_type::try_get_partial_type,
+        types::{self, FunctionType, ParameterType, Type, TypeBindings},
     },
 };
 
@@ -886,9 +889,8 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         self.current_extended_context_mut().push_constructor_field_order(id, field_order);
     }
 
-    fn check_handle(&mut self, _handle: &cst::Handle, _expected: &Type, _expected_effect: &Type, expr: ExprId) {
-        let location = self.current_context().expr_location(expr).clone();
-        UnimplementedItem::Effects.issue(self.compiler, location);
+    fn check_handle(&mut self, handle: &cst::Handle, expected: &Type, expected_effect: &Type, expr: ExprId) {
+        todo!()
     }
 
     fn check_assignment(&mut self, assignment: &cst::Assignment, expected: &Type, expected_effect: &Type, id: ExprId) {

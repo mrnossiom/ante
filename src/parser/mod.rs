@@ -1901,11 +1901,15 @@ impl<'tokens> Parser<'tokens> {
     }
 
     fn parse_handle_pattern(&mut self) -> Result<HandlePattern> {
-        let function_name = self.parse_ident_id()?;
+        let function = self.parse_value_path_id()?;
+        let args = self.many0(|this| this.parse_pattern());
 
-        let parameter_patterns = self.many0(|this| this.parse_pattern());
+        // Each handle branch gets its own `resume` variable. Creating the
+        // `NameId` here makes it easier to find later.
+        let resume_location = self.current_context.path_locations[function].clone();
+        let resume_name = self.push_name(Arc::new("resume".to_string()), resume_location);
 
-        Ok(cst::HandlePattern { function: function_name, args: parameter_patterns })
+        Ok(cst::HandlePattern { function, args, resume_name })
     }
 
     /// Parse an indent followed by any arbitrary tokens until a matching unindent

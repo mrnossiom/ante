@@ -35,6 +35,13 @@ pub enum Kind {
     /// An effect such as `IO`, `Throw a`, or `IO, Throw a, rest`
     Effect,
 
+    /// An effect constructor expecting to be applied to N type arguments,
+    /// producing a [Kind::Effect] after application.
+    ///
+    /// Used for effects with generics, e.g. `Use a` where `Use` has
+    /// [Kind::EffectConstructor(1)].
+    EffectConstructor(NonZeroUsize),
+
     /// An error occurred while resolving the type this kind belongs to
     Error,
 }
@@ -116,6 +123,19 @@ impl Kind {
                     Err(Diagnostic::ExpectedKind { actual: Kind::from_args(args), expected: self, location })
                 }
             },
+            Kind::EffectConstructor(expected) => {
+                if args.len() != expected.into() {
+                    let actual = args.len();
+                    return Err(Diagnostic::FunctionArgCountMismatch { actual, expected: expected.into(), location });
+                }
+
+                for arg in args {
+                    if !arg.unifies(&Kind::Type) {
+                        return Err(Diagnostic::ExpectedTypeKind { actual: arg, location });
+                    }
+                }
+                Ok(())
+            },
             Kind::Error => Ok(()),
         }
     }
@@ -155,6 +175,8 @@ impl Kind {
                     && trait_kinds.iter().zip(complex_kinds).all(|(l, r)| l.unifies(r))
             },
             (Kind::U32, Kind::U32) => true,
+            (Kind::Effect, Kind::Effect) => true,
+            (Kind::EffectConstructor(l), Kind::EffectConstructor(r)) => l == r,
             _ => false,
         }
     }
@@ -178,6 +200,7 @@ impl Kind {
             Kind::TraitConstructor(kinds) => kinds.len(),
             Kind::U32 => 0,
             Kind::Effect => 0,
+            Kind::EffectConstructor(n) => (*n).into(),
             Kind::Error => 0,
         }
     }
@@ -191,6 +214,7 @@ impl Kind {
             Kind::TraitConstructor(kinds) => n == kinds.len() || n == kinds.len() + 1,
             Kind::U32 => n == 0,
             Kind::Effect => n == 0,
+            Kind::EffectConstructor(count) => n == usize::from(*count),
             Kind::Error => true,
         }
     }
@@ -211,7 +235,21 @@ impl Kind {
             },
             Kind::U32 => panic!("Kind::U32 has no parameters"),
             Kind::Effect => panic!("Kind::Effect has no parameters"),
+            Kind::EffectConstructor(count) => {
+                assert!(n < usize::from(*count));
+                Kind::Type
+            },
             Kind::Error => Kind::Error, // Try to avoid further errors
+        }
+    }
+
+    /// The resulting kind after fully applying this kind's parameters.
+    /// For an [EffectConstructor], this is [Kind::Effect]; for most other
+    /// constructors it is [Kind::Type].
+    pub fn result_kind(&self) -> Kind {
+        match self {
+            Kind::EffectConstructor(_) | Kind::Effect => Kind::Effect,
+            _ => Kind::Type,
         }
     }
 }
@@ -226,6 +264,7 @@ impl std::fmt::Display for Kind {
             Kind::U32 => false,
             Kind::Error => false,
             Kind::Effect => false,
+            Kind::EffectConstructor(_) => true,
         };
 
         match self {
@@ -248,6 +287,12 @@ impl std::fmt::Display for Kind {
             },
             Kind::U32 => write!(f, "U32"),
             Kind::Effect => write!(f, "effect"),
+            Kind::EffectConstructor(n) => {
+                for _ in 0..usize::from(*n) {
+                    write!(f, "* -> ")?;
+                }
+                write!(f, "effect")
+            },
             Kind::Error => write!(f, "<Error>"),
         }
     }

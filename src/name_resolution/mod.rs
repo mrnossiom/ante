@@ -541,7 +541,21 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
                     self.pop_local_scope();
                 }
             },
-            Expr::Handle(_handle) => (), //TODO
+            Expr::Handle(handle) => {
+                self.resolve_expr(handle.expression);
+                for (pattern, branch) in &handle.cases {
+                    self.push_local_scope();
+                    self.link(pattern.function, false, false);
+
+                    for arg in &pattern.args {
+                        self.declare_names_in_pattern(*arg, false, true);
+                    }
+
+                    self.declare_name(pattern.resume_name);
+                    self.resolve_expr(*branch);
+                    self.pop_local_scope();
+                }
+            },
             Expr::Reference(reference) => {
                 self.resolve_expr(reference.rhs);
             },
@@ -828,7 +842,8 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
     fn resolve_effect_definition(&mut self, effect_definition: &EffectDefinition) {
         self.declare_generics(&effect_definition.generics);
         for declaration in &effect_definition.body {
-            self.declare(declaration);
+            self.link_existing_union_variant(effect_definition.name, declaration.name);
+            self.resolve_type(&declaration.typ, true);
         }
     }
 

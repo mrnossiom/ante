@@ -212,7 +212,9 @@ pub enum Diagnostic {
     HoleCantBeUsed {
         location: Location,
     },
-    FreeVarsInTypeConstructor { location: Location },
+    FreeVarsInTypeConstructor {
+        location: Location,
+    },
 }
 
 impl Ord for Diagnostic {
@@ -450,13 +452,13 @@ impl Diagnostic {
             },
             Diagnostic::TraitTypeCantBeUsed { location: _ } => {
                 format!("Trait types can't be used in this position")
-            }
+            },
             Diagnostic::HoleCantBeUsed { location: _ } => {
                 format!("A type hole can't be used in this position")
-            }
+            },
             Diagnostic::FreeVarsInTypeConstructor { location: _ } => {
                 format!("Internal compiler error: there are free variables in this type constructor")
-            }
+            },
         }
     }
 

@@ -533,8 +533,9 @@ impl Type {
                     }
                 }
 
+                assert!(!converted_args.is_empty());
                 let typ = Type::Application(Arc::new(f), Arc::new(converted_args));
-                (typ, Kind::Type)
+                (typ, f_kind.result_kind())
             },
             crate::parser::cst::TypeKind::Reference(kind) => (
                 Type::Primitive(PrimitiveType::Reference(*kind)),
@@ -567,18 +568,14 @@ impl Type {
         match effect {
             cst::EffectType::Known(path, arguments) => {
                 let constructor = cst::Type::new(cst::TypeKind::Named(*path), location.clone());
-                let application = cst::Type::new(
-                    cst::TypeKind::Application(Box::new(constructor), arguments.clone()),
-                    location.clone(),
-                );
-                Self::from_cst_type_with_kind(
-                    &application,
-                    Kind::Effect,
-                    resolve,
-                    db,
-                    next_id,
-                    insert_implicit_type_vars,
-                )
+
+                let effect = if arguments.is_empty() {
+                    constructor
+                } else {
+                    let application = cst::TypeKind::Application(Box::new(constructor), arguments.clone());
+                    cst::Type::new(application, location.clone())
+                };
+                Self::from_cst_type_with_kind(&effect, Kind::Effect, resolve, db, next_id, insert_implicit_type_vars)
             },
             cst::EffectType::Variable(name) => Type::Generic(Generic::Named(Origin::Local(*name))),
         }
@@ -597,13 +594,21 @@ impl Type {
             },
             Some(origin @ Origin::TopLevelDefinition(type_name)) => {
                 let (item, ctx) = GetItem(type_name.top_level_item).get(db);
-                let cst::TopLevelItemKind::TypeDefinition(definition) = &item.kind else {
-                    let name = item.kind.name().to_string(ctx.as_ref());
-                    db.accumulate(Diagnostic::NotAType { name, location: location.clone() });
-                    return (Type::ERROR, Kind::Type);
-                };
-                let kind = crate::definition_collection::kind_of_type_definition(definition);
-                (make_type(origin), kind)
+                match &item.kind {
+                    cst::TopLevelItemKind::TypeDefinition(definition) => {
+                        let kind = crate::definition_collection::kind_of_type_definition(definition);
+                        (make_type(origin), kind)
+                    },
+                    cst::TopLevelItemKind::EffectDefinition(effect) => {
+                        let kind = crate::definition_collection::kind_of_effect_definition(effect);
+                        (make_type(origin), kind)
+                    },
+                    _ => {
+                        let name = item.kind.name().to_string(ctx.as_ref());
+                        db.accumulate(Diagnostic::NotAType { name, location: location.clone() });
+                        (Type::ERROR, Kind::Type)
+                    },
+                }
             },
             Some(origin) => (make_type(origin), Kind::Type),
             // Assume name resolution has already issued an error for this case
@@ -878,11 +883,30 @@ where
                 write!(f, ". ")?;
                 self.fmt_type(typ, parenthesize, f)
             }),
-            Type::Tuple(elements) | Type::Effects(elements) => try_parenthesize(parenthesize, f, |f| {
+            Type::Tuple(elements) => try_parenthesize(parenthesize, f, |f| {
                 for (i, element) in elements.iter().enumerate() {
                     if i != 0 {
                         write!(f, ", ")?;
                     }
+                    // TODO: Improve parenthesization here
+                    self.fmt_type(element, true, f)?;
+                }
+                Ok(())
+            }),
+            Type::Effects(elements) => try_parenthesize(parenthesize, f, |f| {
+                let mut written = 0;
+                for element in elements.iter() {
+                    // Elide empty nested effect rows — these appear when a row variable
+                    // is closed to `no_effects()` during generalization, and they add
+                    // noise like `Use String, ()` without carrying information.
+                    let element = element.follow(self.bindings);
+                    if matches!(element, Type::Effects(inner) if inner.is_empty()) {
+                        continue;
+                    }
+                    if written != 0 {
+                        write!(f, ", ")?;
+                    }
+                    written += 1;
                     // TODO: Improve parenthesization here
                     self.fmt_type(element, true, f)?;
                 }

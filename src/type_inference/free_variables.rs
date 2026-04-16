@@ -99,6 +99,9 @@ impl FreeVars {
                     for argument in pattern.args.iter() {
                         self.declare_pattern(*argument, checker);
                     }
+                    // The synthetic `resume` binding is introduced for each
+                    // branch; declare it so it isn't counted as a free variable.
+                    self.defined_in_fn.insert(pattern.resume_name);
                     self.find_free_variables(*branch, checker);
                 }
             },

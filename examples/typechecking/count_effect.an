@@ -11,45 +11,24 @@ handle_count f =
         0
     | count () -> 1 + resume ()
 
-handle_count foo
+main () =
+    handle_count foo
 
 // args: -e ast-t --no-color
-// expected exit status: 1
 // expected stdout:
 // effect Count with
-//     (count: (error)): fn Unit -> Unit
+//     (count: fn Unit -> Unit can Count): fn Unit -> Unit
 // 
-// (foo: fn Unit -> Unit pure) () =
-//     (count: (error)) ()
-//     (repeat: fn Usz (fn Usz -> Unit pure) -> Unit pure) 10 (fn (_: Usz) -> (count: (error)) ())
+// (foo: fn Unit -> Unit can Count) () =
+//     (count: fn Unit -> Unit can Count) ()
+//     (repeat: fn Usz (fn Usz -> Unit can Count) -> Unit can Count) 10 (fn (_: Usz) -> (count: fn Unit -> Unit can Count) ())
 // 
-// (handle_count: fn _ -> _ pure) (f: _) =
+// (handle_count: fn (fn Unit [_] -> _ can Count, _) -> I32 can _) (f: fn Unit [_] -> _ can Count, _) =
 //     handle 
-//         (f: (error)) ()
+//         (f: fn Unit [_] -> _ can Count, _) ()
 //         0
-//     | (count: (error)) () -> 1 (+: (error)) (resume: (error)) ()
-
-// expected stderr:
-// examples/typechecking/count_effect.an:5:5
-// 4 | foo () =
-// 5 |     count ()	// error: `count` not found in scope
-//   |     ^^^^^
-// 6 |     repeat 10 fn _ -> count ()
+//     | (count: fn Unit -> Unit can Count) () -> (+: fn I32 I32 {Add I32} -> I32 pure) 1 ((resume: fn Unit -> I32 can _) ()) {(add_i32: Add I32)}
 // 
-// examples/typechecking/count_effect.an:6:23
-// 5 |     count ()
-// 6 |     repeat 10 fn _ -> count ()	// error: `count` not found in scope
-//   |                       ^^^^^
-// 
-// examples/typechecking/count_effect.an:9:5
-//  8 | handle_count f =
-//  9 |     handle	// error: Effects and handle expressions are currently unimplemented
-//    |     ^^^^^^
-// 10 |         f ()
-// 
-// examples/typechecking/count_effect.an:14:14
-// 14 | handle_count foo	// error: Expected `=` to begin the function body but found `foo`
-//    |              ^^^
-// 
-// Found 4 errors and 0 warnings
+// (main: fn Unit -> I32 pure) () =
+//     (handle_count: fn (fn Unit -> Unit can Count) -> I32 pure) (foo: fn Unit -> Unit can Count)
 

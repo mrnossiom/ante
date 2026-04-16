@@ -895,6 +895,10 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         let expected_and_e = self.next_type_variable();
         self.check_expr(handle.expression, expected, &expected_and_e);
 
+        // Handler branches may execute multiple times (each time the effect is triggered),
+        // so moves of outer variables inside branches are not allowed.
+        let post_expr_moves = self.move_tracker.clone();
+
         // For each case:
         // - function: fn args.. -> r can e
         // - resume: fn r -> expected can expected_effect
@@ -902,6 +906,8 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         //
         // Note that `resume` doesn't emit the handled effect `e` because Ante uses deep handlers
         for (pattern, branch) in &handle.cases {
+            self.move_tracker = post_expr_moves.clone();
+
             let parameter_types = mapvec(&pattern.args, |_| ParameterType::explicit(self.next_type_variable()));
             let r = self.next_type_variable();
             let e = self.next_type_variable();
@@ -915,6 +921,10 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             self.check_path(pattern.function, &function_type, expected_effect, None, None);
 
             self.unify(&e, &expected_and_e, TypeErrorKind::General, pattern.function);
+
+            // Remember which names exist before the branch so we can
+            // distinguish branch-local variables from outer ones.
+            let outer_names = self.name_types.keys().copied().collect();
 
             for (arg, parameter) in pattern.args.iter().zip(parameter_types) {
                 self.check_pattern(*arg, &parameter.typ, &Type::no_effects());
@@ -931,7 +941,14 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             self.push_implicits_scope();
             self.check_expr(*branch, expected, expected_effect);
             self.pop_implicits_scope();
+
+            // NOTE: When for/while loops are added, this can be reused
+            self.check_moves_in_handler_branch(&post_expr_moves, &outer_names);
         }
+
+        // Restore post-expression move state. Branch-local moves don't propagate
+        // outward since they are scoped to each handler invocation.
+        self.move_tracker = post_expr_moves;
 
         // Link expected_effect to the unhandled effects remaining in expected_and_e.
         // The per-case unify calls extracted each handled effect, so the row tail

@@ -206,6 +206,10 @@ pub enum Diagnostic {
         location: Location,
         moved_in: Location,
     },
+    MoveInHandlerBranch {
+        name: String,
+        location: Location,
+    },
     TraitTypeCantBeUsed {
         location: Location,
     },
@@ -450,6 +454,9 @@ impl Diagnostic {
             Diagnostic::UseOfMovedValue { name, location: _, moved_in: _ } => {
                 format!("Use of moved value {}", name.purple())
             },
+            Diagnostic::MoveInHandlerBranch { name, location: _ } => {
+                format!("Cannot move {} in a handler branch because it may be executed multiple times", name.purple())
+            },
             Diagnostic::TraitTypeCantBeUsed { location: _ } => {
                 format!("Trait types can't be used in this position")
             },
@@ -506,6 +513,7 @@ impl Diagnostic {
             | Diagnostic::TypeAnnotationNeeded { location, .. }
             | Diagnostic::NotAType { location, .. }
             | Diagnostic::UseOfMovedValue { location, .. }
+            | Diagnostic::MoveInHandlerBranch { location, .. }
             | Diagnostic::TraitTypeCantBeUsed { location, .. }
             | Diagnostic::HoleCantBeUsed { location, .. }
             | Diagnostic::FreeVarsInTypeConstructor { location, .. }

@@ -36,6 +36,15 @@ impl MovePath {
         }
     }
 
+    /// Return the root variable name of this path.
+    /// E.g. for `x.one.two`, returns the NameId of `x`.
+    pub(super) fn root_variable(&self) -> NameId {
+        match self {
+            MovePath::Variable(name) => *name,
+            MovePath::Field(parent, _) => parent.root_variable(),
+        }
+    }
+
     /// Build a display name for error messages, e.g. `"c.one.two"`.
     pub(super) fn display_name(&self, context: &ExtendedTopLevelContext) -> String {
         match self {
@@ -200,6 +209,28 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             let moved_in = moved_loc.clone();
             self.compiler.accumulate(Diagnostic::UseOfMovedValue { name, location, moved_in });
             self.move_tracker.errored.insert(path.clone());
+        }
+    }
+
+    /// Emit errors for any non-Copy outer variables moved during a handler branch.
+    /// `pre_branch` is the move state before the branch ran, and `outer_names` is
+    /// the set of NameIds that existed before the branch pattern was introduced.
+    pub(super) fn check_moves_in_handler_branch(
+        &mut self, pre_branch: &MoveTracker, outer_names: &rustc_hash::FxHashSet<NameId>,
+    ) {
+        let new_outer_moves: Vec<(MovePath, Location)> = self
+            .move_tracker
+            .moved
+            .iter()
+            .filter(|(path, _)| !pre_branch.moved.contains_key(*path) && outer_names.contains(&path.root_variable()))
+            .map(|(p, l)| (p.clone(), l.clone()))
+            .collect();
+
+        for (path, location) in new_outer_moves {
+            if !self.type_is_copy(&self.name_types[&path.root_variable()].clone()) {
+                let name = path.display_name(self.current_extended_context());
+                self.compiler.accumulate(Diagnostic::MoveInHandlerBranch { name, location });
+            }
         }
     }
 

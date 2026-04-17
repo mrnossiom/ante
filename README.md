@@ -15,7 +15,7 @@ foo (x: mut Bar) (y: ref a) {Clone a}: a can Fail =
     // Safe, aliasable mutable references
     baz x x
 
-    // Traits
+    // Traits via implicits (no more forced newtype wrappers)
     clone y
 ```
 

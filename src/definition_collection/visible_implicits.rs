@@ -237,4 +237,52 @@ impl Implicits {
         // Finally, for any target type we need to consider all of the impls for unknown traits
         apply_f_to_candidates!(f, &self.unknown_trait_to_impls);
     }
+
+    /// Return true if there are <= 1 implicits for this type
+    pub fn at_most_1_candidate(&self, target_type: &Type) -> bool {
+        let mut count = self.unknown_trait_to_impls.len();
+
+        match get_trait_id_and_first_argument(target_type, false) {
+            Some((trait_id, KeyKind::Key(argument))) => {
+                // Fast case: need to iterate over:
+                // 1. (trait match, argument match)
+                // 2. (trait match, generic argument)
+                if let Some(implicits) = self.known_trait_to_impls.get(&trait_id) {
+                    if let Some(candidates) = implicits.type_to_impls.get(&argument) {
+                        count += candidates.len();
+                    }
+                    count += implicits.generic_type_impls.len();
+                }
+            },
+            Some((trait_id, KeyKind::GenericOrUnknown)) => {
+                // Unknown argument, need to iterate over every impl of the matching trait
+                if let Some(implicits) = self.known_trait_to_impls.get(&trait_id) {
+                    for candidates in implicits.type_to_impls.values() {
+                        count += candidates.len();
+                        if count > 1 {
+                            return false;
+                        }
+                    }
+                    count += implicits.generic_type_impls.len();
+                }
+            },
+            Some((_, KeyKind::Function(_))) => unreachable!("This variant is only used when registering implicits"),
+            None => {
+                // Unknown trait, need to iterate over everything
+                for implicits in self.known_trait_to_impls.values() {
+                    for candidates in implicits.type_to_impls.values() {
+                        count += candidates.len();
+                        if count > 1 {
+                            return false;
+                        }
+                    }
+                    count += implicits.generic_type_impls.len();
+                    if count > 1 {
+                        return false;
+                    }
+                }
+            },
+        }
+        count <= 1
+    }
 }

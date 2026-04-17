@@ -248,12 +248,16 @@ impl Type {
             Type::Generic(Generic::Inferred(id)) => {
                 if let Some(binding) = bindings.get(id) {
                     binding.follow_all_two(bindings, more_bindings)
+                } else if let Some(binding) = more_bindings.get(id) {
+                    binding.follow_all_two(bindings, more_bindings)
                 } else {
                     Type::Generic(Generic::Inferred(*id))
                 }
             },
             Type::Variable(id) => {
                 if let Some(binding) = bindings.get(id) {
+                    binding.follow_all_two(bindings, more_bindings)
+                } else if let Some(binding) = more_bindings.get(id) {
                     binding.follow_all_two(bindings, more_bindings)
                 } else {
                     Type::Variable(*id)
@@ -282,6 +286,7 @@ impl Type {
                 for generic in generics.iter() {
                     if let Generic::Inferred(id) = generic {
                         assert!(!bindings.contains_key(id));
+                        assert!(!more_bindings.contains_key(id));
                     }
                 }
 

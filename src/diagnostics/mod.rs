@@ -183,6 +183,12 @@ pub enum Diagnostic {
         parameter_index: usize,
         location: Location,
     },
+    AmbiguousImplicit {
+        type_string: String,
+        function_name: Option<String>,
+        parameter_index: usize,
+        location: Location,
+    },
     ReturnNotInFunction {
         location: Location,
     },
@@ -428,6 +434,20 @@ impl Diagnostic {
                     type_string.blue(),
                 )
             },
+            Diagnostic::AmbiguousImplicit {
+                type_string,
+                function_name,
+                parameter_index,
+                location: _,
+            } => {
+                let function = function_name.as_ref().map(|s| format!(" of {}", s.purple()));
+                let of_function = function.as_ref().map(String::as_str).unwrap_or("");
+                let parameter = parameter_index + 1;
+                format!(
+                    "Ambiguous implicit of type {} required by parameter {parameter}{of_function}, type annotation required",
+                    type_string.blue(),
+                )
+            },
             Diagnostic::ExpectedTypeKind { actual, location: _ } => {
                 let n = actual.required_argument_count();
                 let s = if n == 1 { "" } else { "s" };
@@ -505,6 +525,7 @@ impl Diagnostic {
             | Diagnostic::ImplicitNotAVariable { location }
             | Diagnostic::NoImplicitFound { location, .. }
             | Diagnostic::MultipleImplicitsFound { location, .. }
+            | Diagnostic::AmbiguousImplicit { location, .. }
             | Diagnostic::ExpectedTypeKind { location, .. }
             | Diagnostic::ExpectedKind { location, .. }
             | Diagnostic::ReturnNotInFunction { location }

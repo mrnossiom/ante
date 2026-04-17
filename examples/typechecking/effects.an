@@ -47,7 +47,7 @@ does_use x =
 // expected stderr:
 // examples/typechecking/effects.an:22:12
 // 21 |     y = get ()
-//    |     // error: Multiple matching implicits found for type Add _ required by parameter 3 of +: add_i8, add_i16, add_i32, add_i64, add_isz, ..
+//    |     // error: Ambiguous implicit of type Add _ required by parameter 3 of +, type annotation required
 // 22 |     set (y + x)
 //    |            ^
 // 

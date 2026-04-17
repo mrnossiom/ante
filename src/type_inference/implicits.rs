@@ -392,8 +392,12 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         let function = implicit.source;
         let destination = implicit.destination;
 
-        // A Vec of (implicit name, implicit origin, implicit type, implicit arguments)
-        // Non-function implicits will not have any arguments
+        // If every argument of the target type is an unbound type variable, any implicit
+        // of the same constructor will match. This happens often when types aren't known
+        // so detect this and end early with a helpful error if there is >1 implicit.
+        let unbound = Self::type_args_all_unbound(&target_type);
+
+        // Each matching implicit candidate we find. We're hoping this will be exactly 1 item
         let mut candidates = Vec::new();
 
         for name in implicits_in_local_scope.iter().copied() {
@@ -423,12 +427,14 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         }
 
         // Need to check globally visible implicits separately
-        // TODO: Make this more efficient so we don't need to go through every single implicit.
-        // We could key each implicit by the type it creates & by the first argument type as well
         if candidates.len() <= MULTIPLE_MATCHING_IMPLS_CUTOFF
             && let Some(item) = self.current_item
         {
             let visible_implicits = VisibleImplicits(item.source_file).get(self.compiler);
+
+            if unbound && !visible_implicits.at_most_1_candidate(&target_type) {
+                return Err(self.ambiguous_implicits_error(&target_type, parameter_index, function));
+            }
 
             visible_implicits.iter_possibly_matching_impls(&target_type, |name, name_id| {
                 if candidates.len() > MULTIPLE_MATCHING_IMPLS_CUTOFF {
@@ -467,6 +473,12 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         } else {
             Err(self.multiple_matching_implicits_error(candidates, &target_type, parameter_index, function))
         }
+    }
+
+    /// True if a `Type::Application`'s arguments are all unbound (false for non-type applications)
+    fn type_args_all_unbound(target: &Type) -> bool {
+        let Some((_ctor, args)) = target.as_application() else { return false };
+        args.iter().all(|arg| matches!(arg, Type::Variable(_)))
     }
 
     /// Check if the given `implicit_type` matches the `target_type` directly, or if it can be
@@ -561,7 +573,15 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         Diagnostic::NoImplicitFound { type_string, function_name, parameter_index, location }
     }
 
-    // error: No implicit found for parameter N of type T
+    // error: Implicit type T is ambiguous, type annotations needed
+    fn ambiguous_implicits_error(&self, implicit_type: &Type, parameter_index: usize, function: ExprId) -> Diagnostic {
+        let type_string = self.type_to_string(&implicit_type);
+        let function_name = self.try_get_name(function);
+        let location = function.locate(self);
+        Diagnostic::AmbiguousImplicit { type_string, function_name, parameter_index, location }
+    }
+
+    // error: Multiple implicits found for parameter N of type T
     fn multiple_matching_implicits_error(
         &self, matching: Vec<Candidate>, implicit_type: &Type, parameter_index: usize, function: ExprId,
     ) -> Diagnostic {

@@ -89,14 +89,13 @@ main () =
 // 3 |     | None -> 1
 // 
 // examples/typechecking/completeness_checking.an:5:12
-// 5 |     match (2, Maybe.None)	// error: Missing case: 1..=18446744073709551615, None
+// 5 |     match (2, Maybe.None)	// error: Missing case: _, None
 //   |            ^^^^^^^^^^^^^
 // 6 |     | (0, None) -> ()
 // 
 // examples/typechecking/completeness_checking.an:16:12
 // 15 |     // Redundant patterns
-//    |     // error: Missing cases: 0, 0..=1, 0, 3..=18446744073709551615, 2..=18446744073709551615, 0..=1, 2..=18446744073709551615, 3..=18446744073709551615
-// 16 |     match (1, 2)
+// 16 |     match (1, 2)	// error: Missing case: _, _
 //    |            ^^^^
 // 17 |     | 1, _ -> 0
 // 

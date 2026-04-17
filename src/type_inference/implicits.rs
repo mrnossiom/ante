@@ -21,6 +21,14 @@ use crate::{
 /// message with and instead display `..`.
 const MULTIPLE_MATCHING_IMPLS_CUTOFF: usize = 5;
 
+#[derive(Clone)]
+struct DeferredClosureCheck {
+    lambda: ExprId,
+    environment: Type,
+    self_name: Option<NameId>,
+    is_move: bool,
+}
+
 #[derive(Default, Clone)]
 pub(super) struct ImplicitsContext {
     /// Any implicits introduced in the current scope. To find all implicits in scope, it is
@@ -34,9 +42,10 @@ pub(super) struct ImplicitsContext {
     /// arguments while its type is still unknown.
     delayed_implicits: Vec<DelayedImplicit>,
 
-    /// Closure checks deferred for coercion wrapper lambdas. These are run after `delayed_implicits`
-    /// are resolved so that free-variable analysis sees the freshly added implicit arguments.
-    deferred_closure_checks: Vec<(ExprId, Type)>,
+    /// Closure checks deferred for coercion wrapper lambdas or lambdas whose implicit scope was
+    /// delayed. These are run after `delayed_implicits` are resolved so that free-variable analysis
+    /// sees the freshly added implicit arguments.
+    deferred_closure_checks: Vec<DeferredClosureCheck>,
 
     /// Any type variables created for integer literals for polymorphic integer types.
     /// If not bound by the end of a scope they will be defaulted to I32.
@@ -63,8 +72,18 @@ struct DelayedImplicit {
 }
 
 impl ImplicitsContext {
-    pub(super) fn push_deferred_closure_check(&mut self, lambda: ExprId, environment: Type) {
-        self.deferred_closure_checks.push((lambda, environment))
+    pub(super) fn push_deferred_closure_check(
+        &mut self, lambda: ExprId, environment: Type, self_name: Option<NameId>, is_move: bool,
+    ) {
+        self.deferred_closure_checks.push(DeferredClosureCheck { lambda, environment, self_name, is_move })
+    }
+
+    fn extend(&mut self, other: ImplicitsContext) {
+        self.implicits_in_scope.extend(other.implicits_in_scope);
+        self.delayed_implicits.extend(other.delayed_implicits);
+        self.deferred_closure_checks.extend(other.deferred_closure_checks);
+        self.integer_type_variables.extend(other.integer_type_variables);
+        self.float_type_variables.extend(other.float_type_variables);
     }
 }
 
@@ -166,55 +185,73 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     /// - Solves any implicits queued in the current scope
     /// - Defaults any integer type variables to I32 that are still unbound in the current scope
     /// - Runs any deferred closure free variable checks after adding implicit arguments
-    pub(super) fn pop_implicits_scope(&mut self) {
+    /// Returns `true` if the scope was delayed (extended into the parent) rather than resolved now.
+    pub(super) fn pop_implicits_scope(&mut self) -> bool {
+        let scope = self.implicits.pop().expect("More pops than pushes to `TypeChecker::implicits`");
+
+        // If there are no implicits defined in the current scope, delay checking them until later
+        // so we get as much type information as possible. This particularly helps for polymorphic
+        // integer literals.
+        if scope.implicits_in_scope.is_empty()
+            && let Some(top) = self.implicits.last_mut()
+        {
+            let has_delayed_implicits = !scope.delayed_implicits.is_empty();
+            top.extend(scope);
+            return has_delayed_implicits;
+        }
+
+        // The rest of this function will query all of `self.implicits` so add the last scope back
+        self.implicits.push(scope);
+
         // We must perform any queued requests before popping any implicits which should be visible
-        if let Some(scope) = self.implicits.last_mut() {
-            let implicits = std::mem::take(&mut scope.delayed_implicits);
-            let closures = std::mem::take(&mut scope.deferred_closure_checks);
-            let integers = std::mem::take(&mut scope.integer_type_variables);
-            let floats = std::mem::take(&mut scope.float_type_variables);
+        let scope = self.implicits.last_mut().unwrap();
 
-            // Phase 1: Try to resolve all implicits. When the target type contains an unbound
-            // integer type variable, unification may still succeed (e.g. searching for `Foo _`
-            // where only `Foo U8` exists binds `_ := U8`). Failures are collected for retry.
-            let mut failed_implicits = Vec::new();
-            let implicits_in_scope = self.collect_implicits_in_scope();
+        let implicits = std::mem::take(&mut scope.delayed_implicits);
+        let closures = std::mem::take(&mut scope.deferred_closure_checks);
+        let integers = std::mem::take(&mut scope.integer_type_variables);
+        let floats = std::mem::take(&mut scope.float_type_variables);
 
-            for implicit in implicits {
-                if let Err(error) = self.find_implicit_value(implicit, &implicits_in_scope) {
-                    failed_implicits.push((implicit, error));
-                }
-            }
+        // Phase 1: Try to resolve all implicits. When the target type contains an unbound
+        // integer type variable, unification may still succeed (e.g. searching for `Foo _`
+        // where only `Foo U8` exists binds `_ := U8`). Failures are collected for retry.
+        let mut failed_implicits = Vec::new();
+        let implicits_in_scope = self.collect_implicits_in_scope();
 
-            // Default any still-unbound integers to I32 and ensure their value fits
-            // in whatever type they are now.
-            for (value, type_variable, location) in integers {
-                self.try_default_integer_to_i32(value, type_variable, location);
-            }
-
-            for (type_variable, location) in floats {
-                self.try_default_float_to_f64(type_variable, location);
-            }
-
-            // Phase 2: Retry implicits that failed in phase 1, now that integer type variables
-            // have been defaulted to I32. This handles cases like `Add _` where phase 1 finds
-            // multiple `Add X` candidates (ambiguous on an unbound integer), but after defaulting
-            // `_ := I32` exactly one candidate remains. If the retry still fails, accumulate the
-            // original error so the diagnostic reflects the unbound type the user wrote.
-            for (implicit, original_error) in failed_implicits {
-                if let Err(_) = self.find_implicit_value(implicit, &implicits_in_scope) {
-                    self.compiler.accumulate(original_error);
-                }
-            }
-
-            // Run deferred closure checks after all implicits (including retries) are resolved
-            // so that free-variable analysis sees the fully-resolved implicit arguments.
-            for (expr, env_type) in closures {
-                self.check_for_closure(expr, &env_type, None, false);
+        for implicit in implicits {
+            if let Err(error) = self.find_implicit_value(implicit, &implicits_in_scope) {
+                failed_implicits.push((implicit, error));
             }
         }
 
+        // Default any still-unbound integers to I32 and ensure their value fits
+        // in whatever type they are now.
+        for (value, type_variable, location) in integers {
+            self.try_default_integer_to_i32(value, type_variable, location);
+        }
+
+        for (type_variable, location) in floats {
+            self.try_default_float_to_f64(type_variable, location);
+        }
+
+        // Phase 2: Retry implicits that failed in phase 1, now that integer type variables
+        // have been defaulted to I32. This handles cases like `Add _` where phase 1 finds
+        // multiple `Add X` candidates (ambiguous on an unbound integer), but after defaulting
+        // `_ := I32` exactly one candidate remains. If the retry still fails, accumulate the
+        // original error so the diagnostic reflects the unbound type the user wrote.
+        for (implicit, original_error) in failed_implicits {
+            if let Err(_) = self.find_implicit_value(implicit, &implicits_in_scope) {
+                self.compiler.accumulate(original_error);
+            }
+        }
+
+        // Run deferred closure checks after all implicits (including retries) are resolved
+        // so that free-variable analysis sees the fully-resolved implicit arguments.
+        for check in closures {
+            self.check_for_closure(check.lambda, &check.environment, check.self_name, check.is_move);
+        }
+
         self.implicits.pop().expect("More pops than pushes to `TypeChecker::implicits`");
+        false
     }
 
     pub(super) fn push_inferred_int(&mut self, value: u64, type_variable: TypeVariableId, location: Location) {
@@ -223,6 +260,21 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
 
     pub(super) fn push_inferred_float(&mut self, type_variable: TypeVariableId, location: Location) {
         self.implicits.last_mut().unwrap().float_type_variables.push((type_variable, location));
+    }
+
+    /// Check if a type variable is a pending polymorphic integer literal across all scopes.
+    /// The given `id` should already be the result of `follow_type`.
+    pub(super) fn is_integer_type_variable(&self, id: TypeVariableId) -> bool {
+        self.implicits.iter().any(|scope| {
+            scope.integer_type_variables.iter().any(|(_, tv, _)| {
+                // Follow the integer's type variable through bindings to compare with
+                // the already-followed query id, since unification may have bound one to the other.
+                match Type::Variable(*tv).follow(&self.bindings) {
+                    Type::Variable(resolved) => *resolved == id,
+                    _ => false,
+                }
+            })
+        })
     }
 
     /// Delay finding an implicit value until later when more types are known.

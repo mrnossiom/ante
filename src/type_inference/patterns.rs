@@ -425,6 +425,10 @@ impl<'tc, 'local, 'db> MatchCompiler<'tc, 'local, 'db> {
                 let definition_type = definition_type.clone();
                 self.compile_userdefined_cases(rows, branch_var, &definition_type, *origin, &[], location)
             },
+            Type::Variable(id) if self.checker.is_integer_type_variable(*id) => {
+                let (cases, fallback) = self.compile_int_cases(rows, branch_var)?;
+                Ok(DecisionTree::Switch(branch_var, cases, Some(fallback)))
+            },
             Type::Generic(_)
             | Type::Variable(_)
             | Type::Primitive(_)

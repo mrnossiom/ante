@@ -521,16 +521,16 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
 
         self.function_return_type = old_return_type;
         self.move_tracker = old_move_tracker;
-        self.pop_implicits_scope();
+        let delayed = self.pop_implicits_scope();
 
         // pop_implicits_scope modifies the function by inserting implicit arguments, we need
         // to check captures only after that step in case any of those arguments are captured.
-        if self.coercion_wrapper_exprs.contains(&expr) {
-            // For coercion wrapper lambdas, the implicit argument slots are filled in by the
-            // *enclosing* lambda's pop_implicits_scope. Defer the closure check to that scope
-            // so free-variable analysis sees the resolved arguments rather than Expr::Error.
+        // When `delayed` is true, the scope's implicits were deferred to the parent and haven't
+        // been resolved yet, so the closure check must also be deferred (same as coercion wrappers
+        // whose argument slots are filled by the enclosing scope's pop_implicits_scope).
+        if self.coercion_wrapper_exprs.contains(&expr) || delayed {
             if let Some(scope) = self.implicits.last_mut() {
-                scope.push_deferred_closure_check(expr, function_type.environment.clone());
+                scope.push_deferred_closure_check(expr, function_type.environment.clone(), self_name, lambda.is_move);
             }
         } else {
             self.check_for_closure(expr, &function_type.environment, self_name, lambda.is_move);

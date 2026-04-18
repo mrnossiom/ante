@@ -84,7 +84,10 @@ where
         },
         cst::TopLevelItemKind::TraitDefinition(_) => unreachable!("Traits should be desguared to types"),
         cst::TopLevelItemKind::TraitImpl(_) => unreachable!("Trait impls should be desguared to definitions"),
-        cst::TopLevelItemKind::EffectDefinition(_) => None,
+        cst::TopLevelItemKind::EffectDefinition(effect_definition) => {
+            context.effect_definition(effect_definition);
+            Some(context.finish())
+        },
         cst::TopLevelItemKind::Comptime(_) => None,
     }
 }
@@ -123,6 +126,13 @@ struct Context<'local, Db> {
 
     /// Any external items will have their name & type stored here
     external: FxHashMap<DefinitionId, super::Extern>,
+
+    /// Cache of whether a given top-level item is an effect definition.
+    ///
+    /// For each Call we have to decide if it is effectful or not to potentially
+    /// issue a Perform instead. This cache is used to avoid issuing a GetItemRaw
+    /// query in some more cases but could be improved more.
+    effect_defs: FxHashMap<TopLevelId, bool>,
 }
 
 impl<'local, Db> Context<'local, Db> {
@@ -143,6 +153,7 @@ impl<'local, Db> Context<'local, Db> {
             finished_functions: Default::default(),
             name_to_id: name_mappings,
             external: Default::default(),
+            effect_defs: Default::default(),
         }
     }
 
@@ -255,7 +266,7 @@ where
             cst::Expr::Lambda(lambda) => self.lambda(lambda, None, None, expr, false),
             cst::Expr::If(if_) => self.if_(if_, expr),
             cst::Expr::Match(_) => self.match_(expr),
-            cst::Expr::Handle(handle) => self.handle(handle),
+            cst::Expr::Handle(handle) => self.handle(handle, expr),
             cst::Expr::Reference(reference) => self.reference(reference),
             cst::Expr::TypeAnnotation(type_annotation) => self.expression(type_annotation.lhs),
             cst::Expr::Constructor(constructor) => self.constructor(constructor, expr),
@@ -449,6 +460,17 @@ where
         let arguments = mapvec(&call.arguments, |expr| self.expression(expr.expr));
         let result_type = self.expr_type(id);
 
+        // TODO: This doesn't handle effect functions used as first-class values
+        // TODO: Effect functions in MIR could be wrapper functions over a single Perform
+        // instruction. Then we wouldn't have to handle this case in each Call at all.
+        if let cst::Expr::Variable(path_id) = &self.context()[call.function] {
+            if let Some(effect_op) = self.try_resolve_effect_op(*path_id) {
+                let arguments = mapvec(&call.arguments, |expr| self.expression(expr.expr));
+                let result_type = self.expr_type(id);
+                return self.push_instruction(Instruction::Perform { effect_op, arguments }, result_type);
+            }
+        }
+
         let instruction = if self.type_of_value(&function).is_closure() {
             Instruction::CallClosure { closure: function, arguments }
         } else {
@@ -456,6 +478,37 @@ where
         };
 
         self.push_instruction(instruction, result_type)
+    }
+
+    /// If `path` resolves to an effect-operation declaration, return its
+    /// [DefinitionId]. Otherwise return None.
+    ///
+    /// We use a cache to avoid hitting inc-complete's locks for every
+    /// call instruction but this can likely be improved further.
+    fn try_resolve_effect_op(&mut self, path: PathId) -> Option<DefinitionId> {
+        let origin = self.context().path_origin(path)?;
+        let Origin::TopLevelDefinition(name) = origin else { return None };
+
+        let is_effect = self.effect_defs.get(&name.top_level_item).copied().unwrap_or_else(|| {
+            let (item, _) = GetItemRaw(name.top_level_item).get(self.compiler);
+            let is_effect = matches!(&item.kind, cst::TopLevelItemKind::EffectDefinition(_));
+            self.effect_defs.insert(name.top_level_item, is_effect);
+            is_effect
+        });
+        if !is_effect {
+            return None;
+        }
+
+        // Cold path: this TopLevelId is an effect definition. Verify that the
+        // referenced NameId is one of its ops (defensive — every name pointing
+        // into an effect def should be an op, but we confirm to be safe).
+        let (item, _) = GetItemRaw(name.top_level_item).get(self.compiler);
+        if let cst::TopLevelItemKind::EffectDefinition(effect) = &item.kind {
+            if effect.body.iter().any(|d| d.name == name.local_name_id) {
+                return Some(self.get_definition_id(&name));
+            }
+        }
+        None
     }
 
     fn try_find_name(&self, pattern: PatternId) -> Option<(Name, NameId)> {
@@ -733,13 +786,13 @@ where
         let int_value = self.extract_tag_value(value_being_matched);
         let start = self.current_block;
 
-        let case_blocks = mapvec(&cases, |_| (self.push_block_no_params(), None));
+        let case_blocks = mapvec(0..cases.len(), |i| (i as u8, (self.push_block_no_params(), None)));
         let mut else_block = None;
 
         let result_type = self.expr_type(match_expr);
         let end = self.push_block(vec![result_type]);
 
-        for ((case_block, _), case) in case_blocks.iter().zip(cases) {
+        for ((_, (case_block, _)), case) in case_blocks.iter().zip(cases) {
             self.switch_to_block(*case_block);
 
             if !case.arguments.is_empty() {
@@ -836,8 +889,60 @@ where
         self.push_instruction(Instruction::Transmute(union), variant_type)
     }
 
-    fn handle(&self, _handle: &cst::Handle) -> Value {
-        todo!("mir handle")
+    fn handle(&mut self, handle: &cst::Handle, expr: ExprId) -> Value {
+        let result_type = self.expr_type(expr);
+
+        // The parser wraps both the handled expression and each branch in closures already
+        let body = self.expression(handle.expression);
+        let cases = mapvec(&handle.cases, |(pattern, branch)| {
+            let effect_op =
+                self.try_resolve_effect_op(pattern.function).expect("Couldn't find effect op in MIR handle");
+            let handler = self.expression(*branch);
+            crate::mir::HandlerCase { effect_op, handler }
+        });
+
+        self.push_instruction(Instruction::Handle { body, cases }, result_type)
+    }
+
+    /// Emit a MIR [Definition] for each operation of an effect definition. The
+    /// body of each stub is `fn op args.. = perform op args..`, ensuring the
+    /// operation can be used as a first-class value (passed to higher-order code)
+    /// while also unambiguously naming the effect via its [DefinitionId].
+    fn effect_definition(&mut self, effect: &cst::EffectDefinition) {
+        for declaration in &effect.body {
+            let name_id = declaration.name;
+            let top_level_name = TopLevelName::new(self.top_level_id, name_id);
+
+            // Skip non-function operations — unusual, treated as values elsewhere.
+            let generalized = self.types.get_generalized(name_id);
+            self.set_generics_in_scope(generalized);
+            let typ = self.convert_type(generalized, None);
+            let Type::Function(fn_type) = &typ else { continue };
+            let fn_type = fn_type.clone();
+
+            let name = self.context()[name_id].clone();
+            let generic_count = self.generics_in_scope.len() as u32;
+            let typ_for_closure = typ.clone();
+
+            let id = self.new_definition(name, Some(name_id), generic_count, typ_for_closure, |this| {
+                let param_values: Vec<Value> = fn_type
+                    .parameters
+                    .iter()
+                    .enumerate()
+                    .map(|(i, pt)| {
+                        this.push_parameter(pt.clone());
+                        Value::Parameter(BlockId::ENTRY_BLOCK, i as u32)
+                    })
+                    .collect();
+
+                // Self-reference: the operation's own DefinitionId is the effect-op tag.
+                let self_id = this.current_function.as_ref().unwrap().id;
+                let perform = Instruction::Perform { effect_op: self_id, arguments: param_values };
+                let result = this.push_instruction(perform, fn_type.return_type.clone());
+                this.terminate_block(TerminatorInstruction::Return(result));
+            });
+            self.name_to_id.insert(top_level_name, id);
+        }
     }
 
     fn reference(&mut self, reference: &cst::Reference) -> Value {

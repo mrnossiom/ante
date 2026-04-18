@@ -622,7 +622,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 }
             },
             (Type::Effects(actual), Type::Effects(expected)) => {
-                // Allow `expected` to be potentially larger than `actual`
+                // Allow `expected` to be potentially larger than `actual`.
                 let (mut actual_effects, actual_var) = self.collect_effects_in_types(actual, new_bindings);
                 let (mut expected_effects, expected_var) = self.collect_effects_in_types(expected, new_bindings);
 
@@ -677,31 +677,8 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
 
     /// Collect all the effects in this type, returning the set of concrete effects
     /// along with the type variable marking it open to extension, if present.
-    fn collect_effects_in_type(&self, typ: &Type, bindings: &TypeBindings) -> (Vec<Type>, Option<TypeVariableId>) {
-        match typ.follow_two(&self.bindings, bindings) {
-            Type::Variable(id) => (Vec::new(), Some(id)),
-            Type::Effects(effects) => self.collect_effects_in_types(&effects, bindings),
-            other => (vec![other], None),
-        }
-    }
-
-    /// Collect all the effects in this type, returning the set of concrete effects
-    /// along with the type variable marking it open to extension, if present.
     fn collect_effects_in_types(&self, types: &[Type], bindings: &TypeBindings) -> (Vec<Type>, Option<TypeVariableId>) {
-        let mut collected = Vec::new();
-        let mut variable = None;
-
-        for typ in types {
-            let (found, found_variable) = self.collect_effects_in_type(typ, bindings);
-            collected.extend(found);
-
-            // TODO: How to type check sets with multiple unbound type variables?
-            if variable.is_none() {
-                variable = found_variable;
-            }
-        }
-
-        (collected, variable)
+        Type::collect_effects_in_types(types, &self.bindings, bindings)
     }
 
     /// Try to bind a type variable, possibly erroring instead if the binding would lead

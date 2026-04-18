@@ -92,18 +92,14 @@ fn desugar_impl(impl_: &TraitImpl, context: &mut DesugarContext) -> Definition {
         })
         .collect();
 
-    // Build new parameters with expanded env types (e.g. `Print a` → `Print a [env_0]`).
+    // Build new parameters with expanded env types (e.g. `Print a` -> `Print a [env_0]`).
     // This prevents `from_cst_type_no_type_variables` from auto-inserting fresh type variables.
-    let expanded_parameters: Vec<cst::Parameter> = param_infos
-        .iter()
-        .enumerate()
-        .map(|(i, (is_implicit, inner, typ))| {
-            let env_name = context.push_name(Arc::new(format!("[env_{}]", i)), location.clone());
-            let expanded_type = add_env_to_trait_type(typ, env_name, &location);
-            let new_pattern = context.push_pattern(Pattern::TypeAnnotation(*inner, expanded_type), location.clone());
-            cst::Parameter { is_implicit: *is_implicit, is_mutable: false, pattern: new_pattern }
-        })
-        .collect();
+    let expanded_parameters = mapvec(param_infos.iter().enumerate(), |(i, (is_implicit, inner, typ))| {
+        let env_name = context.push_name(Arc::new(format!("[env_{}]", i)), location.clone());
+        let expanded_type = add_env_to_trait_type(typ, env_name, &location);
+        let new_pattern = context.push_pattern(Pattern::TypeAnnotation(*inner, expanded_type), location.clone());
+        cst::Parameter::with_implicit(new_pattern, *is_implicit)
+    });
 
     if !impl_.trait_arguments.is_empty() || !impl_.parameters.is_empty() {
         let app_location = location.clone();
@@ -323,7 +319,7 @@ fn desugar_loop(expr: ExprId, context: &mut DesugarContext) {
                     (pattern, expr)
                 },
             };
-            (Parameter { is_implicit: false, is_mutable: false, pattern }, Argument::explicit(expr))
+            (Parameter::new(pattern), Argument::explicit(expr))
         })
         .unzip();
 
@@ -375,7 +371,7 @@ fn desugar_call_wildcards(expr: ExprId, context: &mut DesugarContext) {
             let name_id = context.push_name(cst::Name::new(name.clone()), location.clone());
 
             let pattern = context.push_pattern(Pattern::Variable(name_id), location.clone());
-            parameters.push(Parameter { is_implicit: arg.is_implicit, is_mutable: false, pattern });
+            parameters.push(Parameter::with_implicit(pattern, arg.is_implicit));
 
             let path = cst::Path::ident(name, location.clone());
             let path_id = context.push_path(path, location.clone());
@@ -576,7 +572,7 @@ fn desugar_tilde_arrow(expr: ExprId, context: &mut DesugarContext) {
 
     let pattern = context.push_pattern(cst::Pattern::Literal(Literal::Unit), location.clone());
     let lambda = Expr::Lambda(cst::Lambda {
-        parameters: vec![cst::Parameter { is_implicit: false, is_mutable: false, pattern }],
+        parameters: vec![cst::Parameter::new(pattern)],
         return_type: None,
         effects: None,
         body: a,

@@ -495,6 +495,18 @@ impl<'ctx> ModuleContext<'ctx> {
                     .try_as_basic_value()
                     .unwrap_basic()
             },
+            mir::Instruction::Perform { .. } => {
+                unreachable!(
+                    "Instruction::Perform reached LLVM codegen — it must be removed by the \
+                     tail-resume optimization or coroutine lowering passes first"
+                )
+            },
+            mir::Instruction::Handle { .. } => {
+                unreachable!(
+                    "Instruction::Handle reached LLVM codegen — it must be removed by the \
+                     tail-resume optimization or coroutine lowering passes first"
+                )
+            },
             mir::Instruction::CallClosure { closure, arguments } => {
                 let typ = self.convert_function_type(&self.mir.type_of_value(closure, function)).unwrap();
                 let closure = self.lookup_value(closure).into_struct_value();
@@ -705,7 +717,23 @@ impl<'ctx> ModuleContext<'ctx> {
             },
             mir::Instruction::SizeOf(_) => todo!("SizeOf should be removed by monomorphization"),
             mir::Instruction::Extern(name) => {
-                todo!("Import extern {name}")
+                let typ = function.instruction_result_type(id);
+                match self.convert_function_type(typ) {
+                    Some(fn_type) => {
+                        let fn_val = self
+                            .module
+                            .get_function(name)
+                            .unwrap_or_else(|| self.module.add_function(name, fn_type, None));
+                        fn_val.as_global_value().as_pointer_value().into()
+                    },
+                    None => {
+                        let global = self
+                            .module
+                            .get_global(name)
+                            .unwrap_or_else(|| self.module.add_global(self.convert_type(typ), None, name));
+                        global.as_pointer_value().into()
+                    },
+                }
             },
         };
         self.values.insert(mir::Value::InstructionResult(id), result);
@@ -774,10 +802,11 @@ impl<'ctx> ModuleContext<'ctx> {
             TerminatorInstruction::Switch { int_value, cases, else_, end: _ } => {
                 let int_value = self.lookup_value(int_value).into_int_value();
 
-                let cases = mapvec(cases.iter().enumerate(), |(i, (case_block, case_args))| {
+                let cases = mapvec(cases.iter(), |(case_value, target)| {
+                    let (case_block, case_args) = target;
                     self.remember_incoming(*case_block, case_args);
                     let case_block = self.blocks[*case_block];
-                    let int_value = int_value.get_type().const_int(i as u64, false);
+                    let int_value = int_value.get_type().const_int(*case_value as u64, false);
                     (int_value, case_block)
                 });
 

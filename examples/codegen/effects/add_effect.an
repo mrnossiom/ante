@@ -2,12 +2,12 @@ effect Add with
     add: fn U32 -> Unit
 
 foo () can Add =
-    print "foo"
+    println "foo"
     add 1
     add 2
 
 bar () =
-    print "bar"
+    println "bar"
     add 3
     add 4
 
@@ -17,19 +17,26 @@ sum_all () =
         bar ()
         0u32 // TODO: remove suffix
     | add y ->
-        print "add called"
+        println "add called"
         r = resume ()
-        print "add resume finished"
+        println "add resume finished"
         y + r
 
 // 10
 main () =
-    sum_all () |> print
+    sum_all () |> println
 
 // args: --delete-binary --no-color
-// expected exit status: 101
-// expected stderr:
-// thread '<unnamed>' panicked at src/mir/builder/mod.rs:840:9:
-// not yet implemented: mir handle
-// note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+// expected stdout:
+// foo
+// add called
+// add called
+// bar
+// add called
+// add called
+// add resume finished
+// add resume finished
+// add resume finished
+// add resume finished
+// 10
 

@@ -151,6 +151,41 @@ impl Definition {
                 Instruction::Call { function, arguments } | Instruction::CallClosure { closure: function, arguments } => {
                     self.type_check_call(function, arguments, id, result_type, mir);
                 },
+                Instruction::Perform { effect_op, arguments } => {
+                    let op_value = Value::Definition(*effect_op);
+                    let op_type = mir.type_of_value(&op_value, self);
+
+                    let Type::Function(op_fn) = op_type else {
+                        instr_panic!(self, id, mir, "effect_op is not a function");
+                    };
+
+                    instr_assert_eq!(
+                        op_fn.parameters.len(), arguments.len(),
+                        self, id, mir,
+                        "Perform arg count does not match effect op arg count"
+                    );
+                    for (i, (param, arg)) in op_fn.parameters.iter().zip(arguments).enumerate() {
+                        let arg_type = mir.type_of_value(arg, self);
+                        if *param != Type::ERROR && arg_type != Type::ERROR {
+                            instr_assert_eq!(*param, arg_type, self, id, mir, "Type mismatch in arg {i} of perform");
+                        }
+                    }
+                    instr_assert_eq!(op_fn.return_type, *result_type, self, id, mir, "Perform result type does not match effect op return type");
+                },
+                Instruction::Handle { body, cases } => {
+                    let Type::Function(body) = mir.type_of_value(body, self) else {
+                        instr_panic!(self, id, mir, "Handle body is not a function");
+                    };
+
+                    instr_assert_eq!(body.return_type, *result_type, self, id, mir, "Handle body return type does not match Handle result type");
+
+                    for case in cases {
+                        let Type::Function(handler) = mir.type_of_value(&case.handler, self) else {
+                            instr_panic!(self, id, mir, "Handle branch is not a function");
+                        };
+                        instr_assert_eq!(handler.return_type, *result_type, self, id, mir, "Handle branch return type does not match Handle result type");
+                    }
+                },
                 Instruction::PackClosure { function, environment } => {
                     let function_type = mir.type_of_value(function, self);
                     let environment_type = mir.type_of_value(environment, self);
@@ -386,8 +421,8 @@ impl Definition {
                     let int_type = mir.type_of_value(int_value, self);
                     assert!(matches!(int_type, Type::Primitive(PrimitiveType::Int(_))));
 
-                    for case in cases {
-                        block_arg_type_checks(case);
+                    for (_, jmp) in cases {
+                        block_arg_type_checks(jmp);
                     }
 
                     if let Some(else_) = else_ {

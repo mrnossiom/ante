@@ -33,31 +33,18 @@ for_ (stream: fn Unit -> Unit can Emit a) (f: fn a -> Unit pure) =
         f x
         resume ()
 
-my_print (x1: (U32, U32)) =
-    print (first x1)
-    print ", "
-    print (second x1)
-
 main () =
     iota 10
         ~> filter (_ %% 2)
         ~> map (_ * 2)
         ~> enumerate
-        ~> for_ my_print
+        ~> for_ println
 
 // args: --delete-binary --no-color
-// expected exit status: 101
-// expected stderr:
-// thread '<unnamed>' panicked at src/mir/builder/mod.rs:840:9:
-// not yet implemented: mir handle
-// note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
-// 
-// thread '<unnamed>' panicked at src/mir/builder/mod.rs:840:9:
-// not yet implemented: mir handle
-// 
-// thread '<unnamed>' panicked at src/mir/builder/mod.rs:840:9:
-// not yet implemented: mir handle
-// 
-// thread '<unnamed>' panicked at src/mir/builder/mod.rs:840:9:
-// not yet implemented: mir handle
+// expected stdout:
+// 0, 0
+// 1, 4
+// 2, 8
+// 3, 12
+// 4, 16
 

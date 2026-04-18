@@ -1,5 +1,7 @@
 use std::process::Command;
 
+use crate::paths::aminicoro_path;
+
 pub mod llvm;
 
 pub fn link_with_gcc(object_filename: &str, binary_filename: &str) -> bool {
@@ -7,7 +9,7 @@ pub fn link_with_gcc(object_filename: &str, binary_filename: &str) -> bool {
     let output = format!("-o{}", binary_filename);
     let mut child = Command::new("gcc")
         .arg(object_filename)
-        //.arg(minicoro_path())
+        .arg(aminicoro_path())
         .arg("-Wno-everything")
         .arg("-O0")
         .arg("-lm")

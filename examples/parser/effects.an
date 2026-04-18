@@ -44,15 +44,15 @@ map4 (l: List a) (f: fn a -> b) : List b can Log = ()
 //     set: fn a I32 -> Unit
 // 
 // main () =
-//     handle log "test1"
-//     | log s -> print s
-//     handle 
+//     handle fn -> log "test1"
+//     | log s -> fn s resume -> print s
+//     handle fn ->
 //         log "test2"
-//     handle foo + bar
-//     | set 0 a -> resume ()
-//     | get () -> foo resume 1
-//     | set _ b -> resume ()
-//     handle ()
+//     handle fn -> foo + bar
+//     | set 0 a -> fn 0 a resume -> resume ()
+//     | get () -> fn () resume -> foo resume 1
+//     | set _ b -> fn _ b resume -> resume ()
+//     handle fn -> ()
 //     map1 (l: List a) (f: fn a -> b can Log) : List b = ()
 //     map2 (l: List a) (f: fn a -> b pure) : List b = ()
 //     map3 (l: List a) (f: fn a -> b pure) : List b pure = ()

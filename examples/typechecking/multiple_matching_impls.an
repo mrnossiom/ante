@@ -49,14 +49,14 @@ impl candidate2: Foo Thing with
 // type Baz a [env] =
 //     baz: fn a [[env]] -> Unit
 // 
-// (main: fn Unit -> _ pure) () =
-//     (foo: (error)) ((Thing: fn Unit -> Thing pure) ())
+// (main: fn Unit -> Unit pure) () =
+//     (Foo.foo: fn Thing {Foo Thing} -> Unit pure) ((Thing: fn Unit -> Thing pure) ()) {(error)}
 // 
 // implicit (candidate1: fn {Bar a} -> Foo a pure) {(_: Bar a)} : Foo a (Bar a [env_0]) pure = Foo a (Bar a [env_0]) with
-//     (foo: fn a [(Bar a)] -> Unit pure) = fn (a: a) -> (bar: fn {Baz _} -> Bar _ pure) (a: a)
+//     (foo: fn a [(Bar a)] -> Unit pure) = fn (a: a) [(_: Bar a)] -> (Bar.bar: fn a {Bar a} -> Unit pure) (a: a) {(_: Bar a)}
 // 
 // implicit (bar: fn {Baz a} -> Bar a pure) {(_: Baz a)} : Bar a (Baz a [env_0]) pure = Bar a (Baz a [env_0]) with
-//     (bar: fn a [(Baz a)] -> Unit pure) = fn (a: a) -> (baz: Baz Thing) (a: a)
+//     (bar: fn a [(Baz a)] -> Unit pure) = fn (a: a) [(_: Baz a)] -> (Baz.baz: fn a {Baz a} -> Unit pure) (a: a) {(_: Baz a)}
 // 
 // implicit (baz: Baz Thing) = Baz Thing NoClosureEnv with
 //     (baz: fn Thing -> Unit pure) = fn (_: Thing) -> ()
@@ -70,31 +70,9 @@ impl candidate2: Foo Thing with
 // expected stderr:
 // examples/typechecking/multiple_matching_impls.an:15:5
 // 14 |     // The call from which the `Foo a` constraint arises
-// 15 |     foo (Thing ())	// error: `foo` not found in scope
-//    |     ^^^
-// 
-// examples/typechecking/multiple_matching_impls.an:19:5
-// 18 | impl candidate1 {_: Bar a}: Foo a with
-//    |     // error: Expected the closure environment (Bar a), but the actual environment was empty
-// 19 |     foo a = bar a
-//    |     ^^^
-// 
-// examples/typechecking/multiple_matching_impls.an:19:13
-// 18 | impl candidate1 {_: Bar a}: Foo a with
-//    |     // error: Expected fn _ [_] -> Unit pure but found fn {Baz _} -> Bar _ pure
-// 19 |     foo a = bar a
-//    |             ^^^
-// 
-// examples/typechecking/multiple_matching_impls.an:22:5
-// 21 | impl bar {_: Baz a}: Bar a with
-//    |     // error: Expected the closure environment (Baz a), but the actual environment was empty
-// 22 |     bar a = baz a
-//    |     ^^^
-// 
-// examples/typechecking/multiple_matching_impls.an:22:13
-// 21 | impl bar {_: Baz a}: Bar a with
-// 22 |     bar a = baz a	// error: Expected fn _ [_] -> Unit pure but found Baz Thing
-//    |             ^^^
+//    |     // error: Multiple matching implicits found for type Foo Thing required by parameter 2 of foo: candidate2, candidate1
+// 15 |     Foo.foo (Thing ())
+//    |     ^^^^^^^
 // 
 // examples/typechecking/multiple_matching_impls.an:30:5
 // 29 | impl does_not_match {_: Print a}: Foo a with
@@ -102,5 +80,5 @@ impl candidate2: Foo Thing with
 // 30 |     foo _ = ()
 //    |     ^^^
 // 
-// Found 6 errors and 0 warnings
+// Found 2 errors and 0 warnings
 

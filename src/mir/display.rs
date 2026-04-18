@@ -256,11 +256,11 @@ fn fmt_terminator(terminator: &mir::TerminatorInstruction, mir: Option<&mir::Mir
         mir::TerminatorInstruction::Result(value) => write!(f, "result {}", v(value)),
         mir::TerminatorInstruction::Switch { int_value, cases, else_, end } => {
             writeln!(f, "switch {}", v(int_value))?;
-            for (i, (case_block, case_arg)) in cases.iter().enumerate() {
+            for (i, (case_value, (case_block, case_arg))) in cases.iter().enumerate() {
                 if i != 0 {
                     writeln!(f)?;
                 }
-                write!(f, "    | {i} -> {case_block}")?;
+                write!(f, "    | {case_value} -> {case_block}")?;
                 if let Some(arg) = case_arg {
                     write!(f, " {}", v(arg))?;
                 }
@@ -296,6 +296,18 @@ fn fmt_instruction(
             write!(f, "closure-call {}", v(closure))?;
             for argument in arguments {
                 write!(f, " {}", v(argument))?;
+            }
+        },
+        mir::Instruction::Perform { effect_op, arguments } => {
+            write!(f, "perform {effect_op}")?;
+            for argument in arguments {
+                write!(f, " {}", v(argument))?;
+            }
+        },
+        mir::Instruction::Handle { body, cases } => {
+            write!(f, "handle {}", v(body))?;
+            for case in cases {
+                write!(f, " | {} -> {}", case.effect_op, v(&case.handler))?;
             }
         },
         mir::Instruction::PackClosure { function, environment } => {

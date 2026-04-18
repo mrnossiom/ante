@@ -29,7 +29,9 @@ use crate::{
 pub(crate) mod builder;
 mod closure_deconversion;
 mod display;
+mod effect_lowering;
 pub(crate) mod monomorphization;
+mod tail_resume_optimization;
 mod validation;
 
 #[derive(Default)]
@@ -245,7 +247,7 @@ impl Definition {
                         stack.push(else_.0);
                         blocks.push(else_.0);
                     }
-                    for case in cases.iter().rev() {
+                    for (_, case) in cases.iter().rev() {
                         stack.push(case.0);
                         blocks.push(case.0);
                     }
@@ -377,6 +379,23 @@ pub enum Instruction {
         closure: Value,
         arguments: Vec<Value>,
     },
+    /// Transfers control to the handler for `effect_op` somewhere up the call stack.
+    ///
+    /// This instruction will later be removed by either the tail resume optimization pass
+    /// (if its handler uses resume in a tail position) or the effect lowering pass otherwise.
+    Perform {
+        effect_op: DefinitionId,
+        arguments: Vec<Value>,
+    },
+    /// Run `body: fn () [env] -> r`. Any `Perform` instructions to an `effect_op` in this
+    /// handle's cases will transfer control to that case.
+    ///
+    /// Each case contains a closure of type `fn (op_args...) (fn r -> r2) [env] -> r2` where the
+    /// last function argument is the `resume` or continuation function.
+    Handle {
+        body: Value,
+        cases: Vec<HandlerCase>,
+    },
     /// Returns a closure value after packing the function with the given environment.
     /// This is equivalent to a `MakeTuple` instruction but is distinguished because the
     /// compiler will optimize closure values & calls into free functions, removing the
@@ -467,6 +486,14 @@ pub enum Instruction {
     SizeOf(Type),
 }
 
+/// A handler case attached to an [Instruction::Handle]. Maps an effect operation
+/// (identified by its top-level [DefinitionId]) to the function that handles it.
+#[derive(Debug, Clone)]
+pub struct HandlerCase {
+    pub effect_op: DefinitionId,
+    pub handler: Value,
+}
+
 impl Instruction {
     pub fn for_each_value(&self, mut f: impl FnMut(&Value)) {
         let mut two = |a, b| {
@@ -481,6 +508,13 @@ impl Instruction {
             Instruction::CallClosure { closure: function, arguments } => {
                 f(function);
                 arguments.iter().for_each(f);
+            },
+            Instruction::Perform { effect_op: _, arguments } => arguments.iter().for_each(f),
+            Instruction::Handle { body, cases } => {
+                f(body);
+                for case in cases {
+                    f(&case.handler);
+                }
             },
             Instruction::PackClosure { function, environment } => two(function, environment),
             Instruction::IndexTuple { tuple, index: _ } => f(tuple),
@@ -545,7 +579,8 @@ pub enum TerminatorInstruction {
     },
     Switch {
         int_value: Value,
-        cases: Vec<JmpTarget>,
+        /// Each `u8` here is the tag to match.
+        cases: Vec<(u8, JmpTarget)>,
         else_: Option<JmpTarget>,
         end: BlockId,
     },
@@ -586,7 +621,7 @@ impl TerminatorInstruction {
             },
             TerminatorInstruction::Switch { int_value, cases, else_, end: _ } => {
                 f(int_value);
-                for (_, case_value) in cases {
+                for (_, (_, case_value)) in cases {
                     if let Some(value) = case_value {
                         f(value);
                     }
@@ -1044,7 +1079,7 @@ mod tests {
 
         function.blocks[b0].terminator = Some(TerminatorInstruction::Switch {
             int_value: Value::Unit,
-            cases: vec![(b1, None), (b2, None), (b3, None)],
+            cases: vec![(0, (b1, None)), (1, (b2, None)), (2, (b3, None))],
             else_: Some((b4, None)),
             end: b5,
         });

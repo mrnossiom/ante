@@ -29,15 +29,13 @@ filtered () =
     filter zero_to_nine (_ %% 2)
 
 main () =
-    for_ filtered print
+    for_ filtered println
 
 // args: --delete-binary --no-color
-// expected exit status: 101
-// expected stderr:
-// thread '<unnamed>' panicked at src/mir/builder/mod.rs:840:9:
-// not yet implemented: mir handle
-// note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
-// 
-// thread '<unnamed>' panicked at src/mir/builder/mod.rs:840:9:
-// not yet implemented: mir handle
+// expected stdout:
+// 0
+// 2
+// 4
+// 6
+// 8
 

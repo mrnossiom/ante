@@ -70,6 +70,8 @@ where
             acc.extend(monomorphized)
         })
         .reduce(Mir::default, Mir::extend)
+        .optimize_tail_resume()
+        .lower_effects(TargetPointerSize.get(compiler))
         .assert_fully_linked()
         .assert_type_checks()
         .assert_no_unions_or_generics()
@@ -237,6 +239,17 @@ impl<'local> FunctionContext<'local> {
                 self.remap_value(function);
                 for arg in arguments.iter_mut() {
                     self.remap_value(arg);
+                }
+            },
+            Instruction::Perform { effect_op: _, arguments } => {
+                for arg in arguments.iter_mut() {
+                    self.remap_value(arg);
+                }
+            },
+            Instruction::Handle { body, cases } => {
+                self.remap_value(body);
+                for case in cases.iter_mut() {
+                    self.remap_value(&mut case.handler);
                 }
             },
             Instruction::PackClosure { function, environment } => {

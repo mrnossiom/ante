@@ -648,7 +648,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                     let expr = self.push_expr(cst::Expr::Variable(var_path), arg_type.typ, location);
 
                     arguments.push(cst::Argument { is_implicit: arg_type.is_implicit, expr });
-                    parameters.push(cst::Parameter { is_implicit: arg_type.is_implicit, is_mutable: false, pattern });
+                    parameters.push(cst::Parameter::with_implicit(pattern, arg_type.is_implicit));
                 },
             }
         }

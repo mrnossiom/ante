@@ -434,12 +434,7 @@ impl Diagnostic {
                     type_string.blue(),
                 )
             },
-            Diagnostic::AmbiguousImplicit {
-                type_string,
-                function_name,
-                parameter_index,
-                location: _,
-            } => {
+            Diagnostic::AmbiguousImplicit { type_string, function_name, parameter_index, location: _ } => {
                 let function = function_name.as_ref().map(|s| format!(" of {}", s.purple()));
                 let of_function = function.as_ref().map(String::as_str).unwrap_or("");
                 let parameter = parameter_index + 1;

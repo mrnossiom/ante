@@ -370,6 +370,28 @@ pub struct Parameter {
     pub pattern: PatternId,
 }
 
+impl Parameter {
+    /// Creates a new, non-implicit, immutable parameter
+    pub fn new(pattern: PatternId) -> Parameter {
+        Parameter { pattern, is_implicit: false, is_mutable: false }
+    }
+
+    /// Creates a new, implicit, immutable parameter
+    pub fn implicit(pattern: PatternId) -> Parameter {
+        Parameter { pattern, is_implicit: true, is_mutable: false }
+    }
+
+    /// Creates a new, immutable parameter with the given `is_implicit` value
+    pub fn with_implicit(pattern: PatternId, is_implicit: bool) -> Parameter {
+        Parameter { pattern, is_implicit, is_mutable: false }
+    }
+
+    /// Creates a new, non-implicit, mutable parameter
+    pub fn mutable(pattern: PatternId) -> Parameter {
+        Parameter { pattern, is_implicit: false, is_mutable: true }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
 pub struct If {
     pub condition: ExprId,

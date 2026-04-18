@@ -79,7 +79,7 @@ where
                 self.convert_type_variable(*id, Type::UNIT)
             },
             TCType::Function(function_type) => {
-                // TODO: Effects
+                // Effects on the function type are dropped in MIR
                 let parameters = mapvec(&function_type.parameters, |typ| self.convert_type(&typ.typ, None));
 
                 // Default to NoClosureEnv instead of Unit
@@ -101,10 +101,8 @@ where
                 let elements = mapvec(elements.iter(), |t| self.convert_type(t, None));
                 Type::Tuple(Arc::new(elements))
             },
-            TCType::Effects(_effects) => {
-                // TODO: todo!("mir convert type called on Effects")
-                Type::ERROR
-            },
+            // Nothing should actually use this result
+            TCType::Effects(_effects) => Type::UNIT,
         }
     }
 

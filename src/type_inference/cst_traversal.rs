@@ -1,5 +1,7 @@
 use std::{borrow::Cow, collections::BTreeMap, sync::Arc};
 
+use rustc_hash::FxHashSet;
+
 use crate::{
     diagnostics::{Diagnostic, Location, UnimplementedItem},
     incremental::{ExportedDefinitions, GetItemRaw, GetType, Resolve},
@@ -16,6 +18,21 @@ use crate::{
         types::{self, FunctionType, ParameterType, Type, TypeBindings},
     },
 };
+
+/// `handle` exprs involve closures with special behavior.
+/// `Default` on this is intended to be the default behavior for a non-handle lambda.
+#[derive(Default)]
+struct LambdaOptions {
+    /// When true, skip `try_close_lambda_effects` for this lambda. Used for a `handle`'s
+    /// body & branches whose effect rows need to be set up by `check_handle` after
+    /// `check_lambda` returns. Without this they're closed too early and set to `pure`.
+    suppress_effect_closure: bool,
+
+    /// When `Some`, the lambda is a handler branch and should have the affine
+    /// handler-branch check applied to its move tracker. The set is the names
+    /// visible before the branch introduces its own pattern bindings.
+    handler_branch_outer_names: Option<FxHashSet<NameId>>,
+}
 
 impl<'local, 'inner> TypeChecker<'local, 'inner> {
     pub(super) fn check_definition(&mut self, definition: &Definition, expected_effect: &Type) {
@@ -461,6 +478,13 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     }
 
     fn check_lambda(&mut self, lambda: &cst::Lambda, expected: &Type, expr: ExprId, self_name: Option<NameId>) {
+        self.check_lambda_impl(lambda, expected, expr, self_name, LambdaOptions::default());
+    }
+
+    fn check_lambda_impl(
+        &mut self, lambda: &cst::Lambda, expected: &Type, expr: ExprId, self_name: Option<NameId>,
+        options: LambdaOptions,
+    ) {
         let function_type = match self.follow_type(expected) {
             Type::Function(function_type) => function_type.clone(),
             _ => {
@@ -519,6 +543,15 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
 
         self.check_expr(lambda.body, &return_type, &function_type.effects);
 
+        // If this lambda is a handler branch, report any non-Copy outer
+        // variables moved inside the branch body before we discard the
+        // branch's move tracker. `self.move_tracker` at this point is the
+        // branch-local tracker that `mem::take` above started empty.
+        if let Some(outer_names) = options.handler_branch_outer_names.as_ref() {
+            let pre_branch = super::affine::MoveTracker::default();
+            self.check_moves_in_handler_branch(&pre_branch, outer_names);
+        }
+
         self.function_return_type = old_return_type;
         self.move_tracker = old_move_tracker;
         let delayed = self.pop_implicits_scope();
@@ -536,7 +569,9 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             self.check_for_closure(expr, &function_type.environment, self_name, lambda.is_move);
         }
 
-        self.try_close_lambda_effects(&function_type);
+        if !options.suppress_effect_closure {
+            self.try_close_lambda_effects(&function_type);
+        }
 
         // For `move` closures, record that each captured non-Copy variable has been moved
         // in the outer scope. Copy types are simply copied into the environment.
@@ -890,24 +925,40 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     }
 
     fn check_handle(&mut self, handle: &cst::Handle, expected: &Type, expected_effect: &Type, expr: ExprId) {
-        // expression: expected can expected_effect, e
-        // where `e` is the handled effect
+        // `can expected_effect, e`
         let expected_and_e = self.next_type_variable();
-        self.check_expr(handle.expression, expected, &expected_and_e);
 
-        // Handler branches may execute multiple times (each time the effect is triggered),
-        // so moves of outer variables inside branches are not allowed.
-        let post_expr_moves = self.move_tracker.clone();
+        // Body: fn () -> expected can expected_and_e
+        let body_env = self.next_type_variable();
+        let body_type = Type::Function(Arc::new(FunctionType {
+            parameters: Vec::new(),
+            environment: body_env,
+            return_type: expected.clone(),
+            effects: expected_and_e.clone(),
+        }));
+        self.expr_types.insert(handle.expression, body_type.clone());
+
+        // `check_lambda_impl` typically closes polymorphic effectful functions for simpler
+        // function signatures. We need to stop that here since we're going to add an effect to it later.
+        let options = LambdaOptions { suppress_effect_closure: true, ..Default::default() };
+        let body_lambda = self.unwrap_lambda(handle.expression);
+        self.check_lambda_impl(&body_lambda, &body_type, handle.expression, None, options);
+
+        // Snapshot the set of names visible before any handler branch runs.
+        // Each branch is checked against this snapshot so moves of non-Copy
+        // outer variables inside a branch are reported — a branch can fire
+        // more than once, so those moves are not safe.
+        // TODO: This is inefficient, remove the need for collecting here
+        let outer_names = self.name_types.keys().copied().collect::<FxHashSet<_>>();
 
         // For each case:
-        // - function: fn args.. -> r can e
-        // - resume: fn r -> expected can expected_effect
-        // - branch: expected can expected_effect
+        // - pattern.function: fn args.. -> r can e  (the effect op declared type)
+        // - branch lambda:    fn args.. resume -> expected can expected_effect
+        // - resume:           fn r -> expected can expected_effect
         //
-        // Note that `resume` doesn't emit the handled effect `e` because Ante uses deep handlers
+        // `resume` doesn't raise `e` since handlers in Ante are deep: each call to
+        // resume is automatically handled by the same handler.
         for (pattern, branch) in &handle.cases {
-            self.move_tracker = post_expr_moves.clone();
-
             let parameter_types = mapvec(&pattern.args, |_| ParameterType::explicit(self.next_type_variable()));
             let r = self.next_type_variable();
             let e = self.next_type_variable();
@@ -919,42 +970,48 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 effects: e.clone(),
             }));
             self.check_path(pattern.function, &function_type, expected_effect, None, None);
-
             self.unify(&e, &expected_and_e, TypeErrorKind::General, pattern.function);
 
-            // Remember which names exist before the branch so we can
-            // distinguish branch-local variables from outer ones.
-            let outer_names = self.name_types.keys().copied().collect();
-
-            for (arg, parameter) in pattern.args.iter().zip(parameter_types) {
-                self.check_pattern(*arg, &parameter.typ, &Type::no_effects());
-            }
-
+            // resume is a closure capturing its environment by reference.
+            // The coroutine lowering pass supplies a closure with an env pointing to `(coro, handlers..)`.
             let resume_type = Type::Function(Arc::new(FunctionType {
                 parameters: vec![ParameterType::explicit(r)],
-                environment: Type::NO_CLOSURE_ENV,
+                environment: Type::Primitive(types::PrimitiveType::Pointer),
                 return_type: expected.clone(),
                 effects: expected_effect.clone(),
             }));
-            self.check_name(pattern.resume_name, &resume_type);
 
-            self.push_implicits_scope();
-            self.check_expr(*branch, expected, expected_effect);
-            self.pop_implicits_scope();
+            let mut handler_params = parameter_types;
+            handler_params.push(ParameterType::explicit(resume_type));
+            let handler_type = Type::Function(Arc::new(FunctionType {
+                parameters: handler_params,
+                environment: self.next_type_variable(),
+                return_type: expected.clone(),
+                effects: expected_effect.clone(),
+            }));
 
-            // NOTE: When for/while loops are added, this can be reused
-            self.check_moves_in_handler_branch(&post_expr_moves, &outer_names);
+            // TODO: Remove handler_branch_outer_names, inlining the check here
+            let options =
+                LambdaOptions { suppress_effect_closure: true, handler_branch_outer_names: Some(outer_names.clone()) };
+
+            let branch_lambda = self.unwrap_lambda(*branch);
+            self.expr_types.insert(*branch, handler_type.clone());
+            self.check_lambda_impl(&branch_lambda, &handler_type, *branch, None, options);
         }
-
-        // Restore post-expression move state. Branch-local moves don't propagate
-        // outward since they are scoped to each handler invocation.
-        self.move_tracker = post_expr_moves;
 
         // Link expected_effect to the unhandled effects remaining in expected_and_e.
         // The per-case unify calls extracted each handled effect, so the row tail
         // represents effects the handler does not handle.
         if let Some(row_id) = expected_and_e.effect_row(&self.bindings) {
             self.unify(expected_effect, &Type::Variable(row_id), TypeErrorKind::General, expr);
+        }
+    }
+
+    /// Retrieve the [`cst::Lambda`] at `expr_id` or panic otherwise.
+    fn unwrap_lambda(&self, expr_id: ExprId) -> &'local cst::Lambda {
+        match &self.current_context()[expr_id] {
+            Expr::Lambda(lambda) => lambda,
+            other => unreachable!("Expected a lambda, found {other:?}"),
         }
     }
 

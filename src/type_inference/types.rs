@@ -765,6 +765,48 @@ impl Type {
         }
     }
 
+    /// Flatten this type as an effect row, returning the set of concrete
+    /// effects (with nested `Type::Effects` inlined) along with the type
+    /// variable marking it open to extension, if present.
+    ///
+    /// Any duplicates in the set are removed
+    pub fn collect_effects_in_type(
+        typ: &Type, bindings: &TypeBindings, more_bindings: &TypeBindings,
+    ) -> (Vec<Type>, Option<TypeVariableId>) {
+        match typ.follow_two(bindings, more_bindings) {
+            Type::Variable(id) => (Vec::new(), Some(id)),
+            Type::Effects(effects) => Self::collect_effects_in_types(&effects, bindings, more_bindings),
+            other => (vec![other], None),
+        }
+    }
+
+    /// See [Type::collect_effects_in_type]
+    pub fn collect_effects_in_types(
+        types: &[Type], bindings: &TypeBindings, more_bindings: &TypeBindings,
+    ) -> (Vec<Type>, Option<TypeVariableId>) {
+        let mut collected: Vec<Type> = Vec::new();
+        let mut variable = None;
+
+        for typ in types {
+            let (found, found_variable) = Self::collect_effects_in_type(typ, bindings, more_bindings);
+            for effect in found {
+                let zonked = effect.follow_all_two(bindings, more_bindings);
+
+                // Effect sets tend to be small so this is probably okay
+                if !collected.contains(&zonked) {
+                    collected.push(zonked);
+                }
+            }
+
+            // TODO: How to type check sets with multiple unbound type variables?
+            if variable.is_none() {
+                variable = found_variable;
+            }
+        }
+
+        (collected, variable)
+    }
+
     /// If this type is an effect set which is open to extension, return the row variable
     /// representing the rest of the effect set.
     pub fn effect_row(&self, bindings: &TypeBindings) -> Option<TypeVariableId> {
@@ -899,21 +941,32 @@ where
                 Ok(())
             }),
             Type::Effects(elements) => try_parenthesize(parenthesize, f, |f| {
-                let mut written = 0;
-                for element in elements.iter() {
-                    // Elide empty nested effect rows — these appear when a row variable
-                    // is closed to `no_effects()` during generalization, and they add
-                    // noise like `Use String, ()` without carrying information.
-                    let element = element.follow(self.bindings);
-                    if matches!(element, Type::Effects(inner) if inner.is_empty()) {
-                        continue;
-                    }
-                    if written != 0 {
+                if elements.is_empty() {
+                    return write!(f, "pure");
+                }
+
+                // `Type::Effects` can nest — a row variable may be bound to
+                // another effect set — so flatten through bindings. This is
+                // the same logic the unifier uses (dedupe by exact equality
+                // included), so the printed row matches the row the type
+                // checker sees.
+                let empty = TypeBindings::new();
+                let (concrete, row_var) = Type::collect_effects_in_types(elements, self.bindings, &empty);
+
+                let mut first = true;
+                for element in &concrete {
+                    if !first {
                         write!(f, ", ")?;
                     }
-                    written += 1;
+                    first = false;
                     // TODO: Improve parenthesization here
                     self.fmt_type(element, true, f)?;
+                }
+                if let Some(id) = row_var {
+                    if !first {
+                        write!(f, ", ")?;
+                    }
+                    self.fmt_type(&Type::Variable(id), true, f)?;
                 }
                 Ok(())
             }),

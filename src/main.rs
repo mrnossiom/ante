@@ -42,6 +42,7 @@ use crate::{
     diagnostics::{DiagnosticKind, collect_all_diagnostics},
     files::{make_compiler, write_metadata},
     incremental::{TargetPointerSize, TypeCheck},
+    paths::binary_name,
 };
 
 // All the compiler passes:
@@ -316,8 +317,8 @@ fn llvm_codegen_all(compiler: &mut Db, files: &[PathBuf], delete_binary: bool) -
 
     // Run the program
     // Use an absolute path so the binary can be found regardless of PATH.
-    let binary_path =
-        std::fs::canonicalize(module_name.as_ref()).unwrap_or_else(|_| std::path::PathBuf::from(module_name.as_ref()));
+    let binary_path = binary_name(&module_name);
+
     Command::new(&binary_path).spawn().unwrap().wait().unwrap();
     if delete_binary {
         std::fs::remove_file(module_name.as_ref()).unwrap();

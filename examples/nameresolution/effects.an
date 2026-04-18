@@ -35,13 +35,13 @@ main () =
 // 
 // // id = c1m485_1944
 // main_c1m485_1944_0 () =
-//     handle ()
-//     | one_c1m485_8962_1 () -> ()
-//     | one_c1m485_8962_1 () -> ()
-//     handle ()
-//     | get_c1m485_5987_2 () -> resume_3 ()
-//     | put_c1m485_5987_4 () -> ()
-//     handle ()
-//     | put_c1m485_5987_4 () -> ()
-//     | three_c1m485_8962_3 0 1 -> ()
+//     handle fn -> ()
+//     | one_c1m485_8962_1 () -> fn () resume_1 -> ()
+//     | one_c1m485_8962_1 () -> fn () resume_2 -> ()
+//     handle fn -> ()
+//     | get_c1m485_5987_2 () -> fn () resume_3 -> resume_3 ()
+//     | put_c1m485_5987_4 () -> fn () resume_4 -> ()
+//     handle fn -> ()
+//     | put_c1m485_5987_4 () -> fn () resume_5 -> ()
+//     | three_c1m485_8962_3 0 1 -> fn 0 1 resume_6 -> ()
 

@@ -1193,7 +1193,7 @@ impl<'tokens> Parser<'tokens> {
     fn parse_function_parameter(&mut self) -> Result<Parameter> {
         if *self.current_token() == Token::BraceLeft {
             let pattern = self.parse_implicit_function_parameter()?;
-            Ok(Parameter { is_implicit: true, is_mutable: false, pattern })
+            Ok(Parameter::implicit(pattern))
         } else if *self.current_token() == Token::ParenthesisLeft && self.peek_next_token() == &Token::Var {
             let pattern = self.with_pattern_id_and_location(|this| {
                 this.advance(); // consume `(`
@@ -1206,10 +1206,10 @@ impl<'tokens> Parser<'tokens> {
                 this.expect(Token::ParenthesisRight, "a `)` to close the opening `(` from the var parameter")?;
                 Ok(pattern)
             })?;
-            Ok(Parameter { is_implicit: false, is_mutable: true, pattern })
+            Ok(Parameter::mutable(pattern))
         } else {
             let pattern = self.parse_function_parameter_pattern()?;
-            Ok(Parameter { is_implicit: false, is_mutable: false, pattern })
+            Ok(Parameter::new(pattern))
         }
     }
 
@@ -1883,6 +1883,9 @@ impl<'tokens> Parser<'tokens> {
             this.expect(Token::Handle, "`handle` to start this match expression")?;
 
             let expression = this.parse_block_or_expression()?;
+            // Wrap the handled expression in a `fn () -> _ = <expression>` lambda
+            // so downstream passes can reuse the existing closure conversion & free-variable analysis
+            let expression = this.wrap_in_lambda(Vec::new(), expression);
 
             let cases = this.many0(|this| {
                 if *this.peek_next_token() == Token::Pipe {
@@ -1893,11 +1896,24 @@ impl<'tokens> Parser<'tokens> {
                 let pattern = this.parse_handle_pattern()?;
                 this.expect(Token::RightArrow, "a `->` to separate the handle pattern from the match branch")?;
                 let branch = this.parse_block_or_expression()?;
-                Ok((pattern, branch))
+
+                // Wrap the branch in a lambda whose parameters are each of the pattern args followed by `resume`.
+                let resume_location = this.current_context.name_locations[pattern.resume_name].clone();
+                let resume_pattern = this.push_pattern(Pattern::Variable(pattern.resume_name), resume_location);
+                let mut params = mapvec(&pattern.args, |arg| cst::Parameter::new(*arg));
+                params.push(cst::Parameter::new(resume_pattern));
+
+                Ok((pattern, this.wrap_in_lambda(params, branch)))
             });
 
             Ok(Expr::Handle(cst::Handle { expression, cases }))
         })
+    }
+
+    fn wrap_in_lambda(&mut self, parameters: Vec<cst::Parameter>, body: ExprId) -> ExprId {
+        let location = self.current_context.expr_locations[body].clone();
+        let lambda = Expr::Lambda(cst::Lambda { parameters, return_type: None, effects: None, body, is_move: false });
+        self.push_expr(lambda, location)
     }
 
     fn parse_handle_pattern(&mut self) -> Result<HandlePattern> {

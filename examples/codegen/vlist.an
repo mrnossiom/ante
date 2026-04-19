@@ -1,0 +1,19 @@
+import Std.VList
+import Std.VList.copy_vlist, print_vlist
+
+main () =
+    var list = VList.empty ()
+    list := list.push 33
+    list := list.push 44
+    snapshot1 = list
+
+    list := list.push 55
+    println list
+    println snapshot1
+    0
+
+// args: --delete-binary --no-color
+// expected stdout:
+// [33, 44, 55]
+// [33, 44]
+

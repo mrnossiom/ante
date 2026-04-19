@@ -1,0 +1,25 @@
+main () =
+    shout x = "${x}!"
+    bar = "nested interpolations"
+    print
+        "I can do line breaks${
+            shout "\nAny expressions"
+        }${
+            shout "\nEven ${bar}"
+        }"
+
+// args: -e ast --no-color
+// expected exit status: 1
+// expected stdout:
+// main () =
+//     shout x = ""
+
+// expected stderr:
+// examples/parser/string_interpolation.an:2:16
+// 1 | main () =
+// 2 |     shout x = "${x}!"	// error: Expected the end of this block but found `${`
+//   |                ^^
+// 3 |     bar = "nested interpolations"
+// 
+// Found 1 error and 0 warnings
+

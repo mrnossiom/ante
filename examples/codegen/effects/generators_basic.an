@@ -1,28 +1,19 @@
 effect Emit a with
-    emit: a -> Unit
+    emit: fn a -> Unit
 
 iota (n: U32) = loop (i = 0) ->
     if i < n then
         emit i
         recur (i + 1)
 
-for stream f =
+for_ stream f =
     handle stream ()
     | emit x ->
         f x
         resume ()
 
-for (fn () -> iota 10) print
+main () =
+    iota 10 ~> for_ print
 
-// args: --delete-binary
-// expected stdout:
-// 0
-// 1
-// 2
-// 3
-// 4
-// 5
-// 6
-// 7
-// 8
-// 9
+// args: --delete-binary --no-color
+// expected stdout: 0123456789

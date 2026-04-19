@@ -8,15 +8,21 @@ is_even n =
 is_odd n =
     n == 1 or not is_even (n - 1)
 
-is_even 4
+main () = is_even 4
 
-// args: --check --show-types
 
 // Both of these definitions should have the `Print (int a)` constraint.
 // TODO: is_odd here uses `forall a c.` instead of `forall a b.`
 
+// args: -e ast-t --no-color
 // expected stdout:
-// is_even : forall a. (Int a -> Bool pure)
-//   given Eq (Int a), Print (Int a), Sub (Int a)
-// is_odd : forall a. (Int a -> Bool pure)
-//   given Eq (Int a), Print (Int a), Sub (Int a)
+// (is_even: fn I32 -> Bool pure) (n: I32) =
+//     if (==: fn I32 I32 {Eq I32} -> Bool pure) (n: I32) 0 {(eq_i32: Eq I32)} then true else 
+//         (print: fn I32 {Print I32} -> Unit pure) (n: I32) {(print_i32: Print I32)}
+//         (not: fn Bool {Not Bool} -> Bool pure) ((is_odd: fn I32 -> Bool pure) ((-: fn I32 I32 {Sub I32} -> I32 pure) (n: I32) 1 {(sub_i32: Sub I32)})) {(not_bool: Not Bool)}
+// 
+// (is_odd: fn I32 -> Bool pure) (n: I32) =
+//     if (==: fn I32 I32 {Eq I32} -> Bool pure) (n: I32) 1 {(eq_i32: Eq I32)} then true else (not: fn Bool {Not Bool} -> Bool pure) ((is_even: fn I32 -> Bool pure) ((-: fn I32 I32 {Sub I32} -> I32 pure) (n: I32) 1 {(sub_i32: Sub I32)})) {(not_bool: Not Bool)}
+// 
+// (main: fn Unit -> Bool pure) () = (is_even: fn I32 -> Bool pure) 4
+

@@ -1,21 +1,29 @@
 
-extern bar : a
+bar: a = extern bar
 
-trait Baz a with baz : a -> Unit
+trait Baz a with baz: fn a -> Unit
 
 foo () = baz bar
 
 // This test ensures the Baz constraint is solved in foo
 // rather than being propagated up into its signature just
 // because it has a typevariable.
-// 
-// args: --check --show-types
+//
+
+// args: -e ast-t --no-color
+// expected exit status: 1
 // expected stdout:
-// bar : forall a. a
-// baz : forall a. (a -> Unit pure)
-//   given Baz a
-// foo : Unit -> Unit pure
+// (bar: a) = extern "bar"
+// 
+// type Baz a [env] =
+//     baz: fn a [[env]] -> Unit
+// 
+// (foo: fn Unit -> _ pure) () = (baz: (error)) (bar: _)
 
 // expected stderr:
-// trait_propagation.an:6:10	error: No impl found for Baz a
-// foo () = baz bar
+// examples/typechecking/trait_propagation.an:6:10
+// 6 | foo () = baz bar	// error: `baz` not found in scope
+//   |          ^^^
+// 
+// Found 1 error and 0 warnings
+

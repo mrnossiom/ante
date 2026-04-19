@@ -1,17 +1,19 @@
-#[macro_use]
+#![allow(mismatched_lifetime_syntaxes)]
+
+pub mod codegen;
+mod definition_collection;
+pub mod find_files;
+mod lexer;
+mod mir;
+pub mod name_resolution;
 pub mod parser;
-pub mod lexer;
+pub mod type_inference;
 
-#[macro_use]
-pub mod util;
-pub mod frontend;
-
-#[macro_use]
-pub mod error;
-pub mod cache;
-
-#[macro_use]
-pub mod hir;
-mod lifetimes;
-pub mod nameresolution;
-pub mod types;
+// Util modules:
+mod cli;
+pub mod diagnostics;
+pub mod files;
+pub mod incremental;
+mod iterator_extensions;
+pub mod paths;
+mod vecmap;

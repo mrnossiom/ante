@@ -1,0 +1,13 @@
+main () =
+    var x = 0
+
+    closure () =
+        x := 5
+
+    closure ()
+    // Closures capture mutable variables by reference,
+    // so the assignment inside the closure affects the outer x.
+    println x
+
+// args: --delete-binary --no-color
+// expected stdout: 5

@@ -2,8 +2,28 @@ foo a =
     print a
     print a
 
-// Make sure output is not "... given Print a, Print a"
-// args: --check --show-types
+// Make sure output is not "... {Print a} {Print a}" when inference is used
+
+// args: -e ast-t --no-color
+// expected exit status: 1
 // expected stdout:
-// foo : forall a. (a -> Unit pure)
-//   given Print a
+// (foo: fn _ -> Unit pure) (a: _) =
+//     (print: fn _ {Print _} -> Unit pure) (a: _) {(error)}
+//     (print: fn _ {Print _} -> Unit pure) (a: _) {(error)}
+
+// expected stderr:
+// examples/typechecking/repeated_traits.an:2:5
+// 1 | foo a =
+//   |     // error: Ambiguous implicit of type Print _ required by parameter 2 of print, type annotation required
+// 2 |     print a
+//   |     ^^^^^
+// 3 |     print a
+// 
+// examples/typechecking/repeated_traits.an:3:5
+// 2 |     print a
+//   |     // error: Ambiguous implicit of type Print _ required by parameter 2 of print, type annotation required
+// 3 |     print a
+//   |     ^^^^^
+// 
+// Found 2 errors and 0 warnings
+

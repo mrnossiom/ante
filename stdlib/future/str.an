@@ -1,25 +1,25 @@
-import Vec
+import Std.Vec
 
-reverse (s: String) : String =
-    mut buf = malloc (s.len + 1usz)
+reverse (s: String): String =
+    var buf = malloc (s.len + 1)
 
     i = loop (i = 0) ->
-        if i < s.len then
-            buf.[i] := s.[s.len - i - 1usz]
+        if i < s.length then
+            buf.[i] := s.[s.length - i - 1]
             recur (i + 1)
         else i
 
     buf.[i] := '\0'
-    String buf i
+    String.from_parts buf (U32 i)
 
 
-split (s: String) (c: String) : Vec String =
-    mut v = Vec.empty ()
+split (s: String) (c: String): Vec String =
+    var v = Vec.empty ()
 
     i, j = loop (subend = 0) (substart = 0) ->
-        if subend < s.len then
+        if subend < s.length then
             substart = if s.[subend] == c then
-                push v (substr s substart subend)
+                v.push (substr s substart subend)
                 subend + 1
             else 
                 substart
@@ -29,15 +29,15 @@ split (s: String) (c: String) : Vec String =
             subend, substart
         
 
-    push v (substr s j i)
+    v.push (substr s j i)
     v
 
-substr (s: String) (begin: Usz) (end: Usz) : String =
-    if end > s.len or begin >= s.len then
+substr (s: String) (begin: Usz) (end: Usz): String =
+    if end > s.length or begin >= s.len then
         return ""
 
     len = end - begin
-    mut buf = malloc (len + 1)
+    var buf = malloc (len + 1)
     buf.[end] := '\0'
 
     loop (i = 0) ->
@@ -46,4 +46,4 @@ substr (s: String) (begin: Usz) (end: Usz) : String =
             buf.[i] := s.[b]
             recur (i + 1)
 
-    String buf len
+    String.from_parts buf (U32 len)

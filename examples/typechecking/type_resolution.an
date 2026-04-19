@@ -1,0 +1,50 @@
+type Either =
+    | Left
+    | Right
+
+type Directions =
+    | Left
+    | Right
+    | Up
+    | Down
+
+foo (e: Either) =
+    // We shouldn't need to specify Either.Left or Either.Right
+    // Since e's type is known.
+    match e
+    | Left -> ()
+    | Right -> ()
+
+    // Similarly, the type of Directions.Up is known, and multiple
+    // Constructors named Left/Right should not be an issue since we
+    // know to use Direction's namespace.
+    match Directions.Up
+    | Left -> ()
+    | Right -> ()
+    | Up -> ()
+    | Down -> ()
+
+// args: -e ast-t --no-color
+// expected stdout:
+// type Either =
+//     | Left
+//     | Right
+// 
+// type Directions =
+//     | Left
+//     | Right
+//     | Up
+//     | Down
+// 
+// (foo: fn Either -> Unit pure) ((e: Either)) =
+//     (match_var9: (error)) = (e: Either)
+//     switch (match_var9: Either)
+//     | 0 -> ()
+//     | 1 -> ()
+//     (match_var10: (error)) = (Directions.Up: Directions)
+//     switch (match_var10: Directions)
+//     | 0 -> ()
+//     | 1 -> ()
+//     | 2 -> ()
+//     | 3 -> ()
+

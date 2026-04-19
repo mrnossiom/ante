@@ -1,18 +1,26 @@
 
-extern foo: a -> b
+foo: fn a -> b = extern foo
+add: fn I32 I32 -> I32 = extern add
+puts2: fn String -> Unit = extern puts2
+exit2: fn I32 -> never_returns = extern exit2
 
-extern
-    add: I32 - I32 -> I32
-    puts2: String -> Unit
-    exit2: I32 -> never_returns
+foo_result = foo 1
+puts2_result = puts2 "test"
+exit2_result = exit2 0
 
-foo 1
-puts2 "test"
-exit2 0
-
-// args: --check --show-types
+// args: -e ast-t --no-color
 // expected stdout:
-// add : I32 - I32 -> I32 pure
-// exit2 : forall never_returns. (I32 -> never_returns pure)
-// foo : forall a b. (a -> b pure)
-// puts2 : String -> Unit pure
+// (foo: fn a -> b can _) = extern "foo"
+// 
+// (add: fn I32 I32 -> I32 can _) = extern "add"
+// 
+// (puts2: fn String -> Unit can _) = extern "puts2"
+// 
+// (exit2: fn I32 -> never_returns can _) = extern "exit2"
+// 
+// (foo_result: _) = (foo: fn I32 -> _ can _) 1
+// 
+// (puts2_result: Unit) = (puts2: fn String -> Unit can _) "test"
+// 
+// (exit2_result: _) = (exit2: fn I32 -> _ can _) 0
+

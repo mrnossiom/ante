@@ -1,18 +1,19 @@
-mut num = 32
-print num
-num := 7
-print num
+main () =
+    var num = 32
+    println num
+    num := 7
+    println num
 
-mutate !num
-print num
+    mutate (mut num)
+    println num
 
-mutate (n: !I32) =
-    x = double @n
-    n := x
+mutate (n: mut I32) =
+    x = double n.*
+    n.* := x
 
 double x = x * 2
 
-// args: --delete-binary
+// args: --delete-binary --no-color
 // expected stdout:
 // 32
 // 7

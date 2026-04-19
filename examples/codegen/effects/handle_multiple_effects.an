@@ -1,20 +1,21 @@
 
 effect Fail with
-    fail: Unit -> a
+    fail: fn Unit -> a
 
 effect Read a with
-    read: Unit -> a
+    read: fn Unit -> a
 
-read_or_zero f =
-    handle Some <| f ()
-    | fail () -> None
+read_or_none f =
+    handle Maybe.Some <| f ()
+    | fail () -> Maybe.None
     | read () -> resume 5u32
 
 foo () =
     if false then fail ()
     read ()
 
-print <| read_or_zero foo
+main () =
+    print <| read_or_none foo
 
-// args: --delete-binary
-// expected stdout: 5
+// args: --delete-binary --no-color
+// expected stdout: Some 5

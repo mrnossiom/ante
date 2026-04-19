@@ -1,0 +1,14 @@
+effect Fail with
+    fail: fn Unit -> a
+
+effect Read a with
+    read: fn Unit -> a
+
+read_or_none (f: fn Unit -> a can Read Unit, Fail): Maybe a =
+    handle Maybe.Some (f ())
+    | fail () -> None
+    | read () -> resume ()
+
+main () = ()
+
+// args: --delete-binary --no-color

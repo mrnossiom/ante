@@ -1,6 +1,16 @@
-show x = puts x.c_string
+import Std.C.puts
 
-show "foo"
+show (x: String) = puts (Std.C.String x.data)
 
-// args: --delete-binary
+main () =
+    match Maybe.Some (Maybe.Some 3)
+    | Some (Maybe.Some x) -> x
+    | Some _ -> 1
+    | None -> 0
+
+    show "foo\0"
+    0
+
+// args: --delete-binary --no-color
 // expected stdout: foo
+

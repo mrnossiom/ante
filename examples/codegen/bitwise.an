@@ -1,15 +1,19 @@
+main () =
+    x = 3
+    y = 5
 
-x = 3
-y = 5
+    println (Bitwise.band x y)
+    println (Bitwise.bor x y)
+    println (Bitwise.bxor x y)
+    println (not x)
 
-print (band x y)
-print (bor x y)
-print (bxor x y)
-print (bnot x)
+// args: --delete-binary --no-color
+// expected exit status: 1
+// expected stderr:
+// examples/codegen/bitwise.an:8:19
+//  7 |     println (Bitwise.bxor x y)
+//  8 |     println (not x)	// error: Expected the end of this block but found `)`
+//    |                   ^
+// 
+// Found 1 error and 0 warnings
 
-// args: --delete-binary
-// expected stdout:
-// 1
-// 7
-// 6
-// -4

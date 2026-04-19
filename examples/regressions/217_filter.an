@@ -1,5 +1,5 @@
 effect Emit a with
-    emit: a -> Unit
+    emit: fn a -> Unit
 
 iota (n: U32) = loop (i = 0) ->
     if i < n then
@@ -7,7 +7,7 @@ iota (n: U32) = loop (i = 0) ->
         recur (i + 1)
 
 // Removing the `can` here used to panic
-filter (stream: Unit -> Unit) (f: a -> Bool pure) =
+filter (stream: fn Unit -> Unit) (f: fn a -> Bool pure) =
     handle 
         stream ()
     | emit x ->
@@ -15,7 +15,7 @@ filter (stream: Unit -> Unit) (f: a -> Bool pure) =
             emit x
         resume ()
 
-for (stream: Unit -> Unit can Emit a) (f: a -> Unit pure) =
+for_ (stream: fn Unit -> Unit can Emit a) (f: fn a -> Unit pure) =
     handle 
         stream ()
     | emit x ->
@@ -26,14 +26,16 @@ zero_to_nine () =
     iota 10
 
 filtered () =
-    filter zero_to_nine (fn x -> x % 2 == 0)
+    filter zero_to_nine (_ %% 2)
 
-for filtered print
+main () =
+    for_ filtered println
 
-// args: --delete-binary
+// args: --delete-binary --no-color
 // expected stdout:
 // 0
 // 2
 // 4
 // 6
 // 8
+

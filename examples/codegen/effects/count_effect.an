@@ -1,5 +1,5 @@
 effect Count with
-    count: Unit -> Unit
+    count: fn Unit -> Unit
 
 foo () =
     count ()
@@ -11,7 +11,8 @@ handle_count f =
         0
     | count () -> 1 + resume ()
 
-handle_count foo |> print
+main () =
+    handle_count foo |> print
 
-// args: --delete-binary
+// args: --delete-binary --no-color
 // expected stdout: 11

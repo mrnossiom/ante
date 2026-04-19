@@ -1,0 +1,15 @@
+main () =
+    var x: I32 = 10
+
+    // A move fn captures x by value (move or copy)
+    closure = move fn () -> println x
+
+    // Mutating x after the closure is created should not affect the closure's copy
+    x := 20
+    closure ()
+    println x
+
+// args: --delete-binary --no-color
+// expected stdout:
+// 10
+// 20

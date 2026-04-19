@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use clap::{Parser, ValueEnum, ValueHint};
 use clap_complete::Shell;
 
@@ -10,21 +12,13 @@ pub struct Completions {
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct Cli {
-    /// Path to the source file
+    /// Path to the source files
     #[arg(value_hint=ValueHint::FilePath)]
-    pub file: String,
+    pub files: Vec<PathBuf>,
 
     /// Print out the input file annotated with inferred lifetimes of heap allocations
     #[arg(long, short = 'L')]
     pub show_lifetimes: bool,
-
-    /// Lex the file and output the resulting list of tokens
-    #[arg(long, short, group = "compile_mode")]
-    pub lex: bool,
-
-    /// Parse the file and output the resulting Ast
-    #[arg(long, short, group = "compile_mode")]
-    pub parse: bool,
 
     /// Check the file for errors without compiling
     #[arg(long, short, group = "compile_mode")]
@@ -37,6 +31,10 @@ pub struct Cli {
     /// Tells the compiler to create something other than an executable
     #[arg(long, short, group = "compile_mode")]
     pub emit: Option<EmitTarget>,
+
+    /// If set, all crates will be included in the `emit` output rather than just the local crate
+    #[arg(long)]
+    pub emit_all: bool,
 
     /// Specify the backend to use ('llvm' or 'cranelift'). Note that cranelift is only for debug builds.
     /// Ante will use cranelift by default for debug builds and llvm by default for optimized builds,
@@ -61,18 +59,33 @@ pub struct Cli {
     #[arg(long)]
     pub show_time: bool,
 
-    /// Print out the type of each definition
-    #[arg(long, short = 't')]
-    pub show_types: bool,
+    /// Enable incremental compilation by reading from and writing to metadata for the current program
+    #[arg(long, short = 'i')]
+    pub incremental: bool,
 }
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone, ValueEnum)]
 pub enum EmitTarget {
+    /// The tokens issued from the lexer
+    Tokens,
+
+    /// The parse tree
+    Ast,
+
+    /// The parse tree annotated with the origin of each name
+    AstR,
+
+    /// The parse tree annotated with the type of all names
+    AstT,
+
+    /// A representation of the program with simpler control-flow created after type checking
+    Mir,
+
+    /// Monomorphized Mir
+    MirMono,
+
     /// LLVM-IR or Cranelift IR depending on the selected backend
     Ir,
-
-    /// Ante's post-monomorphisation HIR representation
-    Hir,
 }
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone, ValueEnum)]

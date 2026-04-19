@@ -1,6 +1,6 @@
 
 trait Foo a with
-    foo: a - a -> a
+    foo: fn a a -> a
 
 impl Foo I32 with
     foo _a b = b
@@ -13,15 +13,44 @@ a = foo 1 2i32
 b = foo 1.0 2.0
 c = foo "one" "two"
 
-// args: --check --show-types
-// expected stderr:
-// impl.an:14:5	error: No impl found for Foo String
-// c = foo "one" "two"
-// 
-
+// args: -e ast-t --no-color
+// expected exit status: 1
 // expected stdout:
-// a : I32
-// b : F64
-// c : String
-// foo : forall a. (a - a -> a pure)
-//   given Foo a
+// type Foo a [env] =
+//     foo: fn a a [[env]] -> a
+// 
+// (a: _) = (foo: (error)) 1 2_I32
+// 
+// (b: _) = (foo: (error)) 1.0 2.0
+// 
+// (c: _) = (foo: (error)) "one" "two"
+
+// expected stderr:
+// examples/typechecking/impl.an:5:6
+// 5 | impl Foo I32 with	// error: Expected an identifier but found `Foo`
+//   |      ^^^
+// 6 |     foo _a b = b
+// 
+// examples/typechecking/impl.an:8:6
+//  8 | impl Foo F64 with	// error: Expected an identifier but found `Foo`
+//    |      ^^^
+//  9 |     foo _a b = b
+// 
+// examples/typechecking/impl.an:12:5
+// 12 | a = foo 1 2i32	// error: `foo` not found in scope
+//    |     ^^^
+// 13 | b = foo 1.0 2.0
+// 
+// examples/typechecking/impl.an:13:5
+// 12 | a = foo 1 2i32
+// 13 | b = foo 1.0 2.0	// error: `foo` not found in scope
+//    |     ^^^
+// 14 | c = foo "one" "two"
+// 
+// examples/typechecking/impl.an:14:5
+// 13 | b = foo 1.0 2.0
+// 14 | c = foo "one" "two"	// error: `foo` not found in scope
+//    |     ^^^
+// 
+// Found 5 errors and 0 warnings
+

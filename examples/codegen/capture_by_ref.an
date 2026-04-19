@@ -1,0 +1,16 @@
+main () =
+    var x = 0
+
+    // Capture a mutable reference - assigning through it is allowed
+    closure (ref_x: mut I32) () =
+        ref_x := 5
+        println ref_x.*
+
+    closure (mut x) ()
+    // After the closure runs, x should be 5
+    println x
+
+// args: --delete-binary --no-color
+// expected stdout:
+// 5
+// 5

@@ -1,18 +1,37 @@
 bind opt f =
     match opt
-    | Some x -> f x
-    | None -> None
+    | Maybe.Some x -> f x
+    | Maybe.None -> Maybe.None
 
-ret x = Some x
+type Maybe2 t =
+   | None
+   | Some t
 
-x = Some 10i32
+ret x = Maybe.Some x
+
+x = Maybe.Some 10i32
 
 add_one x =
     bind x (fn x -> ret (x + 1i32))
 
-// args: --check --show-types
+// args: -e ast-t --no-color
 // expected stdout:
-// add_one : Maybe I32 -> Maybe I32 pure
-// bind : forall a b c d. (Maybe d - (d => Maybe b can c) -> Maybe b can c)
-// ret : forall a. (a -> Maybe a pure)
-// x : Maybe I32
+// (bind: fn (Maybe _) (fn _ [_] -> Maybe _ can _) -> Maybe _ can _) (opt: Maybe _) (f: fn _ [_] -> Maybe _ can _) =
+//     (match_var6: (error)) = (opt: Maybe _)
+//     switch (match_var6: Maybe _)
+//     | 0 -> (Maybe.None: Maybe _)
+//     | 1, (match_var7: _) -> 
+//             (x: _) = (match_var7: _)
+//             (f: fn _ [_] -> Maybe _ can _) (x: _)
+// 
+// type Maybe2 t =
+//     | None
+//     | Some t
+// 
+// (ret: fn _ -> Maybe _ pure) (x: _) = (Maybe.Some: fn _ -> Maybe _ pure) (x: _)
+// 
+// (x: Maybe I32) = (Maybe.Some: fn I32 -> Maybe I32 pure) 10_I32
+// 
+// (add_one: fn (Maybe I32) -> Maybe I32 pure) (x: Maybe I32) =
+//     (bind: fn (Maybe I32) (fn I32 -> Maybe I32 pure) -> Maybe I32 pure) (x: Maybe I32) (fn (x: I32) -> (ret: fn I32 -> Maybe I32 pure) ((+: fn I32 I32 {Add I32} -> I32 pure) (x: I32) 1_I32 {(add_i32: Add I32)}))
+

@@ -1,28 +1,32 @@
-start = 10
-seq_sum = loop start (sum = 0) ->
-    if start == 0 then sum
-    else recur (start - 1) (sum + start)
+main () =
+    println (sum_up_to 10)
 
-print seq_sum
+    loop (collatz = 7) ->
+        if collatz == 1 then 
+            println ""
+            return ()
+        print collatz
+        print " "
+        if collatz % 2 == 0 then recur (collatz / 2)
+        else recur (collatz * 3 + 1)
 
-loop (collatz = 7) ->
-    if collatz == 1 then 
-        print ""
-        return ()
-    printne collatz
-    printne " "
-    if collatz % 2 == 0 then recur (collatz / 2)
-    else recur (collatz * 3 + 1)
+    s = 0
+    loop s (t = 0) ->
+        print s
+        print t
+        if s == 3 then return ()
+        else recur (s + 1) (t + 1)
 
-s = 0
-loop (s: I32) (t: I32 = 0) ->
-    printne s
-    printne t
-    if s == 3 then return ()
-    else recur (s + 1) (t + 1)
+    loop () -> if false then recur ()
 
-// args: --delete-binary
-// expected stdout: 
+sum_up_to n =
+    loop n (total = 0) ->
+        if n <= 0 then total
+        else recur (n - 1) (total + n)
+
+// args: --delete-binary --no-color
+// expected stdout:
 // 55
 // 7 22 11 34 17 52 26 13 40 20 10 5 16 8 4 2 
 // 00112233
+

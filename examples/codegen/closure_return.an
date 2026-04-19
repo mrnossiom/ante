@@ -1,11 +1,11 @@
 get_closure () =
     foo = "hi there"
-    stuff () = print foo
+    stuff () = println foo
     stuff
 
-foo = get_closure ()
-foo ()
+main () =
+    foo = get_closure ()
+    foo ()
 
-// args: --delete-binary
-// expected stdout:
-// hi there
+// args: --delete-binary --no-color
+// expected stdout: hi there

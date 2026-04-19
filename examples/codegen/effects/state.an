@@ -1,28 +1,34 @@
 effect Use a with
-    get: Unit -> a
-    set: a -> Unit
+    get: fn Unit -> a
+    set: fn a -> Unit
 
-use_state (y: Int a) =
-    x = get () : Int a
+use_state (y: I32) =
+    x = get () : I32
     set (x + y)
-    state = get () : Int a
+    state = get () : I32
     print "Ending state = ${state}"
     state
 
-state (f: Unit -> a can Use s) (initial: s): a =
-    mut state0 = initial
-    mut state = !state0
+state (f: fn Unit -> a can Use s) (initial: s) {Copy s}: a =
+    var state = initial
     handle f ()
-    | get () -> resume @state
+    | get () -> resume state
     | set new_state ->
-        // Set is inferred incorrectly without this type hint
-        state := new_state : s
+        state := new_state
         resume ()
 
-use_state 10_i32 with state 1
-use_state 20_u64 with state 2
+main () =
+    use_state 10 ~> state 1
+    use_state 20 ~> state 2
 
-// args: --delete-binary
-// expected stdout:
-// Ending state = 11
-// Ending state = 22
+// args: --delete-binary --no-color
+// expected exit status: 1
+// expected stderr:
+// examples/codegen/effects/state.an:9:27
+//  8 |     state = get () : I32
+//  9 |     print "Ending state = ${state}"	// error: Expected the end of this block but found `${`
+//    |                           ^^
+// 10 |     state
+// 
+// Found 1 error and 0 warnings
+

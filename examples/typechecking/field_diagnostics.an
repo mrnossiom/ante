@@ -1,54 +1,76 @@
-tuple = (1, 1)
+main () =
+    tuple = (1, 1)
 
-_ = (&&tuple).first
+    _ = (ref ref tuple).first
 
-_ = tuple.!first
-_ = tuple.!missing
+    _ = mut tuple.first
+    _ = mut tuple.missing
 
-imm_ref = &tuple
-_ = imm_ref.!first
-_ = imm_ref.!missing
+    imm_ref = ref tuple
+    _ = mut imm_ref.first
+    _ = mut imm_ref.missing
 
-mut mut_tuple = (1, 1)
+    var mut_tuple = (1, 1)
 
-_ = mut_tuple.&missing
-_ = mut_tuple.!missing
+    _ = ref mut_tuple.missing
+    _ = mut mut_tuple.missing
 
-mut_ref = !mut_tuple
+    mut_ref = mut mut_tuple
 
-_ = mut_ref.&missing
-_ = mut_ref.!missing
+    _ = ref mut_ref.missing
+    _ = mut mut_ref.missing
 
-_ = (!&tuple).!first
+    _ = mut (mut ref tuple).first
 
-// flags: --check
+// args: -e ast-t --no-color
+// expected exit status: 1
+// expected stdout:
+// (main: fn Unit -> Unit pure) () =
+//     (tuple: I32, I32) = 1 (,: fn I32 I32 -> I32, I32 pure) 1
+//     (_: ref I32) = (ref ref (tuple: I32, I32)).first (.*: fn (ref (ref I32)) {Copy (ref I32)} -> ref I32 pure) (copy_ref: Copy (ref I32))
+//     (_: mut I32) = mut (tuple: I32, I32).first
+//     (_: mut _) = mut (tuple: I32, I32).missing
+//     (imm_ref: ref (I32, I32)) = ref (tuple: I32, I32)
+//     (_: mut I32) = mut (imm_ref: ref (I32, I32)).first (.*: fn (ref I32) {Copy I32} -> I32 pure) (copy_i32: Copy I32)
+//     (_: mut _) = mut (imm_ref: ref (I32, I32)).missing
+//     mut (mut_tuple: I32, I32) = 1 (,: fn I32 I32 -> I32, I32 pure) 1
+//     (_: ref _) = ref (mut_tuple: I32, I32).missing
+//     (_: mut _) = mut (mut_tuple: I32, I32).missing
+//     (mut_ref: mut (I32, I32)) = mut (mut_tuple: I32, I32)
+//     (_: ref _) = ref (mut_ref: mut (I32, I32)).missing
+//     (_: mut _) = mut (mut_ref: mut (I32, I32)).missing
+//     (_: mut (ref I32)) = mut (mut ref (tuple: I32, I32)).first (.*: fn (ref (ref I32)) {Copy (ref I32)} -> ref I32 pure) (copy_ref: Copy (ref I32))
+
 // expected stderr:
-// field_diagnostics.an:3:6	error: &shared &shared Int c, Int d has no field 'first' of type { first: b, .. }
-// _ = (&&tuple).first
+// examples/typechecking/field_diagnostics.an:7:18
+// 6 |     _ = mut tuple.first
+// 7 |     _ = mut tuple.missing	// error: _, _ has no field named `missing`
+//   |                  ^^^^^^^^
 // 
-// field_diagnostics.an:5:5	error: Cannot mutably reference `tuple`. It was declared as immutable
-// _ = tuple.!first
+// examples/typechecking/field_diagnostics.an:11:20
+// 10 |     _ = mut imm_ref.first
+// 11 |     _ = mut imm_ref.missing	// error: ref (_, _) has no field named `missing`
+//    |                    ^^^^^^^^
 // 
-// field_diagnostics.an:6:5	error: Int a, Int b has no field 'missing' of type { missing: b, .. }
-// _ = tuple.!missing
+// examples/typechecking/field_diagnostics.an:15:22
+// 15 |     _ = ref mut_tuple.missing	// error: _, _ has no field named `missing`
+//    |                      ^^^^^^^^
+// 16 |     _ = mut mut_tuple.missing
 // 
-// field_diagnostics.an:9:5	error: Expected a mutable reference but found &shared Int b, Int c instead
-// _ = imm_ref.!first
+// examples/typechecking/field_diagnostics.an:16:22
+// 15 |     _ = ref mut_tuple.missing
+// 16 |     _ = mut mut_tuple.missing	// error: _, _ has no field named `missing`
+//    |                      ^^^^^^^^
 // 
-// field_diagnostics.an:10:5	error: &shared Int b, Int c has no field 'missing' of type { missing: b, .. }
-// _ = imm_ref.!missing
+// examples/typechecking/field_diagnostics.an:20:20
+// 20 |     _ = ref mut_ref.missing	// error: mut (_, _) has no field named `missing`
+//    |                    ^^^^^^^^
+// 21 |     _ = mut mut_ref.missing
 // 
-// field_diagnostics.an:14:5	error: Int a, Int b has no field 'missing' of type { missing: b, .. }
-// _ = mut_tuple.&missing
+// examples/typechecking/field_diagnostics.an:21:20
+// 20 |     _ = ref mut_ref.missing
+// 21 |     _ = mut mut_ref.missing	// error: mut (_, _) has no field named `missing`
+//    |                    ^^^^^^^^
 // 
-// field_diagnostics.an:15:5	error: Int a, Int b has no field 'missing' of type { missing: b, .. }
-// _ = mut_tuple.!missing
-// 
-// field_diagnostics.an:19:5	error: !shared Int b, Int c has no field 'missing' of type { missing: b, .. }
-// _ = mut_ref.&missing
-// 
-// field_diagnostics.an:20:5	error: !shared Int b, Int c has no field 'missing' of type { missing: b, .. }
-// _ = mut_ref.!missing
-// 
-// field_diagnostics.an:22:6	error: !shared &shared Int c, Int d has no field 'first' of type { first: b, .. }
-// _ = (!&tuple).!first
+// Found 6 errors and 0 warnings
+

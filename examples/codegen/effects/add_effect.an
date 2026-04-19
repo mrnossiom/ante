@@ -1,13 +1,13 @@
 effect Add with
-    add: U32 -> Unit
+    add: fn U32 -> Unit
 
 foo () can Add =
-    print "foo"
+    println "foo"
     add 1
     add 2
 
 bar () =
-    print "bar"
+    println "bar"
     add 3
     add 4
 
@@ -15,17 +15,18 @@ sum_all () =
     handle
         foo ()
         bar ()
-        0
+        0u32 // TODO: remove suffix
     | add y ->
-        print "add called"
+        println "add called"
         r = resume ()
-        print "add resume finished"
+        println "add resume finished"
         y + r
 
 // 10
-sum_all () |> print
+main () =
+    sum_all () |> println
 
-// args: --delete-binary
+// args: --delete-binary --no-color
 // expected stdout:
 // foo
 // add called
@@ -38,3 +39,4 @@ sum_all () |> print
 // add resume finished
 // add resume finished
 // 10
+

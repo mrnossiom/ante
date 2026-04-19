@@ -1,0 +1,10 @@
+main () =
+    x = 1*2 + 19 == 3*7
+    print x
+
+// args: -e ast --no-color
+// expected stdout:
+// main () =
+//     x = ((1 * 2) + 19) == (3 * 7)
+//     print x
+

@@ -1,0 +1,35 @@
+main () =
+    if true else
+
+    bar a b = if then else
+
+// args: -e ast --no-color
+// expected exit status: 1
+// expected stdout:
+// main () =
+//     bar a b = (error)
+
+// expected stderr:
+// examples/parser/parse_error.an:2:13
+// 1 | main () =
+// 2 |     if true else	// error: Expected a `then` to end this if condition but found `else`
+//   |             ^^^^
+// 
+// examples/parser/parse_error.an:4:18
+// 4 |     bar a b = if then else	// error: Expected an expression but found `then`
+//   |                  ^^^^
+// 
+// examples/parser/parse_error.an:4:23
+// 4 |     bar a b = if then else	// error: Expected an expression but found `else`
+//   |                       ^^^^
+// 
+// examples/parser/parse_error.an:36:1
+// 36 | 	// error: Expected an expression but found an unindent
+//    | 
+// 
+// examples/parser/parse_error.an:36:1
+// 36 | 	// error: Expected the end of this block but found end of input
+//    | 
+// 
+// Found 5 errors and 0 warnings
+

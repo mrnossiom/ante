@@ -1,0 +1,47 @@
+
+type Struct1 = a:I32, b:F64, c:String
+
+type Struct2 t =
+    a: Thingy
+    b: Generic t Thingy
+
+type Union1 a b = | Variant1 | Variant2
+
+type Maybe a =
+   | Some a
+   | None
+
+type List a = | Nil | Cons a (ref List a)
+
+
+type UniquePtr a = ref a
+
+t = 3 : I32
+
+// args: -e ast --no-color
+// expected stdout:
+// type Struct1 =
+//     a: I32
+//     b: F64
+//     c: String
+// 
+// type Struct2 t =
+//     a: Thingy
+//     b: Generic t Thingy
+// 
+// type Union1 a b =
+//     | Variant1
+//     | Variant2
+// 
+// type Maybe a =
+//     | Some a
+//     | None
+// 
+// type List a =
+//     | Nil
+//     | Cons (a (ref (List a)))
+// 
+// type UniquePtr a = ref a
+// 
+// t = 3: I32
+

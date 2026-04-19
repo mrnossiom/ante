@@ -1,17 +1,19 @@
 
-foo a b c =
+foo (a: I32) b c =
     a + b + c
 
-plus2 = foo _ 2 _
-plus4 = foo 2 2 _
+main () =
+    plus2 = foo _ 2 _
+    plus4 = foo 2 2 _
 
-print <| plus4 2
-print <| plus2 38 2
+    println <| plus4 2
+    println <| plus2 38 2
 
-4 |> (_ + 2) |> print
+    4 |> (_ + 2) |> println
 
-// args: --delete-binary
+// args: --delete-binary --no-color
 // expected stdout:
 // 6
 // 42
 // 6
+

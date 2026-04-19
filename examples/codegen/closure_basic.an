@@ -1,10 +1,8 @@
 main () =
     foo = "hi there"
-    stuff () = print foo
+    stuff () = println foo
     stuff ()
 
-main ()
+// args: --delete-binary --no-color
+// expected stdout: hi there
 
-// args: --delete-binary
-// expected stdout:
-// hi there

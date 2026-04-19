@@ -4,12 +4,29 @@ recursion n f =
         f ()
         recursion (n - 1) f
 
-type List a = | Nil | Cons a (List a)
+shared type List a = | Nil | Cons a (List a)
 
 map l f =
     match l
     | Nil -> Nil
     | Cons x xs -> Cons (f x) (map xs f)
 
-// args: --check
+// args: -e ast-r --no-color
 // expected stdout:
+// // id = c1m743_1986
+// recursion_c1m743_1986_0 n_1 f_2 =
+//     if n_1 >_c0m703_4222_0 0 then 
+//         f_2 ()
+//         recursion_c1m743_1986_0 (n_1 -_c0m703_3431_1 1) f_2
+// 
+// // id = c1m743_838
+// shared type List_c1m743_838_0 a_1 =
+//     | Nil_c1m743_838_2
+//     | Cons_c1m743_838_3 (a_1 (List_c1m743_838_0 a_1))
+// 
+// // id = c1m743_4625
+// map_c1m743_4625_0 l_1 f_2 =
+//     match l_1
+//     | Nil_td -> Nil_td
+//     | Cons_td x_3 xs_4 -> Cons_td (f_2 x_3) (map_c1m743_4625_0 xs_4 f_2)
+

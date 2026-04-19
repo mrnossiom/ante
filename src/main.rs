@@ -1,195 +1,333 @@
-//! main.rs - The entry point for the Ante compiler.
-//! Handles command-line argument parsing and dataflow between
-//! each compiler phase. The compiler as a whole is separated into
-//! the following phases (in order):
+//! Welcome to this repository! You're in the entry point to the program where we handle
+//! command-line arguments and invoke the rest of the compiler.
 //!
-//! lexing -> parsing -> name resolution -> type inference -> monomorphisation -> codegen
+//! Compared to a traditional pipeline-style compiler, the main difference in architecture
+//! of this compiler comes from it being pull-based rather than push-based. So instead of
+//! starting by lexing everything, then parsing, name resolution, type inference, etc.,
+//! we start by saying "I want a compiled program!" Then the function to get us a compiled
+//! program says "well, I need a type-checked Ast for that." Then our type inference pass
+//! says "I need a name-resolved ast," and so on. So this compiler still has the same
+//! passes you know and love (and listed further down), they're just composed together a
+//! bit differently.
 //!
-//! Each phase corresponds to a source folder with roughly the same name (though the codegen
-//! folder is named "llvm"), and each phase after parsing operates by traversing the AST.
-//! This AST traversal is usually defined in the mod.rs file for that phase and is a good
-//! place to start if you're trying to learn how that phase works. An exception is type
-//! inference which has its AST pass defined in types/typechecker.rs rather than types/mod.rs.
-//! Note that sometimes "phases" are sometimes called "passes" and vice-versa - the terms are
-//! interchangeable.
-#[macro_use]
-mod parser;
-mod lexer;
-
-#[macro_use]
-mod util;
-mod frontend;
-
-#[macro_use]
-mod error;
-mod cache;
-mod cli;
-
-#[macro_use]
-mod hir;
-mod cranelift_backend;
-mod lifetimes;
-
-#[allow(unused)]
-mod mir;
-mod nameresolution;
-mod types;
-
-#[cfg(feature = "llvm")]
-mod llvm;
-
-use cache::ModuleCache;
-use cli::{Backend, Cli, Completions, EmitTarget};
-use frontend::{check, FrontendPhase, FrontendResult};
+//! List of compiler passes and the source file to find more about them in:
+//! - Lexing `src/lexer/mod.rs`
+//! - Parsing `src/parser/mod.rs`
+//! - Name Resolution `src/name_resolution/mod.rs`
+//! - Type Inference `src/type_inference/cst_traversal.rs`
+//! - MIR Translation `src/mir/builder.rs`
+//!
+//! Non-passes:
+//! - `src/errors.rs`: Defines each error used in the program as well as the `Location` struct
+//! - `src/incremental.rs`: Some plumbing for the inc-complete library which also defines
+//!   which functions we're caching the result of.
+#![allow(mismatched_lifetime_syntaxes)]
 
 use clap::{CommandFactory, Parser};
-use clap_complete as clap_cmp;
-use std::collections::HashMap;
-use std::fs::File;
-use std::io::{stdout, BufReader, Read};
-use std::path::Path;
+use cli::{Cli, Completions};
+use colored::Colorize;
+use diagnostics::Diagnostic;
+use incremental::{Db, GetCrateGraph, Parse, Resolve};
+use name_resolution::namespace::{CrateId, LocalModuleId, SourceFileId};
+use std::{
+    collections::BTreeSet,
+    path::{Path, PathBuf},
+    process::Command,
+    sync::Arc,
+};
 
-#[global_allocator]
-static ALLOCATOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
+use crate::{
+    cli::EmitTarget,
+    codegen::llvm::{CodegenLlvmResult, codegen_llvm},
+    diagnostics::{DiagnosticKind, collect_all_diagnostics},
+    files::{make_compiler, write_metadata},
+    incremental::{TargetPointerSize, TypeCheck},
+    paths::binary_name,
+};
 
-/// Called when the "--check --show-types" command-line flags are given.
-/// Iterates through each Definition from the first compiled module (so excluding imports)
-/// and prints the type and required traits for each.
-fn print_definition_types(cache: &ModuleCache) {
-    let resolver = cache.name_resolvers.get_mut(0).unwrap();
-    let mut definitions = resolver.exports.definitions.iter().collect::<Vec<_>>();
+// All the compiler passes:
+// (listed out of order because `cargo fmt` alphabetizes them)
+mod codegen;
+mod definition_collection;
+mod find_files;
+mod lexer;
+mod mir;
+mod name_resolution;
+mod parser;
+mod type_inference;
 
-    // Make sure the output has a deterministic order for testing
-    definitions.sort();
+// Util modules:
+mod cli;
+mod diagnostics;
+mod files;
+mod incremental;
+mod iterator_extensions;
+mod paths;
+mod vecmap;
 
-    for (name, definition_id) in definitions {
-        let info = &cache[*definition_id];
-
-        if let Some(typ) = &info.typ {
-            let type_string = types::typeprinter::show_type_and_traits(
-                name,
-                typ,
-                &info.required_traits,
-                &info.trait_info,
-                cache,
-                true,
-            );
-            println!("{}", type_string);
-        } else {
-            println!("{} : (none)", name);
-        }
-    }
-}
-
-fn print_completions<G: clap_cmp::Generator>(gen: G) {
-    let mut cmd = Cli::command();
-    let name = cmd.get_name().to_string();
-    clap_cmp::generate(gen, &mut cmd, name, &mut stdout());
-}
-
-/// Convenience macro for unwrapping a Result or printing an error message and returning () on Err.
-macro_rules! expect {( $result:expr , $fmt_string:expr $( , $($msg:tt)* )? ) => ({
-    match $result {
-        Ok(t) => t,
-        Err(_) => {
-            print!($fmt_string $( , $($msg)* )? );
-            return ();
-        },
-    }
-});}
-
-pub fn main() {
+fn main() {
     if let Ok(Completions { shell_completion }) = Completions::try_parse() {
-        print_completions(shell_completion);
+        let mut cmd = Cli::command();
+        let name = cmd.get_name().to_string();
+        clap_complete::generate(shell_completion, &mut cmd, name, &mut std::io::stdout());
     } else {
         compile(Cli::parse())
     }
 }
 
 fn compile(args: Cli) {
-    // Setup the cache and read from the first file
-    let filename = Path::new(&args.file);
-    let file = File::open(filename);
-    let file = expect!(file, "Could not open file {}\n", filename.display());
-    let mut reader = BufReader::new(file);
-    let mut contents = String::new();
-    expect!(reader.read_to_string(&mut contents), "Failed to read {} into a string\n", filename.display());
+    let (mut compiler, metadata_file) = make_compiler(&args.files, args.incremental);
 
-    let filename = if filename.is_relative() {
-        let cwd = expect!(std::env::current_dir(), "Could not get current directory\n");
-        expect!(cwd.join(filename).canonicalize(), "Could not canonicalize {}\n", filename.display())
-    } else {
-        expect!(filename.canonicalize(), "Could not canonicalize {}\n", filename.display())
-    };
-    let parent = filename.parent().unwrap();
+    // TODO: Pointer size should be configurable depending on the target machine
+    TargetPointerSize.set(&mut compiler, 8);
 
-    let file_cache = HashMap::from([(filename.clone(), contents.clone())]);
-
-    let mut cache = ModuleCache::new(parent, file_cache);
-
-    error::color_output(!args.no_color);
-
-    let phase = if args.lex {
-        FrontendPhase::Lex
-    } else if args.parse {
-        FrontendPhase::Parse
-    } else {
-        FrontendPhase::TypeCheck
+    let diagnostics = match args.emit {
+        _ if args.check => collect_all_diagnostics(&mut compiler),
+        Some(EmitTarget::Tokens) => {
+            display_tokens(&compiler);
+            BTreeSet::new()
+        },
+        Some(EmitTarget::Ast) => display_parse_tree(&mut compiler, args.emit_all),
+        Some(EmitTarget::AstR) => display_name_resolution(&mut compiler, args.emit_all),
+        Some(EmitTarget::AstT) => display_type_checking(&mut compiler, true, args.emit_all),
+        Some(EmitTarget::Mir) => display_mir(&mut compiler, args.emit_all),
+        Some(EmitTarget::MirMono) => display_mir_mono(&mut compiler),
+        Some(EmitTarget::Ir) => llvm_codegen_separate(&mut compiler, true).2,
+        None => llvm_codegen_all(&mut compiler, &args.files, args.delete_binary),
     };
 
-    match check(&filename, contents, &mut cache, phase, args.show_time) {
-        FrontendResult::Done => return,
-        FrontendResult::ContinueCompilation => (),
-        FrontendResult::Errors => {
-            cache.display_diagnostics();
+    let (error_count, _) = classify_diagnostics(&diagnostics);
+    display_diagnostics(&diagnostics, &compiler, args.no_color);
 
-            if args.show_types {
-                print_definition_types(&cache);
+    if let Some(metadata_file) = metadata_file {
+        if let Err(error) = write_metadata(&compiler, &metadata_file) {
+            eprintln!("\n{error}");
+        }
+    }
+
+    if error_count != 0 {
+        std::process::exit(1);
+    }
+}
+
+/// Returns a pair of (error count, warning count)
+fn classify_diagnostics(diagnostics: &BTreeSet<Diagnostic>) -> (usize, usize) {
+    let mut error_count = 0;
+    let mut warning_count = 0;
+    for diagnostic in diagnostics {
+        match diagnostic.kind() {
+            DiagnosticKind::Error => error_count += 1,
+            DiagnosticKind::Warning => warning_count += 1,
+            DiagnosticKind::Note => (),
+        }
+    }
+    (error_count, warning_count)
+}
+
+fn display_diagnostics(diagnostics: &BTreeSet<Diagnostic>, compiler: &Db, no_color: bool) {
+    let (error_count, warning_count) = classify_diagnostics(&diagnostics);
+    for diganostic in diagnostics {
+        eprintln!("{}", diganostic.display(!no_color, &compiler));
+    }
+
+    if error_count != 0 {
+        let error_s = if error_count == 1 { "" } else { "s" };
+        let errors = format!("{error_count} error{error_s}");
+        let errors = if no_color { errors.into() } else { errors.red() };
+
+        let warning_s = if warning_count == 1 { "" } else { "s" };
+        let warnings = format!("{warning_count} warning{warning_s}");
+        let warnings = if no_color || warning_count == 0 { warnings.into() } else { warnings.yellow() };
+
+        eprintln!("Found {errors} and {warnings}");
+    } else if warning_count != 0 {
+        let warning_s = if warning_count == 1 { "" } else { "s" };
+        let warnings = format!("{warning_count} warning{warning_s}");
+        let warnings = if no_color { warnings.into() } else { warnings.yellow() };
+        eprintln!("Compiled with {warnings}");
+    }
+}
+
+fn display_tokens(compiler: &Db) {
+    let crates = GetCrateGraph.get(compiler);
+    let local_crate = &crates[&CrateId::LOCAL];
+
+    for file_id in local_crate.source_files.values() {
+        let file = file_id.get(compiler);
+        let tokens = lexer::Lexer::new(&file.contents).collect::<Vec<_>>();
+        for (token, _) in tokens {
+            println!("{token}");
+        }
+    }
+}
+
+fn display_parse_tree(compiler: &mut Db, emit_all: bool) -> BTreeSet<Diagnostic> {
+    let crates = GetCrateGraph.get(compiler);
+    let mut diagnostics = BTreeSet::new();
+
+    for (crate_id, crate_) in crates.iter() {
+        if emit_all || *crate_id == CrateId::LOCAL {
+            for file in crate_.source_files.values() {
+                let result = Parse(*file).get(compiler);
+                println!("{}", result.cst.display(&result.top_level_data));
+
+                let parse_diagnostics = compiler.get_accumulated_uncached(Parse(*file));
+                diagnostics.extend(parse_diagnostics);
             }
-            return;
-        },
+        }
     }
+    diagnostics
+}
 
-    let ast = cache.parse_trees.get_mut(0).unwrap();
+fn display_name_resolution(compiler: &mut Db, emit_all: bool) -> BTreeSet<Diagnostic> {
+    let crates = GetCrateGraph.get(compiler);
+    let mut diagnostics = BTreeSet::new();
 
-    if args.show_types {
-        print_definition_types(&cache);
-    }
+    for (crate_id, crate_) in crates.iter() {
+        if emit_all || *crate_id == CrateId::LOCAL {
+            for file in crate_.source_files.values() {
+                let parse = Parse(*file).get(compiler);
 
-    if args.check || cache.error_count() != 0 {
-        return;
-    }
+                for item in &parse.cst.top_level_items {
+                    let resolve_diagnostics = compiler.get_accumulated_uncached(Resolve(item.id));
+                    diagnostics.extend(resolve_diagnostics);
+                }
 
-    let hir = hir::monomorphise(ast, cache);
-    if args.emit == Some(EmitTarget::Hir) {
-        println!("{}", hir);
-        return;
-    }
-
-    // Phase 5: Lifetime inference
-    // util::timing::start_time("Lifetime Inference");
-    // lifetimes::infer(ast, &mut cache);
-
-    // if args.show_lifetimes {
-    //     println!("{}", ast);
-    // }
-
-    // Phase 6: Codegen
-    let default_backend = if args.opt_level == '0' { Backend::Cranelift } else { Backend::Llvm };
-    let backend = args.backend.unwrap_or(default_backend);
-
-    match backend {
-        Backend::Cranelift => cranelift_backend::run(&filename, hir, &args),
-        Backend::Llvm => {
-            if cfg!(feature = "llvm") {
-                #[cfg(feature = "llvm")]
-                llvm::run(&filename, hir, &args);
-            } else {
-                eprintln!("The llvm backend is required for non-debug builds. Recompile ante with --features 'llvm' to enable optimized builds.");
+                println!("{}", parse.cst.display_resolved(&parse.top_level_data, compiler))
             }
-        },
+        }
+    }
+    diagnostics
+}
+
+fn display_type_checking(compiler: &mut Db, show_types: bool, emit_all: bool) -> BTreeSet<Diagnostic> {
+    let crates = GetCrateGraph.get(compiler);
+    let mut diagnostics = BTreeSet::new();
+
+    for (crate_id, crate_) in crates.iter() {
+        if emit_all || *crate_id == CrateId::LOCAL {
+            for file in crate_.source_files.values() {
+                let parse = Parse(*file).get(compiler);
+
+                for item in &parse.cst.top_level_items {
+                    let more_diagnostics = compiler.get_accumulated_uncached(TypeCheck(item.id));
+                    diagnostics.extend(more_diagnostics);
+                }
+
+                if show_types {
+                    println!("{}", parse.cst.display_typed(&parse.top_level_data, compiler))
+                }
+            }
+        }
+    }
+    diagnostics
+}
+
+fn display_mir(compiler: &mut Db, emit_all: bool) -> BTreeSet<Diagnostic> {
+    let crates = GetCrateGraph.get(compiler);
+    let mut diagnostics = BTreeSet::new();
+
+    for (crate_id, crate_) in crates.iter() {
+        if emit_all || *crate_id == CrateId::LOCAL {
+            for file in crate_.source_files.values() {
+                let parse = Parse(*file).get(compiler);
+
+                for item in &parse.cst.top_level_items {
+                    let mir = mir::builder::build_initial_mir_with_shared_map(compiler, item.id);
+                    if let Some(mir) = mir {
+                        print!("{mir}");
+                    }
+                    let more_diagnostics = compiler.get_accumulated_uncached(TypeCheck(item.id));
+                    diagnostics.extend(more_diagnostics);
+                }
+            }
+        }
+    }
+    diagnostics
+}
+
+fn display_mir_mono(compiler: &mut Db) -> BTreeSet<Diagnostic> {
+    let mir = mir::monomorphization::monomorphize(compiler);
+    println!("{mir}");
+
+    let crates = GetCrateGraph.get(compiler);
+    let mut diagnostics = BTreeSet::new();
+    for crate_ in crates.values() {
+        for file in crate_.source_files.values() {
+            let parse = Parse(*file).get(compiler);
+
+            for item in parse.cst.top_level_items.iter() {
+                let more_diagnostics = compiler.get_accumulated_uncached(TypeCheck(item.id));
+                diagnostics.extend(more_diagnostics);
+            }
+        }
+    }
+    diagnostics
+}
+
+/// Codegen each item as a separate llvm module
+/// Returns (module strings, true if there are any errors, diagnostics)
+fn llvm_codegen_separate(compiler: &mut Db, display_ir: bool) -> (Vec<Arc<Vec<u8>>>, bool, BTreeSet<Diagnostic>) {
+    let diagnostics = collect_all_diagnostics(compiler);
+    let (errors, _) = classify_diagnostics(&diagnostics);
+    if errors != 0 {
+        return (Vec::new(), true, diagnostics);
     }
 
-    // Print out the time each compiler pass took to complete if the --show-time flag was passed
-    util::timing::show_timings();
+    let modules = if let Some(result) = codegen_llvm(compiler) {
+        if display_ir {
+            display_llvm_bitcode(&result, "program");
+        }
+        vec![result.module_bitcode]
+    } else {
+        Vec::new()
+    };
+    (modules, false, diagnostics)
+}
+
+fn display_llvm_bitcode(result: &CodegenLlvmResult, module_name: &str) {
+    let buffer = inkwell::memory_buffer::MemoryBuffer::create_from_memory_range(&result.module_bitcode, module_name);
+    let context = inkwell::context::Context::create();
+    let new_module = inkwell::module::Module::parse_bitcode_from_buffer(&buffer, &context)
+        .expect("Failed to parse llvm module bitcode");
+    let module = new_module.print_to_string();
+    let module = module.to_string_lossy();
+    println!("{module}");
+}
+
+/// Codegen everything, linking together each separate llvm module
+fn llvm_codegen_all(compiler: &mut Db, files: &[PathBuf], delete_binary: bool) -> BTreeSet<Diagnostic> {
+    let (mut modules, has_errors, diagnostics) = llvm_codegen_separate(compiler, false);
+    if has_errors {
+        return diagnostics;
+    }
+
+    // Monomorphization currently needs all definitions to compile, so each llvm call currently
+    // compiles the whole program. This should be fixed in the future, but for now each module is
+    // the whole program so we just need one.
+    modules.truncate(1);
+
+    let module_name = files.first().map_or_else(|| "a.out".into(), |file| file.with_extension(""));
+    let module_name = module_name.to_string_lossy();
+
+    let link_succeeded = codegen::llvm::link(modules, &module_name);
+    if !link_succeeded {
+        return diagnostics;
+    }
+
+    // Run the program
+    // Use an absolute path so the binary can be found regardless of PATH.
+    let binary_path = binary_name(&module_name);
+
+    Command::new(&binary_path).spawn().unwrap().wait().unwrap();
+    if delete_binary {
+        std::fs::remove_file(module_name.as_ref()).unwrap();
+    }
+
+    diagnostics
+}
+
+pub fn path_to_id(crate_id: CrateId, path: &Path) -> SourceFileId {
+    let local_module_id = LocalModuleId(parser::ids::hash(path) as u32);
+    SourceFileId { crate_id, local_module_id }
 }

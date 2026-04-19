@@ -10,20 +10,19 @@ count_down n f =
 
 main () =
     // Making this mutable helps prevent inlining
-    mut offset = 1
+    var offset = 1
     count_down 3 fn x ->
-        print (x + offset)
+        println (x + offset)
 
-    print_offset _ = print offset
+    print_offset _ = println offset
     closure = count_down _ print_offset
     closure 2
 
-main ()
-
-// args: --delete-binary
+// args: --delete-binary --no-color
 // expected stdout:
 // 4
 // 3
 // 2
 // 1
 // 1
+

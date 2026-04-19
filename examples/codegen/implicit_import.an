@@ -1,9 +1,14 @@
-mut v = Vec.empty ()
+// Still need to import this explicitly
+import Std.Vec.print_vec
 
-Vec.push !v 3i32
-Vec.push !v 4
+main () =
+    var v = Std.Vec.empty ()
+    Std.Vec.push (mut v) 3i32
+    Std.Vec.push (mut v) 4
+    println (ref v)
 
-print v
+// Found 1 error and 0 warnings
 
-// args: --delete-binary
+// args: --delete-binary --no-color
 // expected stdout: [3, 4]
+

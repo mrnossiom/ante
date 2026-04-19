@@ -1,11 +1,9 @@
-
 foo x = x
 
 bar x = foo x
 
 baz x = bar x
 
-baz "hi"
+main () = baz "hi"
 
-// args: --delete-binary
-// expected stdout:
+// args: --delete-binary --no-color

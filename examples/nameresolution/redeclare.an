@@ -7,25 +7,34 @@ foo _ =
     a = 5
     ()
 
-// args: --check
+// args: -e ast-r --no-color
+// expected stdout:
+// // id = c1m779_7365
+// a_c1m779_7365_1 = 1
+// 
+// // id = c1m779_4138
+// a_c1m779_7365_1 = 2
+// 
+// // id = c1m779_1920
+// a_c1m779_7365_1 = 3
+// 
+// // id = c1m779_3132
+// foo_c1m779_3132_0 __1 =
+//     a_3 = 4
+//     a_5 = 5
+//     ()
+
 // expected stderr:
-// redeclare.an:2:1	error: a is already in scope
-// a = 2
+// examples/nameresolution/redeclare.an:2:1
+// 1 | a = 1
+// 2 | a = 2	// warning: `a` was already defined
+//   | ^
+// 3 | a = 3
 // 
-// redeclare.an:1:1	note: a was previously defined here
-// a = 1
+// examples/nameresolution/redeclare.an:3:1
+// 2 | a = 2
+// 3 | a = 3	// warning: `a` was already defined
+//   | ^
 // 
-// redeclare.an:3:1	error: a is already in scope
-// a = 3
-// 
-// redeclare.an:2:1	note: a was previously defined here
-// a = 2
-// 
-// redeclare.an:6:5	warning: a is unused (prefix name with _ to silence this warning)
-//     a = 4
-// 
-// redeclare.an:5:1	warning: foo is unused (prefix name with _ to silence this warning)
-// foo _ =
-// 
-// redeclare.an:7:5	warning: a is unused (prefix name with _ to silence this warning)
-//     a = 5
+// Compiled with 2 warnings
+

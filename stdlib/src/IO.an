@@ -1,0 +1,80 @@
+import Std.C.fclose, fopen, fputs, fgetc, ungetc, feof, malloc, realloc, getchar, copy_file
+import Std.C
+
+export File, open, close, drop_file, eof, write, next_char, next_line,
+    iterator_file, read_line
+
+type File = c_file: C.File
+
+File.open (path: String) (mode: String): File =
+    // TODO: Add null byte here
+    File <| fopen (C.String path.data) (C.String mode.data)
+
+File.close (file: File): Unit =
+    fclose file.c_file
+
+impl drop_file: Drop File with
+    drop f =
+        fclose f.c_file
+
+//Convenience function for using feof with better types
+File.eof (f: ref File): Bool =
+    feof f.c_file != 0
+
+File.write (f: mut File) (text: String): Unit =
+    // TODO: Add null byte here
+    fputs (C.String text.data) f.c_file
+    ()
+
+File.next_char (f: ref File): Char =
+    Char (fgetc f.c_file)
+
+File.next_line (f: mut File): String =
+    if f.eof () then return ""
+
+    len, cstr = loop (len = 0) (capacity = 32) (cstr = malloc 32) ->
+        next = fgetc f.c_file
+        if next < 0 then return (len, cstr)
+        c = Char next
+
+        //Flag feof if eof occurs after terminating newline
+        if c == c"\n" then
+            peek = fgetc f.c_file
+            if peek >= 0 then ungetc peek f.c_file
+            return (len, cstr)
+
+        new_capacity, new_cstr = if len + 1 >= capacity then
+            new_cap = capacity * 2
+            (new_cap, realloc cstr new_cap)
+        else (capacity, cstr)
+
+        array_insert new_cstr len c
+        recur (len + 1) new_capacity new_cstr
+
+    array_insert cstr len c"\0"
+    String.from_parts cstr (U32 len)
+
+// Iterating through a File iterates through each line
+impl iterator_file: Iterator (mut File) String with
+    next file =
+        if file.eof () then None
+        else Some (file, file.next_line ())
+
+// Read a line from stdin, ending with (and not including) a terminating c"\n"
+read_line (): String =
+    buffer, len = loop (buffer = null ()) (len = 0) ->
+        c = getchar ()
+        c_char = Char c
+
+        buffer2 = if len %% 32
+            then realloc buffer (len + 32)
+            else buffer
+
+        array_insert buffer2 len c_char
+
+        if c_char != c"\n" and c >= 0
+        then recur buffer2 (len + 1)
+        else buffer2, len
+
+    array_insert buffer len c"\0"
+    String.from_parts buffer (U32 len)

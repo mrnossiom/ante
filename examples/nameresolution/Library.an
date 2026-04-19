@@ -3,5 +3,11 @@ library_int = 5
 
 library_fn _ = 2
 
-// args: --check
+// args: -e ast-r --no-color
 // expected stdout:
+// // id = c1m753_7873
+// library_int_c1m753_7873_1 = 5
+// 
+// // id = c1m753_5383
+// library_fn_c1m753_5383_0 __1 = 2
+

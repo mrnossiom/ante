@@ -1,7 +1,10 @@
 type S = message: String
 
-impl Print S with
-    printne s = printne s.message
+impl print_s: Print S with
+    print s = print s.message
+
+impl copy_s: Copy S with
+    (.*) s = S s.message
 
 // If the compiler decides to pass by reference, the code becomes:
 // void foo(const S *x, S *y) {
@@ -9,17 +12,19 @@ impl Print S with
 // }
 // which can mutate x when x == y if not careful
 foo (x: S) (y: S) =
-    printne "x before: "
-    print x
-    mut z = y
-    z.!message := "modifying y"
-    printne "x after:  "
-    print x
+    print "x before: "
+    println x
+    var z = y
+    z.message := "modifying y"
+    print "x after:  "
+    println x
 
-mut x = S "original x string"
-foo x x
+main () =
+    var x = S "original x string"
+    foo x x
 
-// args: --delete-binary
+// args: --delete-binary --no-color
 // expected stdout:
 // x before: original x string
 // x after:  original x string
+

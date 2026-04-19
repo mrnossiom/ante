@@ -1,9 +1,10 @@
 not_an_error = 1
 
+main () =
+    // Not a name resolution error at least. This isn't testing the type checker
+    not_an_error is_an_error
 
-not_an_error is_an_error
-
-fn a b -> a + c + b
+    fn a b -> a + c + b
 
 foo a b =
     bar c d =
@@ -14,28 +15,43 @@ foo a b =
 a = 2
 a = 3 // already declared
 
-// args: --check
+// args: -e ast-r --no-color
+// expected exit status: 1
+// expected stdout:
+// // id = c1m416_9923
+// not_an_error_c1m416_9923_1 = 1
+// 
+// // id = c1m416_1944
+// main_c1m416_1944_0 () =
+//     not_an_error_c1m416_9923_1 is_an_error_?
+//     fn a_4 b_5 -> (a_4 +_c0m703_6099_1 c_?) +_c0m703_6099_1 b_5
+// 
+// // id = c1m416_3132
+// foo_c1m416_3132_0 a_1 b_2 =
+//     bar_3 c_4 d_5 =
+//         b_2
+//     ()
+// 
+// // id = c1m416_7365
+// a_c1m416_7365_1 = 2
+// 
+// // id = c1m416_4138
+// a_c1m416_7365_1 = 3
+
 // expected stderr:
-// errors.an:15:1	error: a is already in scope
-// a = 3 // already declared
+// examples/nameresolution/errors.an:5:18
+// 4 |     // Not a name resolution error at least. This isn't testing the type checker
+// 5 |     not_an_error is_an_error	// error: `is_an_error` not found in scope
+//   |                  ^^^^^^^^^^^
 // 
-// errors.an:14:1	note: a was previously defined here
-// a = 2
+// examples/nameresolution/errors.an:7:19
+// 7 |     fn a b -> a + c + b	// error: `c` not found in scope
+//   |                   ^
 // 
-// errors.an:4:14	error: No declaration for `is_an_error` was found in scope
-// not_an_error is_an_error
+// examples/nameresolution/errors.an:16:1
+// 15 | a = 2
+// 16 | a = 3 // already declared	// warning: `a` was already defined
+//    | ^
 // 
-// errors.an:6:15	error: No declaration for `c` was found in scope
-// fn a b -> a + c + b
-// 
-// errors.an:9:9	warning: c is unused (prefix name with _ to silence this warning)
-//     bar c d =
-// 
-// errors.an:9:11	warning: d is unused (prefix name with _ to silence this warning)
-//     bar c d =
-// 
-// errors.an:8:5	warning: a is unused (prefix name with _ to silence this warning)
-// foo a b =
-// 
-// errors.an:9:5	warning: bar is unused (prefix name with _ to silence this warning)
-//     bar c d =
+// Found 2 errors and 1 warning
+

@@ -1,6 +1,15 @@
-a: Int String = 3
+a: Num String = 3
 
-// args: --check
+// args: --check --no-color
+// expected exit status: 1
 // expected stderr:
-// 146_invalid_int_type.an:1:4	error: Type String is not an integer type
-// a: Int String = 3
+// examples/regressions/146_invalid_int_type.an:1:1
+// 1 | a: Num String = 3	// error: This program has no `main` function
+//   | 
+// 
+// examples/regressions/146_invalid_int_type.an:1:17
+// 1 | a: Num String = 3	// error: Expected an integer type but found Num String
+//   |                 ^
+// 
+// Found 2 errors and 0 warnings
+

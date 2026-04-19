@@ -1,0 +1,593 @@
+use std::sync::Arc;
+
+use crate::{
+    diagnostics::Location,
+    incremental::{DbHandle, GetItem, GetItemRaw},
+    iterator_extensions::mapvec,
+    lexer::token::{FloatKind, IntegerKind},
+    parser::{
+        cst::{
+            self, Argument, Constructor, Definition, Expr, If, Lambda, Literal, Parameter, Path, Pattern, SequenceItem,
+            TopLevelItem, TopLevelItemKind, TraitDefinition, TraitImpl, Type, TypeDefinitionBody, TypeKind,
+        },
+        desugar_context::DesugarContext,
+        ids::{ExprId, PathId},
+    },
+};
+
+pub fn get_item_impl(context: &GetItem, db: &DbHandle) -> (Arc<TopLevelItem>, Arc<DesugarContext>) {
+    let (item, context) = GetItemRaw(context.0).get(db);
+
+    match &item.kind {
+        TopLevelItemKind::TraitDefinition(trait_definition) => {
+            let mut new_context = DesugarContext::new(context);
+            let new_kind = desugar_trait(trait_definition, &mut new_context);
+            let new_item = Arc::new(TopLevelItem { comments: item.comments.clone(), kind: new_kind, id: item.id });
+            (new_item, Arc::new(new_context))
+        },
+        TopLevelItemKind::TraitImpl(trait_impl) => {
+            let mut new_context = DesugarContext::new(context);
+            let new_definition = desugar_impl(trait_impl, &mut new_context);
+            desugar_expression(new_definition.rhs, &mut new_context);
+            let kind = TopLevelItemKind::Definition(new_definition);
+            let new_item = Arc::new(TopLevelItem { comments: item.comments.clone(), kind, id: item.id });
+            (new_item, Arc::new(new_context))
+        },
+        TopLevelItemKind::Definition(definition) => {
+            let mut new_context = DesugarContext::new(context);
+            desugar_expression(definition.rhs, &mut new_context);
+            (item, Arc::new(new_context))
+        },
+        _ => {
+            let new_context = DesugarContext::new(context);
+            (item, Arc::new(new_context))
+        },
+    }
+}
+
+/// Expands a trait-typed parameter from e.g. `Print a` → `Print a [env_i]`.
+/// This ensures `from_cst_type_no_type_variables` sees a named generic for the env
+/// rather than auto-inserting a fresh type variable (which would cause it to return None).
+fn add_env_to_trait_type(typ: &Type, env_var: crate::parser::ids::NameId, location: &Location) -> Type {
+    let env_type = Type::new(TypeKind::Variable(env_var), location.clone());
+    match &typ.kind {
+        TypeKind::Named(_) => {
+            Type::new(TypeKind::Application(Box::new(typ.clone()), vec![env_type]), typ.location.clone())
+        },
+        TypeKind::Application(f, args) => {
+            let mut new_args = args.clone();
+            new_args.push(env_type);
+            Type::new(TypeKind::Application(f.clone(), new_args), typ.location.clone())
+        },
+        _ => typ.clone(),
+    }
+}
+
+/// Desugars
+/// ```ante
+/// impl name {Parameter}: Trait TraitArgs with
+///     method1 = ...
+///     method2 = ...
+/// ```
+/// Into
+/// ```ante
+/// implicit name {Parameter}: Trait TraitArgs Parameter = Trait With
+///     method1 = ...
+///     method2 = ...
+/// ```
+/// Note that this assumes the returned trait will capture each parameter used.
+fn desugar_impl(impl_: &TraitImpl, context: &mut DesugarContext) -> Definition {
+    let location = context.name_location(impl_.name).clone();
+    let variable = context.push_pattern(Pattern::Variable(impl_.name), location.clone());
+
+    let mut trait_type = Type::new(TypeKind::Named(impl_.trait_path), location.clone());
+
+    // Collect existing parameter info before mutating context.
+    let param_infos: Vec<(bool, crate::parser::ids::PatternId, Type)> = impl_
+        .parameters
+        .iter()
+        .map(|param| match &context[param.pattern] {
+            Pattern::TypeAnnotation(inner, typ) => (param.is_implicit, *inner, typ.clone()),
+            _ => unreachable!("impl parameters are expected to have type annotations"),
+        })
+        .collect();
+
+    // Build new parameters with expanded env types (e.g. `Print a` -> `Print a [env_0]`).
+    // This prevents `from_cst_type_no_type_variables` from auto-inserting fresh type variables.
+    let expanded_parameters = mapvec(param_infos.iter().enumerate(), |(i, (is_implicit, inner, typ))| {
+        let env_name = context.push_name(Arc::new(format!("[env_{}]", i)), location.clone());
+        let expanded_type = add_env_to_trait_type(typ, env_name, &location);
+        let new_pattern = context.push_pattern(Pattern::TypeAnnotation(*inner, expanded_type), location.clone());
+        cst::Parameter::with_implicit(new_pattern, *is_implicit)
+    });
+
+    if !impl_.trait_arguments.is_empty() || !impl_.parameters.is_empty() {
+        let app_location = location.clone();
+        let mut arguments = impl_.trait_arguments.clone();
+
+        // Assume the returned trait captures each parameter.
+        let parameter_types = expanded_parameters.iter().map(|param| match &context[param.pattern] {
+            Pattern::TypeAnnotation(_, typ) => typ.clone(),
+            _ => unreachable!("impl parameters are expected to have type annotations"),
+        });
+        arguments.push(make_tuple_type(&location, parameter_types));
+
+        trait_type = Type::new(TypeKind::Application(Box::new(trait_type), arguments), app_location);
+    }
+
+    // If this is not a function we need to put the type annotation on the name itself rather than
+    // the return type of the lambda.
+    let pattern = if impl_.parameters.is_empty() {
+        context.push_pattern(Pattern::TypeAnnotation(variable, trait_type.clone()), location.clone())
+    } else {
+        variable
+    };
+
+    let fields = impl_.body.clone();
+    let constructor = Expr::Constructor(Constructor { fields, typ: trait_type.clone() });
+    let constructor = context.push_expr(constructor, location.clone());
+
+    let rhs = if impl_.parameters.is_empty() {
+        constructor
+    } else {
+        let lambda = Expr::Lambda(Lambda {
+            parameters: expanded_parameters,
+            return_type: Some(trait_type),
+            effects: Some(Vec::new()),
+            body: constructor,
+            is_move: false,
+        });
+        context.push_expr(lambda, location)
+    };
+
+    Definition { implicit: true, mutable: false, pattern, rhs }
+}
+
+fn make_tuple_type(location: &Location, types: impl ExactSizeIterator<Item = Type>) -> Type {
+    if types.len() == 0 {
+        return Type::new(TypeKind::NoClosureEnv, location.clone());
+    }
+    Type::new(TypeKind::Tuple(types.collect()), location.clone())
+}
+
+/// Desugars
+/// ```ante
+/// trait Foo args with
+///     declaration1: fn Arg1_1 ... ArgN_1 -> Ret_1
+///     ...
+///     declarationN: fn Arg1_N ... ArgN_N -> Ret_N
+///     field1: SomeTrait args
+/// ```
+/// Into
+/// ```ante
+/// type Foo args env =
+///     declaration1: fn Arg1_1 ... ArgN_1 [env] -> Ret_1
+///     ...
+///     declarationN: fn Arg1_N ... ArgN_N [env] -> Ret_N
+///     field1: SomeTrait args [env]
+/// ```
+fn desugar_trait(trait_: &TraitDefinition, context: &mut DesugarContext) -> TopLevelItemKind {
+    let name_location = context.name_location(trait_.name).clone();
+
+    // TODO: Can this be done more cleanly without resorting to strings users cannot type?
+    let env = context.push_name(Arc::new("[env]".into()), name_location.clone());
+
+    // Add the `env` generic to the trait type itself
+    let mut generics = trait_.generics.clone();
+    generics.push(env);
+
+    // Add `[env]` to each field type: for function types this is set as the closure environment,
+    // for non-function types (e.g. sub-trait fields like `Add a`) it is appended as a type argument
+    // so that the env is properly substituted when the trait is instantiated.
+    let fields = mapvec(&trait_.body, |decl| {
+        let typ = match &decl.typ.kind {
+            cst::TypeKind::Function(f) => {
+                let mut f = f.clone();
+                f.environment = Some(Box::new(Type::new(TypeKind::Variable(env), name_location.clone())));
+                Type::new(cst::TypeKind::Function(f), decl.typ.location.clone())
+            },
+            _ => add_env_to_trait_type(&decl.typ, env, &name_location),
+        };
+        (decl.name, typ)
+    });
+
+    TopLevelItemKind::TypeDefinition(super::cst::TypeDefinition {
+        shared: false,
+        is_trait: true,
+        name: trait_.name,
+        generics,
+        body: TypeDefinitionBody::Struct(fields),
+    })
+}
+
+/// Traverse the expression recursively, desugaring along the way looking for the following cases:
+/// - `loop`: All loops are sugar for an immediately invoked helper function
+/// - `|>` and `<|`: Apply operators are sugar for direct application
+/// - `foo _ x _`: Function calls with `_` as arguments are automatically converted into lambdas
+///                with the `_` parameters as the remaining lambda parameters in source order.
+fn desugar_expression(expr: ExprId, context: &mut DesugarContext) {
+    let mut desugars = Vec::new();
+    collect_expressions_to_desugar(expr, context, &mut desugars);
+
+    for desugar in desugars {
+        desugar.apply(context);
+    }
+}
+
+fn collect_expressions_to_desugar(expr: ExprId, context: &DesugarContext, to_desugar: &mut Vec<ExprDesugar>) {
+    match &context[expr] {
+        Expr::Error => (),
+        Expr::Literal(_) => (),
+        Expr::Variable(_) => (),
+        Expr::Quoted(_) => (),
+        Expr::Definition(definition) => collect_expressions_to_desugar(definition.rhs, context, to_desugar),
+        Expr::MemberAccess(access) => collect_expressions_to_desugar(access.object, context, to_desugar),
+        Expr::Lambda(lambda) => collect_expressions_to_desugar(lambda.body, context, to_desugar),
+        Expr::Reference(reference) => collect_expressions_to_desugar(reference.rhs, context, to_desugar),
+        Expr::TypeAnnotation(annotation) => collect_expressions_to_desugar(annotation.lhs, context, to_desugar),
+        Expr::Return(return_) => collect_expressions_to_desugar(return_.expression, context, to_desugar),
+        Expr::Sequence(sequence) => {
+            for item in sequence {
+                collect_expressions_to_desugar(item.expr, context, to_desugar);
+            }
+        },
+        Expr::Call(call) => {
+            collect_expressions_to_desugar(call.function, context, to_desugar);
+            for arg in call.arguments.iter() {
+                collect_expressions_to_desugar(arg.expr, context, to_desugar);
+            }
+
+            if call.arguments.iter().any(|arg| is_wildcard(arg.expr, context)) {
+                to_desugar.push(ExprDesugar::CallWildcards(expr));
+            }
+
+            if let Some(desugar) = classify_call(&call, expr, context) {
+                to_desugar.push(desugar);
+            }
+        },
+        Expr::If(if_) => {
+            collect_expressions_to_desugar(if_.condition, context, to_desugar);
+            collect_expressions_to_desugar(if_.then, context, to_desugar);
+            if let Some(else_) = if_.else_ {
+                collect_expressions_to_desugar(else_, context, to_desugar);
+            }
+        },
+        Expr::Match(match_) => {
+            collect_expressions_to_desugar(match_.expression, context, to_desugar);
+            for case in match_.cases.iter() {
+                collect_expressions_to_desugar(case.1, context, to_desugar);
+            }
+        },
+        Expr::Handle(handle) => {
+            collect_expressions_to_desugar(handle.expression, context, to_desugar);
+            for case in handle.cases.iter() {
+                collect_expressions_to_desugar(case.1, context, to_desugar);
+            }
+        },
+        Expr::Constructor(constructor) => {
+            for field in constructor.fields.iter() {
+                collect_expressions_to_desugar(field.1, context, to_desugar);
+            }
+        },
+        Expr::Loop(loop_) => {
+            collect_expressions_to_desugar(loop_.body, context, to_desugar);
+            to_desugar.push(ExprDesugar::Loop(expr));
+        },
+        Expr::Assignment(assignment) => {
+            let rhs = assignment.rhs;
+            collect_expressions_to_desugar(assignment.lhs, context, to_desugar);
+            collect_expressions_to_desugar(rhs, context, to_desugar);
+            if let Some((_, op_expr)) = assignment.op {
+                collect_expressions_to_desugar(op_expr, context, to_desugar);
+            }
+        },
+        Expr::Extern(_) => (),
+    }
+}
+
+/// `loop (p1 = e1) ... -> body`
+/// gets desugared to
+/// `{ recur p1 ... = body; recur e1 ... }`
+fn desugar_loop(expr: ExprId, context: &mut DesugarContext) {
+    let Expr::Loop(loop_) = context[expr].clone() else { unreachable!() };
+
+    let location = context.expr_location(expr).clone();
+    let body = loop_.body;
+    let parameters = loop_.parameters.into_iter();
+
+    // parameters and arg list
+    let (parameters, arguments) = parameters
+        .map(|parameter| {
+            let (pattern, expr) = match parameter {
+                cst::LoopParameter::Variable(name) => {
+                    let pattern = cst::Pattern::Variable(name);
+                    let pattern = context.push_pattern(pattern, location.clone());
+
+                    let name_string = context[name].clone();
+                    let path = cst::Path::ident(name_string.to_string(), location.clone());
+                    let path = context.push_path(path, location.clone());
+                    let expr = cst::Expr::Variable(path);
+                    let expr = context.push_expr(expr, location.clone());
+                    (pattern, expr)
+                },
+                cst::LoopParameter::PatternAndExpr(pattern, expr) => (pattern, expr),
+                cst::LoopParameter::UnitLiteral(location) => {
+                    let pattern = cst::Pattern::Literal(cst::Literal::Unit);
+                    let pattern = context.push_pattern(pattern, location.clone());
+                    let expr = cst::Expr::Literal(cst::Literal::Unit);
+                    let expr = context.push_expr(expr, location.clone());
+                    (pattern, expr)
+                },
+            };
+            (Parameter::new(pattern), Argument::explicit(expr))
+        })
+        .unzip();
+
+    // Create `recur = fn params... -> body`
+    let name_id = context.push_name(cst::Name::new("recur".to_string()), location.clone());
+
+    let recur = cst::Pattern::Variable(name_id);
+    let recur = context.push_pattern(recur, location.clone());
+
+    let lambda = cst::Expr::Lambda(cst::Lambda { parameters, return_type: None, effects: None, body, is_move: false });
+    let lambda = context.push_expr(lambda, location.clone());
+
+    let definition =
+        cst::Expr::Definition(cst::Definition { implicit: false, mutable: false, pattern: recur, rhs: lambda });
+    let definition = context.push_expr(definition, location.clone());
+
+    // Create `recur args...`
+    let function_path = cst::Path::ident("recur".to_string(), location.clone());
+    let function_path = context.push_path(function_path, location.clone());
+    let function = cst::Expr::Variable(function_path);
+    let function = context.push_expr(function, location.clone());
+    let call = cst::Expr::Call(cst::Call { function, arguments });
+    let call = context.push_expr(call, location);
+
+    let definition = SequenceItem { expr: definition, comments: Vec::new() };
+    let call = SequenceItem { expr: call, comments: Vec::new() };
+
+    let replacement_expr = cst::Expr::Sequence(vec![definition, call]);
+    context.set_expr(expr, replacement_expr);
+}
+
+fn is_wildcard(expr_id: ExprId, context: &DesugarContext) -> bool {
+    if let Expr::Variable(path_id) = &context[expr_id] { context[*path_id].last_ident() == "_" } else { false }
+}
+
+/// Desugars `foo _ x _` into `fn _1 _2 -> foo _1 x _2`
+fn desugar_call_wildcards(expr: ExprId, context: &mut DesugarContext) {
+    let Expr::Call(call) = context[expr].clone() else { unreachable!() };
+
+    let location = context.expr_location(expr).clone();
+    let mut parameters = Vec::new();
+    let mut counter = 1u32;
+
+    let new_arguments = mapvec(&call.arguments, |arg| {
+        if is_wildcard(arg.expr, context) {
+            let name = format!("_{}", counter);
+            counter += 1;
+
+            let name_id = context.push_name(cst::Name::new(name.clone()), location.clone());
+
+            let pattern = context.push_pattern(Pattern::Variable(name_id), location.clone());
+            parameters.push(Parameter::with_implicit(pattern, arg.is_implicit));
+
+            let path = cst::Path::ident(name, location.clone());
+            let path_id = context.push_path(path, location.clone());
+            let var_expr = context.push_expr(Expr::Variable(path_id), location.clone());
+
+            Argument { is_implicit: arg.is_implicit, expr: var_expr }
+        } else {
+            *arg
+        }
+    });
+
+    let new_call = Expr::Call(cst::Call { function: call.function, arguments: new_arguments });
+    let new_call_id = context.push_expr(new_call, location.clone());
+
+    context.set_expr(
+        expr,
+        Expr::Lambda(Lambda { parameters, return_type: None, effects: None, body: new_call_id, is_move: false }),
+    );
+}
+
+enum ExprDesugar {
+    CallWildcards(ExprId),
+
+    /// true = `|>`, false = `<|`
+    Pipe {
+        call: ExprId,
+        pipe_right: bool,
+    },
+
+    /// true = `and`, false = `or`
+    LogicalOperator {
+        call: ExprId,
+        is_or: bool,
+    },
+
+    /// `a with b` desugars to `b (fn () -> a)`
+    TildeArrow {
+        call: ExprId,
+    },
+
+    /// `U8 x` desugars to `cast x : U8`
+    TypeCast {
+        call: ExprId,
+        target_type: Type,
+    },
+
+    Loop(ExprId),
+}
+
+/// Classifies this call based on the called function.
+/// Returns the desugaring to perform on this call, or `None` if there is nothing to do.
+fn classify_call(call: &cst::Call, expr: ExprId, context: &DesugarContext) -> Option<ExprDesugar> {
+    let Expr::Variable(path_id) = &context[call.function] else { return None };
+
+    let path = &context[*path_id];
+    if path.components.len() > 1 {
+        return None;
+    }
+
+    let name = path.last_ident();
+
+    if call.arguments.len() == 1 {
+        let location = context.expr_location(call.function);
+        if let Some(target_type) = type_name_to_type(name, location, *path_id) {
+            return Some(ExprDesugar::TypeCast { call: expr, target_type });
+        }
+    }
+
+    if call.arguments.len() != 2 {
+        return None;
+    }
+
+    match name {
+        "|>" => Some(ExprDesugar::Pipe { call: expr, pipe_right: true }),
+        "<|" => Some(ExprDesugar::Pipe { call: expr, pipe_right: false }),
+        "or" => Some(ExprDesugar::LogicalOperator { call: expr, is_or: true }),
+        "and" => Some(ExprDesugar::LogicalOperator { call: expr, is_or: false }),
+        "~>" => Some(ExprDesugar::TildeArrow { call: expr }),
+        _ => None,
+    }
+}
+
+fn type_name_to_type(name: &str, location: &Location, path_id: PathId) -> Option<Type> {
+    let kind = match name {
+        "I8" => TypeKind::Integer(IntegerKind::I8),
+        "I16" => TypeKind::Integer(IntegerKind::I16),
+        "I32" => TypeKind::Integer(IntegerKind::I32),
+        "I64" => TypeKind::Integer(IntegerKind::I64),
+        "Isz" => TypeKind::Integer(IntegerKind::Isz),
+        "U8" => TypeKind::Integer(IntegerKind::U8),
+        "U16" => TypeKind::Integer(IntegerKind::U16),
+        "U32" => TypeKind::Integer(IntegerKind::U32),
+        "U64" => TypeKind::Integer(IntegerKind::U64),
+        "Usz" => TypeKind::Integer(IntegerKind::Usz),
+        "F32" => TypeKind::Float(FloatKind::F32),
+        "F64" => TypeKind::Float(FloatKind::F64),
+        "Char" => TypeKind::Char,
+        "Bool" => TypeKind::Named(path_id),
+        _ => return None,
+    };
+    Some(Type::new(kind, location.clone()))
+}
+
+impl ExprDesugar {
+    /// Apply the desugaring, mutating the DesugarContext with new expressions
+    fn apply(self, context: &mut DesugarContext) {
+        match self {
+            ExprDesugar::CallWildcards(expr) => desugar_call_wildcards(expr, context),
+            ExprDesugar::Pipe { call, pipe_right } => desugar_pipeline(call, context, pipe_right),
+            ExprDesugar::LogicalOperator { call, is_or } => desugar_logical_operators(call, context, is_or),
+            ExprDesugar::TildeArrow { call } => desugar_tilde_arrow(call, context),
+            ExprDesugar::TypeCast { call, target_type } => desugar_type_cast(call, target_type, context),
+            ExprDesugar::Loop(expr) => desugar_loop(expr, context),
+        }
+    }
+}
+
+/// Desugars `U8 x` into `(Std.Prelude.Cast.cast x) : U8`
+fn desugar_type_cast(expr: ExprId, target_type: Type, context: &mut DesugarContext) {
+    let Expr::Call(call) = context[expr].clone() else { unreachable!() };
+    let location = context.expr_location(expr).clone();
+
+    let cast_path = Path {
+        components: vec![
+            ("Std".to_string(), location.clone()),
+            ("Prelude".to_string(), location.clone()),
+            ("Cast".to_string(), location.clone()),
+            ("cast".to_string(), location.clone()),
+        ],
+    };
+    let cast_path = context.push_path(cast_path, location.clone());
+    let cast_var = context.push_expr(Expr::Variable(cast_path), location.clone());
+
+    let cast_call = Expr::Call(cst::Call { function: cast_var, arguments: call.arguments });
+    let cast_call = context.push_expr(cast_call, location);
+
+    context.set_expr(expr, Expr::TypeAnnotation(cst::TypeAnnotation { lhs: cast_call, rhs: target_type }));
+}
+
+/// Desugars `x |> foo a b` into `foo x a b` and `foo a b <| x` into `foo x a b`
+///
+/// Although `|>` and `<|` always slot into the first argument, this can be combined with
+/// explicit currying via `_` to slot into the underscore's position:
+/// `x |> foo a _ b` => `x |> (fn _1 -> foo a _1 b)` => `(fn _1 -> foo a _1 b) x`
+fn desugar_pipeline(expr: ExprId, context: &mut DesugarContext, is_pipe_right: bool) {
+    let Expr::Call(call) = &context[expr] else { unreachable!() };
+
+    // TODO: This check bypasses name resolution of these operators. If the user shadows
+    // the prelude's definitions of the pipeline operators they'll still get this behavior.
+    // `x |> f`, `f <| x`
+    let (x, f) = if is_pipe_right {
+        (call.arguments[0], call.arguments[1].expr)
+    } else {
+        (call.arguments[1], call.arguments[0].expr)
+    };
+
+    if let Expr::Call(inner_call) = &context[f] {
+        // Prepend value as the first argument: foo b c => foo(value, b, c)
+        let new_args = std::iter::once(x).chain(inner_call.arguments.iter().copied()).collect();
+        let new_call = cst::Call { function: inner_call.function, arguments: new_args };
+        context.set_expr(expr, Expr::Call(new_call));
+    }
+}
+
+/// Desugars:
+/// - `a and b` into `if a then b else false`
+/// - `a or b` into `if a then true else b`
+fn desugar_logical_operators(expr: ExprId, context: &mut DesugarContext, is_or: bool) {
+    let Expr::Call(call) = &context[expr] else { unreachable!() };
+
+    let a = call.arguments[0].expr;
+    let b = call.arguments[1].expr;
+    let location = context.expr_location(expr).clone();
+    // We need `false` in the `and` case and `true` in the `or` case
+    let boolean = Expr::Literal(Literal::Bool(is_or));
+    let boolean = context.push_expr(boolean, location);
+
+    context.set_expr(
+        expr,
+        if is_or {
+            Expr::If(If { condition: a, then: boolean, else_: Some(b) })
+        } else {
+            Expr::If(If { condition: a, then: b, else_: Some(boolean) })
+        },
+    );
+}
+
+/// Desugars `a ~> b` into `b (fn () -> a)`
+///
+/// If `b` is itself a call, `a` is prepended to its arguments directly:
+/// `a ~> b c d` desugars to `b (fn () -> a) c d`
+fn desugar_tilde_arrow(expr: ExprId, context: &mut DesugarContext) {
+    let Expr::Call(call) = &context[expr] else { unreachable!() };
+
+    let a = call.arguments[0].expr;
+    let b = call.arguments[1].expr;
+    let location = context.expr_location(expr).clone();
+
+    let pattern = context.push_pattern(cst::Pattern::Literal(Literal::Unit), location.clone());
+    let lambda = Expr::Lambda(cst::Lambda {
+        parameters: vec![cst::Parameter::new(pattern)],
+        return_type: None,
+        effects: None,
+        body: a,
+        is_move: false,
+    });
+    let lambda = context.push_expr(lambda, location);
+
+    let new_call = if let Expr::Call(inner_call) = &context[b] {
+        // Prepend value as the first argument: foo b c => foo(value, b, c)
+        let new_args =
+            std::iter::once(Argument::explicit(lambda)).chain(inner_call.arguments.iter().copied()).collect();
+        cst::Call { function: inner_call.function, arguments: new_args }
+    } else {
+        // Create a new call
+        cst::Call { function: b, arguments: vec![Argument::explicit(lambda)] }
+    };
+    context.set_expr(expr, Expr::Call(new_call));
+}

@@ -4,6 +4,9 @@ foo x =
 
 // type should be a -> (b -> a)
 
-// args: --check --show-types
+// args: -e ast-t --no-color
 // expected stdout:
-// foo : forall a b. (a -> b => a pure pure)
+// (foo: fn _ -> fn _ [_] -> _ pure pure) (x: _) =
+//     (y: fn _ [_] -> _ pure) (_: _) [(x: _)] = (x: _)
+//     (y: fn _ [_] -> _ pure)
+

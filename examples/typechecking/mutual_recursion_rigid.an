@@ -14,31 +14,69 @@ ex1b (a: u) b =
 
 
 // Second example
-trait T1 a with trait1: a -> Unit
-trait T2 a with trait2: a -> Unit
+trait T1 a with trait1: fn a -> Unit
+trait T2 a with trait2: fn a -> Unit
 
-ex2a (a: t) b =
+ex2a (a: t) b {Copy t} =
     ex2b a b
     trait1 a
 
-ex2b (a: u) b =
+ex2b (a: u) b {Copy u} =
     ex2c a b
     trait2 a
 
 ex2c (a: v) b =
     ex2a a b
 
-// args: --check --show-types
+// args: -e ast-t --no-color
+// expected exit status: 1
 // expected stdout:
-// ex1a : forall t a. (t - a -> U32 pure)
-// ex1b : forall t a. (t - a -> U32 pure)
-// ex2a : forall t a. (t - a -> Unit pure)
-//   given T1 t, T2 t
-// ex2b : forall t a. (t - a -> Unit pure)
-//   given T1 t, T2 t
-// ex2c : forall t a. (t - a -> Unit pure)
-//   given T1 t, T2 t
-// trait1 : forall a. (a -> Unit pure)
-//   given T1 a
-// trait2 : forall a. (a -> Unit pure)
-//   given T2 a
+// (ex1a: fn t _ -> U32 pure) ((a: t)) (b: _) =
+//     (ex1b: fn t _ -> U32 pure) (a: t) (b: _)
+//     0_U32
+// 
+// (ex1b: fn u _ -> U32 pure) ((a: u)) (b: _) =
+//     (ex1a: fn u _ -> U32 pure) (a: u) (b: _)
+//     1_U32
+// 
+// type T1 a [env] =
+//     trait1: fn a [[env]] -> Unit
+// 
+// type T2 a [env] =
+//     trait2: fn a [[env]] -> Unit
+// 
+// (ex2a: fn t (error) -> _ pure) ((a: (error))) (b: (error)) {(_: (error))} =
+//     (ex2b: fn t (error) {Copy t} -> _ pure) (a: (error)) (b: (error)) {(error)}
+//     (trait1: (error)) (a: (error))
+// 
+// (ex2b: fn u (error) {Copy u} -> _ pure) ((a: u)) (b: (error)) {(_: Copy u)} =
+//     (ex2c: fn u (error) -> _ pure) (a: u) (b: (error))
+//     (trait2: (error)) (a: u)
+// 
+// (ex2c: fn v (error) -> _ pure) ((a: v)) (b: (error)) =
+//     (ex2a: fn v (error) -> _ pure) (a: v) (b: (error))
+
+// expected stderr:
+// examples/typechecking/mutual_recursion_rigid.an:20:1
+// 20 | ex2a (a: t) b {Copy t} =	// error: Expected 2 arguments but found 3
+//    | ^^^^
+// 21 |     ex2b a b
+// 
+// examples/typechecking/mutual_recursion_rigid.an:21:5
+// 20 | ex2a (a: t) b {Copy t} =
+// 21 |     ex2b a b	// error: No implicit found for type Copy t required by parameter 3 of ex2b
+//    |     ^^^^
+// 22 |     trait1 a
+// 
+// examples/typechecking/mutual_recursion_rigid.an:22:5
+// 21 |     ex2b a b
+// 22 |     trait1 a	// error: `trait1` not found in scope
+//    |     ^^^^^^
+// 
+// examples/typechecking/mutual_recursion_rigid.an:26:5
+// 25 |     ex2c a b
+// 26 |     trait2 a	// error: `trait2` not found in scope
+//    |     ^^^^^^
+// 
+// Found 4 errors and 0 warnings
+

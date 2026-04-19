@@ -1,21 +1,22 @@
 type T = a: I32, b: String
 
-t = T 1 "one"
-printne "t = "
-printne (t.a)
-printne ", "
+main () =
+    t = T 1 "one"
+    print "t = "
+    print t.a
+    print ", "
+    println t.b
 
-puts t.b.c_string
+    s = Maybe.Some 2
+    match s
+    | Some x ->
+        print "s = "
+        println x
+    | None -> println "s = None"
 
-s = Some 2
-
-match s
-| Some x -> 
-    printne "s = "
-    print x
-| None -> print "s = None"
-
-// args: --delete-binary
+// args: --delete-binary --no-color
+// expected exit status: 0
 // expected stdout:
 // t = 1, one
 // s = 2
+

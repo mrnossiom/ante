@@ -1,33 +1,51 @@
+import Std.C.puts, exit
+import Std.C
 
-foo (_: I32) (_: String) : Char = 'a'
+foo (_: I32) (_: String) : Char = c"a"
 
-bar: a - a -> I32 =
+bar: fn a a -> I32 =
     fn _ b -> b
 
-baz (a: Usz) : Ptr a =
+baz (a: Usz): Ptr a =
     transmute a
 
-exit2 = exit
-puts2: (Ptr Char) -> I32 = puts
+main () =
+    exit2 = exit
+    puts2: fn C.String -> I32 = puts
 
-exit2 "test"
-puts2
+    exit2 "test"
+    puts2
 
-// args: --check --show-types
-// TODO: This first error is duplicated
-// expected stderr:
-// type_annotations.an:4:1	error: Pattern type a - b -> b pure does not match the annotated type a - a -> I32 pure
-// bar: a - a -> I32 =
-// 
-// type_annotations.an:4:1	error: Pattern type a - b -> b pure does not match the annotated type a - a -> I32 pure
-// bar: a - a -> I32 =
-// 
-// type_annotations.an:13:7	error: Expected argument of type I32, but found String
-// exit2 "test"
-
+// args: -e ast-t --no-color
+// expected exit status: 1
 // expected stdout:
-// bar : forall a b. (b - a -> a pure)
-// baz : forall a. (Usz -> Ptr a pure)
-// exit2 : I32 -> Unit pure
-// foo : I32 - String -> Char pure
-// puts2 : Ptr Char -> I32 pure
+// import Std.C.puts, exit
+// import Std.C
+// 
+// (foo: fn I32 String -> Char pure) ((_: I32)) ((_: String)) : Char = c"a"
+// 
+// (bar: fn a a -> I32 pure) =
+//     fn (_: a) (b: a) -> (b: a)
+// 
+// (baz: fn Usz -> Ptr a pure) ((a: Usz)) : Ptr a =
+//     (transmute: fn Usz -> Ptr a pure) (a: Usz)
+// 
+// (main: fn Unit -> fn String -> I32 can _ pure) () =
+//     (exit2: fn I32 -> Unit pure) = (exit: fn I32 -> Unit pure)
+//     (puts2: fn String -> I32 can _) = (puts: fn String -> I32 can _)
+//     (exit2: fn I32 -> Unit pure) "test"
+//     (puts2: fn String -> I32 can _)
+
+// expected stderr:
+// examples/typechecking/type_annotations.an:7:15
+// 6 | bar: fn a a -> I32 =
+// 7 |     fn _ b -> b	// error: Expected I32 but found a
+//   |               ^
+// 
+// examples/typechecking/type_annotations.an:16:11
+// 16 |     exit2 "test"	// error: Expected I32 but found String
+//    |           ^^^^^^
+// 17 |     puts2
+// 
+// Found 2 errors and 0 warnings
+

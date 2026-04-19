@@ -786,7 +786,7 @@ where
         let int_value = self.extract_tag_value(value_being_matched);
         let start = self.current_block;
 
-        let case_blocks = mapvec(0..cases.len(), |i| (i as u8, (self.push_block_no_params(), None)));
+        let case_blocks = mapvec(0..cases.len(), |i| (i as u32, (self.push_block_no_params(), None)));
         let mut else_block = None;
 
         let result_type = self.expr_type(match_expr);

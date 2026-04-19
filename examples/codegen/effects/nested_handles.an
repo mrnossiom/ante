@@ -1,0 +1,46 @@
+effect Ping with
+    do_ping: fn U32 -> U32
+
+effect Pong with
+    do_pong: fn U64 -> U64
+
+foo () =
+    a = do_ping 1
+    b = do_pong 2
+    c = do_ping 3
+    d = do_pong 4
+    a + c, b + d
+
+ping f =
+    handle f ()
+    | do_ping x ->
+        println "ping?"
+        r = resume (x * 2)
+        println "ping!"
+        r
+
+pong f =
+    handle f ()
+    | do_pong x ->
+        println "pong?"
+        r = resume (x * 3)
+        println "pong!"
+        r
+
+main () =
+    a, b = foo () ~> ping ~> pong
+    println a //=> (1*2 + 3*2) = 8
+    println b //=> (2*3 + 4*3) = 18
+
+// args: --delete-binary --no-color
+// expected stdout:
+// ping?
+// pong?
+// ping?
+// pong?
+// ping!
+// ping!
+// pong!
+// pong!
+// 8
+// 18

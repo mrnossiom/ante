@@ -334,7 +334,7 @@ impl Value {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) struct DefinitionId(u32);
+pub(crate) struct DefinitionId(pub u32);
 
 /// DefinitionIds are assigned in monotonically increasing order. These IDs are nondeterministic in
 /// practice due to this counter being used concurrently. As a result, anything using these ids
@@ -579,8 +579,7 @@ pub enum TerminatorInstruction {
     },
     Switch {
         int_value: Value,
-        /// Each `u8` here is the tag to match.
-        cases: Vec<(u8, JmpTarget)>,
+        cases: Vec<(/*tag_to_match*/u32, JmpTarget)>,
         else_: Option<JmpTarget>,
         end: BlockId,
     },

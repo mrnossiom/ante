@@ -4,7 +4,7 @@ use rustc_hash::FxHashSet;
 
 use crate::{
     diagnostics::{Diagnostic, Location, UnimplementedItem},
-    incremental::{ExportedDefinitions, GetItemRaw, GetType, Resolve},
+    incremental::{AllDefinitions, ExportedDefinitions, GetItemRaw, GetType, Resolve},
     iterator_extensions::mapvec,
     name_resolution::{Origin, builtin::Builtin, namespace::SourceFileId},
     parser::{
@@ -703,9 +703,17 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             return None;
         }
 
-        let exported = ExportedDefinitions(source_file).get(self.compiler);
+        // Within the same file, non-exported methods should be visible (matching
+        // how regular definitions work). Across files, only exported methods are visible.
+        let current_file = self.current_item.expect("current_item set").source_file;
+        let definitions = if source_file == current_file {
+            AllDefinitions(source_file).get(self.compiler)
+        } else {
+            ExportedDefinitions(source_file).get(self.compiler)
+        };
+
         let member_name = Arc::new(member.to_owned());
-        let name = *exported.methods.get(&type_top_level_id)?.get(&member_name)?;
+        let name = *definitions.methods.get(&type_top_level_id)?.get(&member_name)?;
 
         let (method_type, bindings) = self.type_and_bindings_of_top_level_name(&name);
 

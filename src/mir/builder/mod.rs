@@ -121,6 +121,10 @@ struct Context<'local, Db> {
     /// These have a StackAlloc'd pointer as their MIR value.
     mutable_locals: rustc_hash::FxHashSet<NameId>,
 
+    /// Stack of `(continue_target, break_target)` for each enclosing `while`/`for` loop.
+    /// Innermost loop is last. Swapped out across lambda boundaries.
+    loop_targets: Vec<(BlockId, BlockId)>,
+
     finished_functions: FxHashMap<DefinitionId, Definition>,
     name_to_id: &'local SharedIdsMap,
 
@@ -148,6 +152,7 @@ impl<'local, Db> Context<'local, Db> {
             global_variables: FxHashMap::default(),
             local_variables: FxHashMap::default(),
             mutable_locals: Default::default(),
+            loop_targets: Vec::new(),
             current_block: BlockId::ENTRY_BLOCK,
             current_function: None,
             finished_functions: Default::default(),
@@ -272,6 +277,10 @@ where
             cst::Expr::Constructor(constructor) => self.constructor(constructor, expr),
             cst::Expr::Quoted(quoted) => self.quoted(quoted),
             cst::Expr::Loop(_) => unreachable!("Loops should be desugared before MIR generation"),
+            cst::Expr::While(while_) => self.while_(while_),
+            cst::Expr::For(for_) => self.for_(for_),
+            cst::Expr::Break => self.break_(),
+            cst::Expr::Continue => self.continue_(),
             cst::Expr::Return(return_) => self.return_(return_.expression),
             cst::Expr::Assignment(assignment) => self.assignment(assignment),
             cst::Expr::Extern(extern_) => self.extern_(extern_, expr),
@@ -588,6 +597,7 @@ where
         let generics_count = self.generics_in_scope.len() as u32;
         let old_scope = std::mem::take(&mut self.local_variables);
         let old_mutables = std::mem::take(&mut self.mutable_locals);
+        let old_loop_targets = std::mem::take(&mut self.loop_targets);
 
         let id = self.new_definition(name.clone(), name_id, generics_count, full_type.clone(), |this| {
             for (i, parameter) in lambda.parameters.iter().enumerate() {
@@ -649,6 +659,7 @@ where
 
         self.local_variables = old_scope;
         self.mutable_locals = old_mutables;
+        self.loop_targets = old_loop_targets;
 
         // If this is a generic lambda, it will have generics forward from the currenty context
         // which we need to manually instantiate.
@@ -705,6 +716,83 @@ where
             let existing = self.local_variables.insert(var, result);
             assert!(existing.is_none(), "Closure is overwriting values from the outer scope");
         }
+    }
+
+    fn while_(&mut self, while_: &cst::While) -> Value {
+        let header = self.push_block_no_params();
+        let body = self.push_block_no_params();
+        let exit = self.push_block_no_params();
+
+        self.terminate_block(TerminatorInstruction::jmp_no_args(header));
+
+        self.switch_to_block(header);
+        let cond = self.expression(while_.condition);
+        self.terminate_block(TerminatorInstruction::if_(cond, body, exit, exit));
+
+        self.switch_to_block(body);
+        self.loop_targets.push((header, exit));
+        let _ = self.expression(while_.body);
+        self.loop_targets.pop();
+        self.terminate_block(TerminatorInstruction::jmp_no_args(header));
+
+        self.switch_to_block(exit);
+        Value::Unit
+    }
+
+    fn for_(&mut self, for_: &cst::For) -> Value {
+        let variable_type = self.expr_type(for_.start);
+        let kind = match &variable_type {
+            Type::Primitive(crate::mir::PrimitiveType::Int(k)) => *k,
+            _ => unreachable!("for-loop range was not inferred to an integer type: {variable_type:?}"),
+        };
+
+        let start_value = self.expression(for_.start);
+        let end_value = self.expression(for_.end);
+
+        let header = self.push_block(vec![variable_type.clone()]);
+        let body = self.push_block_no_params();
+        let step = self.push_block_no_params();
+        let exit = self.push_block_no_params();
+
+        let variable = Value::Parameter(header, 0);
+        self.local_variables.insert(for_.variable, variable);
+
+        self.terminate_block(TerminatorInstruction::jmp(header, start_value));
+
+        self.switch_to_block(header);
+        let cmp = if kind.is_signed() {
+            Instruction::LessSigned(variable, end_value.clone())
+        } else {
+            Instruction::LessUnsigned(variable, end_value.clone())
+        };
+        let cond = self.push_instruction(cmp, Type::BOOL);
+        self.terminate_block(TerminatorInstruction::if_(cond, body, exit, exit));
+
+        self.switch_to_block(body);
+        self.loop_targets.push((step, exit));
+        let _ = self.expression(for_.body);
+        self.loop_targets.pop();
+        self.terminate_block(TerminatorInstruction::jmp_no_args(step));
+
+        self.switch_to_block(step);
+        let one = Self::integer(1, kind);
+        let variable_plus_one = self.push_instruction(Instruction::AddInt(variable, one), variable_type);
+        self.terminate_block(TerminatorInstruction::jmp(header, variable_plus_one));
+
+        self.switch_to_block(exit);
+        Value::Unit
+    }
+
+    fn break_(&mut self) -> Value {
+        let exit = self.loop_targets.last().expect("`break` outside of a loop").1;
+        self.terminate_block(TerminatorInstruction::jmp_no_args(exit));
+        Value::Error
+    }
+
+    fn continue_(&mut self) -> Value {
+        let cont = self.loop_targets.last().expect("`continue` outside of a loop").0;
+        self.terminate_block(TerminatorInstruction::jmp_no_args(cont));
+        Value::Error
     }
 
     fn if_(&mut self, if_: &cst::If, expr: ExprId) -> Value {

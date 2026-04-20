@@ -192,6 +192,12 @@ pub enum Diagnostic {
     ReturnNotInFunction {
         location: Location,
     },
+    BreakNotInLoop {
+        location: Location,
+    },
+    ContinueNotInLoop {
+        location: Location,
+    },
     IntegerTooLarge {
         value: u64,
         kind: IntegerKind,
@@ -458,6 +464,8 @@ impl Diagnostic {
                 }
             },
             Diagnostic::ReturnNotInFunction { location: _ } => "`return` can only be used in a function".to_string(),
+            Diagnostic::BreakNotInLoop { location: _ } => "`break` can only be used inside a loop".to_string(),
+            Diagnostic::ContinueNotInLoop { location: _ } => "`continue` can only be used inside a loop".to_string(),
             Diagnostic::IntegerTooLarge { value, kind, location: _ } => {
                 format!("{} is too large for type {}", value.to_string().purple(), kind.to_string().blue())
             },
@@ -524,6 +532,8 @@ impl Diagnostic {
             | Diagnostic::ExpectedTypeKind { location, .. }
             | Diagnostic::ExpectedKind { location, .. }
             | Diagnostic::ReturnNotInFunction { location }
+            | Diagnostic::BreakNotInLoop { location }
+            | Diagnostic::ContinueNotInLoop { location }
             | Diagnostic::IntegerTooLarge { location, .. }
             | Diagnostic::Unimplemented { location, .. }
             | Diagnostic::TypeAnnotationNeeded { location, .. }

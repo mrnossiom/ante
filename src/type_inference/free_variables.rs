@@ -113,6 +113,17 @@ impl FreeVars {
                 }
             },
             cst::Expr::Loop(_) => unreachable!("Loops should be desugared before finding free variables"),
+            cst::Expr::While(w) => {
+                self.find_free_variables(w.condition, checker);
+                self.find_free_variables(w.body, checker);
+            },
+            cst::Expr::For(fo) => {
+                self.find_free_variables(fo.start, checker);
+                self.find_free_variables(fo.end, checker);
+                self.defined_in_fn.insert(fo.variable);
+                self.find_free_variables(fo.body, checker);
+            },
+            cst::Expr::Break | cst::Expr::Continue => (),
             cst::Expr::Quoted(_) => (),
             cst::Expr::Return(return_) => self.find_free_variables(return_.expression, checker),
             cst::Expr::Assignment(assignment) => {

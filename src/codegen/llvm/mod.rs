@@ -8,7 +8,7 @@ use inkwell::{
     module::Module,
     targets::{CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetMachine},
     types::{BasicType, BasicTypeEnum, IntType},
-    values::{AggregateValue, AnyValue, BasicValue, BasicValueEnum, FunctionValue, GlobalValue},
+    values::{AggregateValue, AnyValue, BasicValue, BasicValueEnum, FunctionValue, GlobalValue, PhiValue},
 };
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
@@ -113,6 +113,10 @@ struct ModuleContext<'ctx> {
     ///
     /// Maps merge_block to a vec of each incoming block along with the arguments it branches with.
     incoming: FxHashMap<BlockId, Vec<(BasicBlock<'ctx>, BasicValueEnum<'ctx>)>>,
+
+    /// PHI nodes created for each block's parameter. Filled in after all blocks are processed,
+    /// so that back edges from later-processed blocks are included.
+    phi_nodes: FxHashMap<BlockId, PhiValue<'ctx>>,
 }
 
 impl<'ctx> ModuleContext<'ctx> {
@@ -131,6 +135,7 @@ impl<'ctx> ModuleContext<'ctx> {
             builder: llvm.create_builder(),
             blocks: Default::default(),
             incoming: Default::default(),
+            phi_nodes: Default::default(),
         }
     }
 
@@ -304,8 +309,21 @@ impl<'ctx> ModuleContext<'ctx> {
             self.codegen_block(block, function);
         }
 
+        // Fill in PHI incomings now that every block (including back-edge sources) has been
+        // processed and has recorded its outgoing arguments in `self.incoming`.
+        for (block_id, phi) in self.phi_nodes.drain() {
+            let incoming = self
+                .incoming
+                .remove(&block_id)
+                .unwrap_or_else(|| panic!("llvm codegen: No incoming for block {block_id}"));
+            for (pred_block, value) in incoming {
+                phi.add_incoming(&[(&value, pred_block)]);
+            }
+        }
+
         self.values.clear();
         self.blocks.clear();
+        self.incoming.clear();
     }
 
     /// Create an empty block for each block in the given function
@@ -321,21 +339,15 @@ impl<'ctx> ModuleContext<'ctx> {
         self.builder.position_at_end(llvm_block);
         let block = &function.blocks[block_id];
 
-        // Translate the block parameters into phi instructions
+        // Create PHI instructions for each block parameter. Incomings are filled in later
+        // (see `codegen_function`) so that back edges from blocks processed after this one
+        // are included.
         if block_id != BlockId::ENTRY_BLOCK {
             for (parameter, parameter_type) in block.parameters(block_id) {
                 let parameter_type = self.convert_type(&parameter_type);
                 let phi = self.builder.build_phi(parameter_type, "").unwrap();
-
-                let incoming = self
-                    .incoming
-                    .remove(&block_id)
-                    .unwrap_or_else(|| panic!("llvm codegen: No incoming for block {block_id}"));
-
-                for (block, block_args) in incoming {
-                    phi.add_incoming(&[(&block_args, block)]);
-                }
                 self.values.insert(parameter, phi.as_basic_value());
+                self.phi_nodes.insert(block_id, phi);
             }
         }
 

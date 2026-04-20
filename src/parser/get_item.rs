@@ -273,6 +273,16 @@ fn collect_expressions_to_desugar(expr: ExprId, context: &DesugarContext, to_des
             collect_expressions_to_desugar(loop_.body, context, to_desugar);
             to_desugar.push(ExprDesugar::Loop(expr));
         },
+        Expr::While(w) => {
+            collect_expressions_to_desugar(w.condition, context, to_desugar);
+            collect_expressions_to_desugar(w.body, context, to_desugar);
+        },
+        Expr::For(fo) => {
+            collect_expressions_to_desugar(fo.start, context, to_desugar);
+            collect_expressions_to_desugar(fo.end, context, to_desugar);
+            collect_expressions_to_desugar(fo.body, context, to_desugar);
+        },
+        Expr::Break | Expr::Continue => (),
         Expr::Assignment(assignment) => {
             let rhs = assignment.rhs;
             collect_expressions_to_desugar(assignment.lhs, context, to_desugar);

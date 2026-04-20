@@ -1409,6 +1409,10 @@ impl<'tokens> Parser<'tokens> {
             Token::Match => self.parse_match(),
             Token::Handle => self.parse_handle(),
             Token::Loop => self.parse_loop(),
+            Token::While => self.parse_while(),
+            Token::For => self.parse_for(),
+            Token::Break => self.parse_break(),
+            Token::Continue => self.parse_continue(),
             _ => self.parse_shunting_yard(),
         }
     }
@@ -1820,6 +1824,48 @@ impl<'tokens> Parser<'tokens> {
             this.expect(Token::Return, "`return` to begin a return statement")?;
             let expression = this.parse_block_or_expression()?;
             Ok(Expr::Return(cst::Return { expression }))
+        })
+    }
+
+    fn parse_break(&mut self) -> Result<ExprId> {
+        self.with_expr_id_and_location(|this| {
+            this.expect(Token::Break, "`break` to exit a loop")?;
+            Ok(Expr::Break)
+        })
+    }
+
+    fn parse_continue(&mut self) -> Result<ExprId> {
+        self.with_expr_id_and_location(|this| {
+            this.expect(Token::Continue, "`continue` to skip to the next loop iteration")?;
+            Ok(Expr::Continue)
+        })
+    }
+
+    fn parse_while(&mut self) -> Result<ExprId> {
+        self.with_expr_id_and_location(|this| {
+            this.expect(Token::While, "`while` to begin a while loop")?;
+            let condition = this.parse_expr_with_recovery(Self::parse_expression, Token::Do, &[Token::Newline])?;
+            this.accept(Token::Newline);
+            this.expect(Token::Do, "`do` to separate the condition from the body of a while loop")?;
+            let body = this.parse_block_or_expression()?;
+            Ok(Expr::While(cst::While { condition, body }))
+        })
+    }
+
+    fn parse_for(&mut self) -> Result<ExprId> {
+        self.with_expr_id_and_location(|this| {
+            this.expect(Token::For, "`for` to begin a for loop")?;
+            let variable = this.parse_ident_id()?;
+            this.expect(Token::In, "`in` after the for-loop variable")?;
+            // Parse the start of the range at a precedence below Range (..) so that
+            // the `..` does not get consumed by shunting-yard here.
+            let start = this.parse_term()?;
+            this.expect(Token::Range, "`..` to separate the start and end of a for-loop range")?;
+            let end = this.parse_expr_with_recovery(Self::parse_expression, Token::Do, &[Token::Newline])?;
+            this.accept(Token::Newline);
+            this.expect(Token::Do, "`do` to separate the range from the body of a for loop")?;
+            let body = this.parse_block_or_expression()?;
+            Ok(Expr::For(cst::For { variable, start, end, body }))
         })
     }
 

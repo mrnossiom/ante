@@ -1,0 +1,29 @@
+break_at_top () = break
+
+continue_at_top () = continue
+
+for_with_non_integers () =
+    for i in "zero" .. "ten" do
+        _ = i
+
+main () = ()
+
+// args: --check --no-color
+// expected exit status: 1
+// expected stderr:
+// examples/typechecking/break_continue_not_in_loop.an:1:19
+// 1 | break_at_top () = break	// error: `break` can only be used inside a loop
+//   |                   ^^^^^
+// 
+// examples/typechecking/break_continue_not_in_loop.an:3:22
+// 3 | continue_at_top () = continue	// error: `continue` can only be used inside a loop
+//   |                      ^^^^^^^^
+// 
+// examples/typechecking/break_continue_not_in_loop.an:6:5
+// 5 | for_with_non_integers () =
+// 6 |     for i in "zero" .. "ten" do	// error: Expected an integer type but found String
+//   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+// 7 |         _ = i
+// 
+// Found 3 errors and 0 warnings
+

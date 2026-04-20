@@ -238,6 +238,10 @@ pub enum Expr {
     TypeAnnotation(TypeAnnotation),
     Constructor(Constructor),
     Loop(Loop),
+    While(While),
+    For(For),
+    Break,
+    Continue,
     Quoted(Quoted),
     Return(Return),
     Assignment(Assignment),
@@ -451,6 +455,22 @@ pub struct Assignment {
     /// For compound assignments (+=, -=, etc.): the operator kind and a synthetic
     /// Variable expression for the operator function, resolved via normal trait dispatch.
     pub op: Option<(CompoundAssignOp, ExprId)>,
+}
+
+/// `while cond do body` — imperative loop, body is Unit, whole expression is Unit.
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
+pub struct While {
+    pub condition: ExprId,
+    pub body: ExprId,
+}
+
+/// `for variable in start .. end do body` — end-exclusive numeric range loop.
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
+pub struct For {
+    pub variable: NameId,
+    pub start: ExprId,
+    pub end: ExprId,
+    pub body: ExprId,
 }
 
 /// Sugar for an immediately invoked helper function: `loop x (i = 0) -> ...`

@@ -55,6 +55,9 @@ struct Resolver<'local, 'inner> {
     compiler: &'local DbHandle<'inner>,
     referenced_items: BTreeSet<TopLevelId>,
     top_level_names: Vec<NameId>,
+
+    /// Nesting depth of enclosing `while`/`for` loops. Used to reject `break`/`continue` outside of loops.
+    loop_depth: u32,
 }
 
 /// Where was this variable defined?
@@ -150,6 +153,7 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
             names_in_local_scope: vec![Default::default()],
             referenced_items: Default::default(),
             top_level_names: Vec::new(),
+            loop_depth: 0,
             context,
         }
     }
@@ -559,6 +563,26 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
             },
             Expr::Constructor(constructor) => self.resolve_constructor(constructor, expr),
             Expr::Loop(_) => unreachable!("Loops should be desugared before name resolution"),
+            Expr::While(while_) => {
+                self.loop_depth += 1;
+                self.resolve_expr(while_.condition);
+                self.push_local_scope();
+                self.resolve_expr(while_.body);
+                self.loop_depth -= 1;
+                self.pop_local_scope();
+            },
+            Expr::For(for_) => {
+                self.resolve_expr(for_.start);
+                self.resolve_expr(for_.end);
+                self.push_local_scope();
+                self.declare_name(for_.variable);
+                self.loop_depth += 1;
+                self.resolve_expr(for_.body);
+                self.loop_depth -= 1;
+                self.pop_local_scope();
+            },
+            Expr::Break => self.check_break_or_continue(true, expr),
+            Expr::Continue => self.check_break_or_continue(false, expr),
             Expr::Quoted(_) => (),
             Expr::Return(return_) => self.resolve_expr(return_.expression),
             Expr::Assignment(assignment) => {
@@ -571,6 +595,17 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
             },
             Expr::Error => (),
             Expr::Extern(_) => (),
+        }
+    }
+
+    fn check_break_or_continue(&mut self, is_break: bool, id: ExprId) {
+        if self.loop_depth == 0 {
+            let location = self.context.expr_location(id).clone();
+            if is_break {
+                self.compiler.accumulate(Diagnostic::BreakNotInLoop { location });
+            } else {
+                self.compiler.accumulate(Diagnostic::ContinueNotInLoop { location });
+            }
         }
     }
 

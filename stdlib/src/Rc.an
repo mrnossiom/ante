@@ -35,11 +35,11 @@ ref_count (rc: ref Rc t): U32 =
 
 inc_ref_count (rc: mut Rc t): Unit =
     rc = ptr_to_mut rc.ptr
-    rc.first := rc.first + 1
+    rc.first += 1
 
 dec_ref_count (rc: mut Rc t): Unit =
     rc = ptr_to_mut rc.ptr
-    rc.first := rc.first - 1
+    rc.first -= 1
 
 impl copy_rc: Copy (Rc t) with
     (.*) (rc: ref Rc t) =

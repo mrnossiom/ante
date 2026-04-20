@@ -1,0 +1,11 @@
+main () =
+    var i = 0
+    while i < 3 do
+        println i
+        i += 1
+
+// args: --delete-binary --no-color
+// expected stdout:
+// 0
+// 1
+// 2

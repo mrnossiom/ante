@@ -579,7 +579,7 @@ pub enum TerminatorInstruction {
     },
     Switch {
         int_value: Value,
-        cases: Vec<(/*tag_to_match*/u32, JmpTarget)>,
+        cases: Vec<(/*tag_to_match*/ u32, JmpTarget)>,
         else_: Option<JmpTarget>,
         end: BlockId,
     },

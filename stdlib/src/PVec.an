@@ -1,4 +1,4 @@
-import Std.C.malloc, realloc, memcpy
+import Std.C.malloc, realloc, memcpy, free
 
 export empty, push, pop, remove_last, get, get_copied, iter, copy_pvec, print_pvec
 
@@ -18,9 +18,8 @@ PVec.empty (): PVec t =
     PVec 0 (null ())
 
 PVec.push (vec: ref PVec t) (elem: t): PVec t =
-    // Case A: first push into an empty PVec.
     if vec.data == null () then
-        data_ptr: Ptr (Data t) = malloc (size_of (MkType: Type (Data t)))
+        data_ptr = malloc (size_of (MkType: Type (Data t)))
         ptr_store data_ptr (Data 1 1 1 elem)
         return PVec 1 data_ptr
 
@@ -85,22 +84,24 @@ PVec.get (vec: ref PVec t) (index: U32): Maybe (ref t) =
         Some (ptr_to_mut elem)
     else None
 
-PVec.iter (vec: PVec t) (f: fn (ref t) [env] -> Unit): Unit =
-    loop (i = 0) ->
-        if i < vec.len then
-            elem = offset vec.data.elements (Usz i)
-            f (ptr_to_mut elem)
-            recur (i + 1)
+PVec.iter (vec: ref PVec t) (f: fn (ref t) [env] -> Unit): Unit =
+    for i in 0 .. vec.len do
+        elem = offset vec.data.elements (Usz i)
+        f (ptr_to_mut elem)
+
+PVec.iter_mut (vec: mut PVec t) (f: fn (mut t) [env] -> Unit): Unit =
+    for i in 0 .. vec.len do
+        elem = offset vec.data.elements (Usz i)
+        f (ptr_to_mut elem)
 
 // Paper cut #2: Copy t
 impl print_pvec {p: Print t} {Copy t}: Print (PVec t) with
     print (vec: PVec t): Unit =
         print "["
-        var i = 0
-        vec.iter fn elem ->
+        for i in 0 .. vec.len do
             if i != 0 then print ", "
-            print elem
-            i += 1
+            elem = offset vec.data.elements (Usz i)
+            print (ptr_to_mut elem).*
         print "]"
 
 impl copy_pvec: Copy (PVec t) with
@@ -108,3 +109,12 @@ impl copy_pvec: Copy (PVec t) with
     (.*) (vec: ref (PVec t)) =
         ptr_store vec.data.rc (deref_ptr vec.data.rc + 1)
         deref vec
+
+impl drop_pvec {Drop t}: Drop (PVec t) with
+    drop (vec: mut PVec t) =
+        rc = deref_ptr vec.data.rc
+        if rc != 1 then
+            ptr_store vec.data.rc (rc - 1)
+        else
+            vec.iter_mut Drop.drop
+            free vec.data

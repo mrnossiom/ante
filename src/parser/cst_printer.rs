@@ -10,7 +10,7 @@ use crate::{
     lexer::token::INDEX_OPERATOR_FUNCTION_NAME,
     name_resolution::{Origin, namespace::SourceFileId},
     parser::{
-        cst::{Argument, Constructor, Loop, LoopParameter, ReferenceKind, TopLevelItemKind},
+        cst::{Argument, Constructor, For, Loop, LoopParameter, ReferenceKind, TopLevelItemKind, While},
         ids::{IdStore, NameId, PathId},
     },
     type_inference::{
@@ -654,6 +654,10 @@ impl<'a> CstDisplay<'a> {
             Expr::Quoted(quoted) => self.fmt_quoted(quoted, f),
             Expr::Constructor(constructor) => self.fmt_constructor(constructor, context, f),
             Expr::Loop(loop_) => self.fmt_loop(loop_, context, f),
+            Expr::While(while_) => self.fmt_while(while_, context, f),
+            Expr::For(for_) => self.fmt_for(for_, context, f),
+            Expr::Break => write!(f, "break"),
+            Expr::Continue => write!(f, "continue"),
             Expr::Return(return_) => {
                 write!(f, "return ")?;
                 self.fmt_expr(return_.expression, context, f)
@@ -1223,6 +1227,24 @@ impl<'a> CstDisplay<'a> {
 
         write!(f, " -> ")?;
         self.fmt_expr(loop_.body, context, f)
+    }
+
+    fn fmt_while(&mut self, while_: &While, context: &impl IdStore, f: &mut Formatter) -> std::fmt::Result {
+        write!(f, "while ")?;
+        self.fmt_expr(while_.condition, context, f)?;
+        write!(f, " do ")?;
+        self.fmt_expr(while_.body, context, f)
+    }
+
+    fn fmt_for(&mut self, for_: &For, context: &impl IdStore, f: &mut Formatter) -> std::fmt::Result {
+        write!(f, "for ")?;
+        self.fmt_name(for_.variable, context, f)?;
+        write!(f, " in ")?;
+        self.fmt_expr(for_.start, context, f)?;
+        write!(f, "..")?;
+        self.fmt_expr(for_.end, context, f)?;
+        write!(f, " do ")?;
+        self.fmt_expr(for_.body, context, f)
     }
 }
 

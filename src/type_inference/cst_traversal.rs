@@ -135,6 +135,11 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 UnimplementedItem::Comptime.issue(self.compiler, location);
             },
             Expr::Loop(_) => unreachable!("Loops should be desugared before type inference"),
+            Expr::While(while_) => self.check_while(while_, expected, expected_effect, id),
+            Expr::For(for_) => self.check_for(for_, expected, expected_effect, id),
+            // Allow break/continue to return any type
+            // TODO: Add bottom type
+            Expr::Break | Expr::Continue => (),
             Expr::Return(return_) => self.check_return(return_.expression, expected_effect, id),
             Expr::Assignment(assignment) => self.check_assignment(assignment, expected, expected_effect, id),
             Expr::Error => (),
@@ -1072,6 +1077,27 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 self.compiler.accumulate(Diagnostic::ReturnNotInFunction { location });
             },
         }
+    }
+
+    fn check_while(&mut self, while_: &cst::While, expected: &Type, expected_effect: &Type, id: ExprId) {
+        self.check_expr(while_.condition, &Type::BOOL, expected_effect);
+        self.check_expr(while_.body, &Type::UNIT, expected_effect);
+        self.unify(&Type::UNIT, expected, TypeErrorKind::General, id);
+    }
+
+    fn check_for(&mut self, for_: &cst::For, expected: &Type, expected_effect: &Type, id: ExprId) {
+        let int_ty = self.next_type_variable_id();
+        // Hack: use 0 for the integer value here since it fits into all integer types.
+        // We just need this to ensure the user actually uses integer ranges. Any actual integer
+        // they choose will already have its range checked by the Literal code path.
+        self.push_inferred_int(0, int_ty, id.locate(self));
+        let int_ty = Type::Variable(int_ty);
+
+        self.check_expr(for_.start, &int_ty, expected_effect);
+        self.check_expr(for_.end, &int_ty, expected_effect);
+        self.name_types.insert(for_.variable, int_ty);
+        self.check_expr(for_.body, &Type::UNIT, expected_effect);
+        self.unify(&Type::UNIT, expected, TypeErrorKind::General, id);
     }
 
     /// Check if an expression always diverges (e.g. ends with a `return`).

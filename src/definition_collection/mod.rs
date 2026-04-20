@@ -18,7 +18,8 @@ use crate::{
     parser::{
         context::TopLevelContext,
         cst::{
-            EffectDefinition, Import, ItemName, Literal, Pattern, TopLevelItemKind, TypeDefinition, TypeDefinitionBody,
+            EffectDefinition, Import, ItemName, Literal, Name, Pattern, TopLevelItemKind, TypeDefinition,
+            TypeDefinitionBody,
         },
         ids::{NameId, PatternId, TopLevelId, TopLevelName},
     },
@@ -287,8 +288,10 @@ pub fn exported_types_impl(context: &ExportedTypes, db: &DbHandle) -> TypeDefini
     // If we knew on the export itself whether each item was a type or not we could skip
     // the AllTypes query and only require the export itself. Union variants & type constructors
     // make this impossible with Ante' current syntax however.
-    let export_set: HashSet<&str> = result.cst.exports.iter().map(|(n, _)| n.as_str()).collect();
-    types.retain(|name, _| export_set.contains(name.as_str()));
+    if let Some(exports) = &result.cst.exports {
+        let export_set: HashSet<&str> = exports.iter().map(|(n, _)| n.as_str()).collect();
+        types.retain(|name, _| export_set.contains(name.as_str()));
+    }
 
     incremental::exit_query();
     types
@@ -361,35 +364,36 @@ pub fn all_definitions_impl(context: &AllDefinitions, db: &DbHandle) -> Arc<Visi
 }
 
 /// Collect exported definitions, filtered by the file's export list.
+/// If the file has no `export` statement, all definitions are exported.
 pub fn exported_definitions_impl(context: &ExportedDefinitions, db: &DbHandle) -> Arc<VisibleDefinitionsResult> {
     incremental::enter_query();
     let all = AllDefinitions(context.0).get(db);
     let result = Parse(context.0).get(db);
 
-    let export_set: HashSet<&str> = result.cst.exports.iter().map(|(n, _)| n.as_str()).collect();
+    let filtered = match &result.cst.exports {
+        None => VisibleDefinitionsResult {
+            definitions: all.definitions.clone(),
+            methods: all.methods.clone(),
+            imported_modules: BTreeMap::new(),
+        },
+        Some(exports) => {
+            let export_set: HashSet<&str> = exports.iter().map(|(n, _)| n.as_str()).collect();
+            let in_exports = |(name, _): &(&Name, &TopLevelName)| export_set.contains(name.as_str());
 
-    let definitions = all
-        .definitions
-        .iter()
-        .filter(|(name, _)| export_set.contains(name.as_str()))
-        .map(|(k, v)| (k.clone(), *v))
-        .collect();
+            let definitions = all.definitions.iter().filter(in_exports).map(|(k, v)| (k.clone(), *v)).collect();
 
-    let methods = all
-        .methods
-        .iter()
-        .map(|(type_id, methods)| {
-            let filtered_methods = methods
-                .iter()
-                .filter(|(name, _)| export_set.contains(name.as_str()))
-                .map(|(k, v)| (k.clone(), *v))
+            let methods = all.methods.iter();
+            let methods = methods
+                .map(|(type_id, methods)| {
+                    let filtered_methods = methods.iter().filter(in_exports).map(|(k, v)| (k.clone(), *v)).collect();
+                    (*type_id, filtered_methods)
+                })
+                .filter(|(_, methods): &(_, Definitions)| !methods.is_empty())
                 .collect();
-            (*type_id, filtered_methods)
-        })
-        .filter(|(_, methods): &(_, Definitions)| !methods.is_empty())
-        .collect();
 
-    let filtered = VisibleDefinitionsResult { definitions, methods, imported_modules: BTreeMap::new() };
+            VisibleDefinitionsResult { definitions, methods, imported_modules: BTreeMap::new() }
+        },
+    };
 
     incremental::exit_query();
     Arc::new(filtered)

@@ -460,7 +460,7 @@ impl<'tokens> Parser<'tokens> {
         imports
     }
 
-    fn parse_exports(&mut self) -> Vec<(String, Location)> {
+    fn parse_exports(&mut self) -> Option<Vec<(String, Location)>> {
         use Token::{Comma, EndOfInput, Export, Identifier, Newline, TypeName};
         self.accept(Newline);
 
@@ -469,7 +469,7 @@ impl<'tokens> Parser<'tokens> {
 
         if !self.accept(Export) {
             self.token_index = position_before_comments;
-            return Vec::new();
+            return None;
         }
 
         let mut items = self.delimited(Self::parse_ident_or_type_name, Comma, true);
@@ -501,7 +501,7 @@ impl<'tokens> Parser<'tokens> {
         }
 
         self.accept(Newline);
-        items
+        Some(items)
     }
 
     fn expect_newline_with_recovery(&mut self, error_message: &'static str) {

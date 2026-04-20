@@ -168,7 +168,7 @@ impl<'a> CstDisplay<'a> {
             writeln!(f)?;
         }
 
-        self.fmt_export(&cst.exports, f)?;
+        self.fmt_export(cst.exports.as_deref(), f)?;
 
         for item in &cst.top_level_items {
             if let Some(db) = self.db_resolve() {
@@ -207,8 +207,8 @@ impl<'a> CstDisplay<'a> {
         Ok(())
     }
 
-    fn fmt_export(&mut self, exports: &[(String, Location)], f: &mut Formatter) -> std::fmt::Result {
-        if !exports.is_empty() {
+    fn fmt_export(&mut self, exports: Option<&[(String, Location)]>, f: &mut Formatter) -> std::fmt::Result {
+        if let Some(exports) = exports {
             write!(f, "export ")?;
             for (i, (item, _location)) in exports.iter().enumerate() {
                 if i != 0 {

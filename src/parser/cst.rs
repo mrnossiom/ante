@@ -17,7 +17,9 @@ use super::ids::{ExprId, IdStore, NameId, NameStore, PathId, PatternId, TopLevel
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Cst {
     pub imports: Vec<Import>,
-    pub exports: Vec<(String, Location)>,
+    /// `None` when the file has no `export` statement (all items are exported by default).
+    /// `Some(list)` when an explicit `export` statement restricts visibility to those items.
+    pub exports: Option<Vec<(String, Location)>>,
     pub top_level_items: Vec<Arc<TopLevelItem>>,
 
     /// Comments after the last top level item

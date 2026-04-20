@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::BTreeMap, num::NonZeroUsize, sync::Arc};
+use std::{borrow::Cow, num::NonZeroUsize, sync::Arc};
 
 use inc_complete::DbGet;
 use rustc_hash::FxHashMap;
@@ -111,7 +111,7 @@ pub enum PrimitiveType {
 }
 
 /// Maps type variables to their bindings
-pub type TypeBindings = BTreeMap<TypeVariableId, Type>;
+pub type TypeBindings = FxHashMap<TypeVariableId, Type>;
 
 pub type GenericSubstitutions = FxHashMap<Generic, Type>;
 
@@ -239,7 +239,7 @@ impl Type {
     /// Similar to [Self::follow] but will replace all bound type variables reachable within
     /// this type with their bindings if found. This is sometimes referred to as "zonking."
     pub fn follow_all(&self, bindings: &TypeBindings) -> Type {
-        self.follow_all_two(bindings, &TypeBindings::new())
+        self.follow_all_two(bindings, &TypeBindings::default())
     }
 
     pub fn follow_all_two(&self, bindings: &TypeBindings, more_bindings: &TypeBindings) -> Type {
@@ -422,7 +422,7 @@ impl Type {
             // fast track - if no type variables were created, we have nothing to replace
             typ
         } else {
-            typ.generalize(&BTreeMap::new()).remove_forall()
+            typ.generalize(&TypeBindings::default()).remove_forall()
         }
     }
 
@@ -950,7 +950,7 @@ where
                 // the same logic the unifier uses (dedupe by exact equality
                 // included), so the printed row matches the row the type
                 // checker sees.
-                let empty = TypeBindings::new();
+                let empty = TypeBindings::default();
                 let (concrete, row_var) = Type::collect_effects_in_types(elements, self.bindings, &empty);
 
                 let mut first = true;

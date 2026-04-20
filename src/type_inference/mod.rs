@@ -100,15 +100,15 @@ pub struct IndividualTypeCheckResult {
     /// but in `a, b = 1, 2`, both `a` and `b` will be.
     /// Ex2: in `type Foo = | A | B`, `A` and `B` will both be generalized, and
     /// there is no need to generalize `Foo` itself.
-    pub generalized: BTreeMap<NameId, Type>,
+    pub generalized: FxHashMap<NameId, Type>,
 }
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct TypeMaps {
-    pub name_types: BTreeMap<NameId, Type>,
-    pub path_types: BTreeMap<PathId, Type>,
-    pub expr_types: BTreeMap<ExprId, Type>,
-    pub pattern_types: BTreeMap<PatternId, Type>,
+    pub name_types: FxHashMap<NameId, Type>,
+    pub path_types: FxHashMap<PathId, Type>,
+    pub expr_types: FxHashMap<ExprId, Type>,
+    pub pattern_types: FxHashMap<PatternId, Type>,
 }
 
 /// The TypeChecker is responsible for checking for type errors inside of an
@@ -125,10 +125,10 @@ pub struct TypeMaps {
 /// - New expressions & paths resulting from the compilation of match expressions into decision trees
 struct TypeChecker<'local, 'inner> {
     compiler: &'local DbHandle<'inner>,
-    name_types: BTreeMap<NameId, Type>,
-    path_types: BTreeMap<PathId, Type>,
-    pattern_types: BTreeMap<PatternId, Type>,
-    expr_types: BTreeMap<ExprId, Type>,
+    name_types: FxHashMap<NameId, Type>,
+    path_types: FxHashMap<PathId, Type>,
+    pattern_types: FxHashMap<PatternId, Type>,
+    expr_types: FxHashMap<ExprId, Type>,
 
     bindings: TypeBindings,
 
@@ -395,8 +395,8 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     /// Note that NameIds and PatternIds locally within each function will still refer to the
     /// non-generalized version of their types. If you want to retrieve the generalized type of an
     /// item from this SCC, you'll need to go through the generalized results specifically.
-    fn generalize_all(&mut self) -> BTreeMap<TopLevelId, BTreeMap<NameId, Type>> {
-        let mut items: BTreeMap<_, BTreeMap<_, _>> = BTreeMap::new();
+    fn generalize_all(&mut self) -> FxHashMap<TopLevelId, FxHashMap<NameId, Type>> {
+        let mut items: FxHashMap<_, FxHashMap<_, _>> = FxHashMap::default();
 
         for (name, typ) in self.item_types.clone().iter() {
             self.current_item = Some(name.top_level_item);
@@ -522,7 +522,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     ///
     /// Returns any new bindings created on success
     fn try_unify(&self, actual: &Type, expected: &Type) -> Result<TypeBindings, ()> {
-        let mut bindings = TypeBindings::new();
+        let mut bindings = TypeBindings::default();
         self.try_unify_with_bindings(actual, expected, &mut bindings).map(|_| bindings)
     }
 

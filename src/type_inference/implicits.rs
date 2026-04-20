@@ -377,7 +377,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         let arbitrary_recursion_limit = 8;
         // The type bindings parameter is for recursive calls when we need to find implicits
         // to slot in for another implicit function's arguments.
-        let no_bindings = TypeBindings::new();
+        let no_bindings = TypeBindings::default();
         self.find_implicit_value_inner(implicit, implicits_in_local_scope, &no_bindings, arbitrary_recursion_limit)
     }
 

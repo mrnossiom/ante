@@ -184,7 +184,7 @@ pub fn type_check_impl(context: &TypeCheck, db: &DbHandle) -> Arc<TypeCheckResul
         let (_, item_context) = GetItem(context.0).get(db);
         IndividualTypeCheckResult {
             maps: TypeMaps::default(),
-            generalized: BTreeMap::default(),
+            generalized: FxHashMap::default(),
             context: ExtendedTopLevelContext::new(item_context),
         }
     });

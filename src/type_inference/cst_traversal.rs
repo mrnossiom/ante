@@ -604,7 +604,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         let Some(row) = function.effects.effect_row(&self.bindings) else { return };
 
         // Check if `row` is mentioned anywhere in the function except its effect set
-        let no_bindings = TypeBindings::new();
+        let no_bindings = TypeBindings::default();
         let occurs = function.parameters.iter().any(|param| self.occurs(&param.typ, row, &no_bindings))
             || self.occurs(&function.environment, row, &no_bindings)
             || self.occurs(&function.return_type, row, &no_bindings);

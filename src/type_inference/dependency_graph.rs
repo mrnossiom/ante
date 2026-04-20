@@ -89,19 +89,16 @@ pub fn get_type_check_graph_impl(_: &TypeCheckDependencyGraph, db: &DbHandle) ->
         for file in crate_.source_files.values() {
             let exported = ExportedDefinitions(*file).get(db);
             for (_type_id, methods) in &exported.methods {
-                let method_ids: Vec<_> = methods
-                    .values()
-                    .map(|name| name.top_level_item)
-                    .filter(|&id| item_lacks_known_type(id, db))
-                    .collect();
+                let mut method_ids =
+                    methods.values().map(|name| &name.top_level_item).filter(|id| item_lacks_known_type(**id, db));
 
-                // Add edges between all pairs to form a clique
-                for (i, &a) in method_ids.iter().enumerate() {
-                    let a_index = add_node(&mut graph, a);
-                    for &b in &method_ids[i + 1..] {
-                        let b_index = add_node(&mut graph, b);
-                        graph.update_edge(a_index, b_index, ());
-                        graph.update_edge(b_index, a_index, ());
+                if let Some(representative) = method_ids.next() {
+                    let rep_index = add_node(&mut graph, *representative);
+
+                    for other in method_ids {
+                        let other_index = add_node(&mut graph, *other);
+                        graph.update_edge(rep_index, other_index, ());
+                        graph.update_edge(other_index, rep_index, ());
                     }
                 }
             }

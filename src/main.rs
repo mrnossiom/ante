@@ -34,7 +34,6 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
     sync::Arc,
-    time::{Duration, Instant},
 };
 
 use crate::{
@@ -64,7 +63,10 @@ mod files;
 mod incremental;
 mod iterator_extensions;
 mod paths;
+mod timings;
 mod vecmap;
+
+use crate::timings::{print_total_time_of_phases, time_phase};
 
 fn main() {
     if let Ok(Completions { shell_completion }) = Completions::try_parse() {
@@ -82,15 +84,13 @@ fn compile(args: Cli) {
     // TODO: Pointer size should be configurable depending on the target machine
     TargetPointerSize.set(&mut compiler, 8);
 
-    // Force each pass in dependency order, timing each. inc-complete caches the results,
-    // so the downstream compile mode (`--emit`, `--check`, or the default binary path)
-    // re-uses them and only pays for work not already done here (mainly linking / running).
     if args.show_time {
+        eprintln!("Phase timings:");
         print_phase_timings(&mut compiler);
     }
 
     let diagnostics = match args.emit {
-        _ if args.check => collect_all_diagnostics(&mut compiler),
+        _ if args.check => time_phase("Diagnostics", args.show_time, || collect_all_diagnostics(&mut compiler)),
         Some(EmitTarget::Tokens) => {
             display_tokens(&compiler);
             BTreeSet::new()
@@ -100,17 +100,22 @@ fn compile(args: Cli) {
         Some(EmitTarget::AstT) => display_type_checking(&mut compiler, true, args.emit_all),
         Some(EmitTarget::Mir) => display_mir(&mut compiler, args.emit_all),
         Some(EmitTarget::MirMono) => display_mir_mono(&mut compiler),
-        Some(EmitTarget::Ir) => llvm_codegen_separate(&mut compiler, true).2,
-        None => llvm_codegen_all(&mut compiler, &args.files, args.delete_binary),
+        Some(EmitTarget::Ir) => llvm_codegen_separate(&mut compiler, true, args.show_time).2,
+        None => llvm_codegen_all(&mut compiler, &args.files, !args.build, args.delete_binary, args.show_time),
     };
 
     let (error_count, _) = classify_diagnostics(&diagnostics);
     display_diagnostics(&diagnostics, &compiler, args.no_color);
 
     if let Some(metadata_file) = metadata_file {
-        if let Err(error) = write_metadata(&compiler, &metadata_file) {
+        let result = time_phase("Write metadata", args.show_time, || write_metadata(&compiler, &metadata_file));
+        if let Err(error) = result {
             eprintln!("\n{error}");
         }
+    }
+
+    if args.show_time {
+        print_total_time_of_phases();
     }
 
     if error_count != 0 {
@@ -118,75 +123,42 @@ fn compile(args: Cli) {
     }
 }
 
-/// Force each major compiler pass in dependency order and print how long each takes.
-/// This simplifies separating each pass for timing but does mean that times are not
-/// exactly representative of real compilations.
+/// Force the front-end passes (parse, name resolution, type inference) in dependency
+/// order so each has its own `--show-time` line. inc-complete caches the results, so
+/// the downstream compile mode reuses them. Later phases — monomorphization, LLVM
+/// codegen, object emission, gcc link, and diagnostic collection — are timed where
+/// they actually run, via `time_phase`, so `--show-time` doesn't double-count work.
 fn print_phase_timings(compiler: &mut Db) {
-    let mut timings = Vec::new();
-
-    // Parse: parse every file and collect every top-level item id. We need the ids
-    // for the per-item phases below, so this does double duty.
-    let t = Instant::now();
-    let crates = GetCrateGraph.get(compiler);
-    let mut item_ids = Vec::new();
-    for crate_ in crates.values() {
-        for file in crate_.source_files.values() {
-            let parse = Parse(*file).get(compiler);
-            for item in parse.cst.top_level_items.iter() {
-                item_ids.push(item.id);
+    let item_ids = time_phase("Parsing", true, || {
+        let crates = GetCrateGraph.get(compiler);
+        let mut item_ids = Vec::new();
+        for crate_ in crates.values() {
+            for file in crate_.source_files.values() {
+                let parse = Parse(*file).get(compiler);
+                for item in parse.cst.top_level_items.iter() {
+                    item_ids.push(item.id);
+                }
             }
         }
-    }
-    timings.push(("Parsing", t.elapsed()));
+        item_ids
+    });
 
     // Name resolution: per-item. Transitively forces definition collection queries
     // (VisibleDefinitions, ExportedDefinitions, VisibleTypes, ...) so those roll up
     // into this bucket.
-    let t = Instant::now();
-    for id in &item_ids {
-        Resolve(*id).get(&*compiler);
-    }
-    timings.push(("Name resolution", t.elapsed()));
+    time_phase("Name resolution", true, || {
+        for id in &item_ids {
+            Resolve(*id).get(&*compiler);
+        }
+    });
 
     // Type inference: per-item. Transitively forces the type-check dependency graph
     // and SCC partitioning.
-    let t = Instant::now();
-    for id in &item_ids {
-        incremental::TypeCheck(*id).get(&*compiler);
-    }
-    timings.push(("Type inference", t.elapsed()));
-
-    // Monomorphization and LLVM codegen assume a well-typed program. Skip them if
-    // there are any errors — matches the guard in `llvm_codegen_separate`.
-    let diagnostics = collect_all_diagnostics(compiler);
-    let (errors, _) = classify_diagnostics(&diagnostics);
-    let skipped = if errors == 0 {
-        // Monomorphization: builds initial MIR and specializes generics. Not cached.
-        let t = Instant::now();
-        let mir = mir::monomorphization::monomorphize(&*compiler);
-        timings.push(("Monomorphization", t.elapsed()));
-
-        // LLVM codegen on the already-monomorphized MIR, so no duplicate mono work here.
-        let t = Instant::now();
-        let _ = codegen::llvm::codegen_llvm_for_mir(&mir);
-        timings.push(("LLVM codegen", t.elapsed()));
-        false
-    } else {
-        true
-    };
-
-    let total: Duration = timings.iter().map(|(_, d)| *d).sum();
-    let label_width = timings.iter().map(|(l, _)| l.len()).max().unwrap_or(0).max("Total".len());
-
-    eprintln!("Phase timings:");
-    for (label, duration) in &timings {
-        eprintln!("  {:<label_width$}  {:>9.2} ms", label, duration.as_secs_f64() * 1000.0);
-    }
-    if skipped {
-        eprintln!("  (Monomorphization and LLVM codegen skipped — earlier errors)");
-    }
-    eprintln!("  {:-<width$}", "", width = label_width + 2 + 9 + 3);
-    eprintln!("  {:<label_width$}  {:>9.2} ms", "Total", total.as_secs_f64() * 1000.0);
+    time_phase("Type inference", true, || {
+        for id in &item_ids {
+            incremental::TypeCheck(*id).get(&*compiler);
+        }
+    });
 }
 
 /// Returns a pair of (error count, warning count)
@@ -346,14 +318,16 @@ fn display_mir_mono(compiler: &mut Db) -> BTreeSet<Diagnostic> {
 
 /// Codegen each item as a separate llvm module
 /// Returns (module strings, true if there are any errors, diagnostics)
-fn llvm_codegen_separate(compiler: &mut Db, display_ir: bool) -> (Vec<Arc<Vec<u8>>>, bool, BTreeSet<Diagnostic>) {
-    let diagnostics = collect_all_diagnostics(compiler);
+fn llvm_codegen_separate(
+    compiler: &mut Db, display_ir: bool, show_time: bool,
+) -> (Vec<Arc<Vec<u8>>>, bool, BTreeSet<Diagnostic>) {
+    let diagnostics = time_phase("Diagnostics", show_time, || collect_all_diagnostics(compiler));
     let (errors, _) = classify_diagnostics(&diagnostics);
     if errors != 0 {
         return (Vec::new(), true, diagnostics);
     }
 
-    let modules = if let Some(result) = codegen_llvm(compiler) {
+    let modules = if let Some(result) = codegen_llvm(compiler, show_time) {
         if display_ir {
             display_llvm_bitcode(&result, "program");
         }
@@ -375,8 +349,10 @@ fn display_llvm_bitcode(result: &CodegenLlvmResult, module_name: &str) {
 }
 
 /// Codegen everything, linking together each separate llvm module
-fn llvm_codegen_all(compiler: &mut Db, files: &[PathBuf], delete_binary: bool) -> BTreeSet<Diagnostic> {
-    let (mut modules, has_errors, diagnostics) = llvm_codegen_separate(compiler, false);
+fn llvm_codegen_all(
+    compiler: &mut Db, files: &[PathBuf], run: bool, delete_binary: bool, show_time: bool,
+) -> BTreeSet<Diagnostic> {
+    let (mut modules, has_errors, diagnostics) = llvm_codegen_separate(compiler, false, show_time);
     if has_errors {
         return diagnostics;
     }
@@ -389,18 +365,20 @@ fn llvm_codegen_all(compiler: &mut Db, files: &[PathBuf], delete_binary: bool) -
     let module_name = files.first().map_or_else(|| "a.out".into(), |file| file.with_extension(""));
     let module_name = module_name.to_string_lossy();
 
-    let link_succeeded = codegen::llvm::link(modules, &module_name);
+    let link_succeeded = codegen::llvm::link(modules, &module_name, show_time);
     if !link_succeeded {
         return diagnostics;
     }
 
-    // Run the program
-    // Use an absolute path so the binary can be found regardless of PATH.
-    let binary_path = binary_name(&module_name);
+    if run {
+        // Run the program
+        // Use an absolute path so the binary can be found regardless of PATH.
+        let binary_path = binary_name(&module_name);
 
-    Command::new(&binary_path).spawn().unwrap().wait().unwrap();
-    if delete_binary {
-        std::fs::remove_file(module_name.as_ref()).unwrap();
+        Command::new(&binary_path).spawn().unwrap().wait().unwrap();
+        if delete_binary {
+            std::fs::remove_file(module_name.as_ref()).unwrap();
+        }
     }
 
     diagnostics

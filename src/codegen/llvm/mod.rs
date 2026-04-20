@@ -31,11 +31,13 @@ pub fn initialize_native_target() {
     Target::initialize_native(&config).unwrap();
 }
 
-pub fn codegen_llvm(compiler: &Db) -> Option<CodegenLlvmResult> {
+pub fn codegen_llvm(compiler: &Db, show_time: bool) -> Option<CodegenLlvmResult> {
     // Monomorphize everything - ideally we could only monomorphize some items so that the
     // `CodegenLlvmResult` later can be split up and combined but for now it is whole program only.
-    let mir = mir::monomorphization::monomorphize(compiler);
-    codegen_llvm_for_mir(&mir)
+    let mir = crate::timings::time_phase("Monomorphization", show_time, || {
+        mir::monomorphization::monomorphize(compiler)
+    });
+    crate::timings::time_phase("LLVM codegen", show_time, || codegen_llvm_for_mir(&mir))
 }
 
 /// LLVM IR generation on an already-monomorphized `Mir`
@@ -70,25 +72,35 @@ pub(crate) fn codegen_llvm_for_mir(mir: &mir::Mir) -> Option<CodegenLlvmResult> 
 
 /// Link the given list of llvm bitcode modules into an executable.
 /// Returns `true` if linking succeeded, `false` otherwise.
-pub fn link(modules: Vec<Arc<Vec<u8>>>, binary_name: &str) -> bool {
+pub fn link(modules: Vec<Arc<Vec<u8>>>, binary_name: &str, show_time: bool) -> bool {
     let llvm = inkwell::context::Context::create();
     let module = llvm.create_module(binary_name);
 
-    for bitcode in modules {
-        let buffer = MemoryBuffer::create_from_memory_range(&bitcode, "buffer");
-        let new_module =
-            Module::parse_bitcode_from_buffer(&buffer, &llvm).expect("Failed to parse llvm module bitcode");
-        module.link_in_module(new_module).expect("Failed to link in llvm module");
-    }
+    // Re-parse each bitcode module and merge them into `module`. For a whole-program
+    // single module this is still O(program-size) so it's worth its own bucket.
+    crate::timings::time_phase("Bitcode assembly", show_time, || {
+        for bitcode in modules {
+            let buffer = MemoryBuffer::create_from_memory_range(&bitcode, "buffer");
+            let new_module =
+                Module::parse_bitcode_from_buffer(&buffer, &llvm).expect("Failed to parse llvm module bitcode");
+            module.link_in_module(new_module).expect("Failed to link in llvm module");
+        }
+    });
 
     // generate the bitcode to a .bc file
     let path = std::path::Path::new(binary_name).with_extension("o");
     let target_machine = native_target_machine();
 
-    target_machine.write_to_file(&module, FileType::Object, &path).unwrap();
+    // Object emission runs the LLVM backend (IR -> machine code), typically the most
+    // expensive LLVM step, so it gets its own phase bucket.
+    crate::timings::time_phase("Object emission", show_time, || {
+        target_machine.write_to_file(&module, FileType::Object, &path).unwrap();
+    });
 
     // call gcc to compile the bitcode to a binary
-    super::link_with_gcc(path.to_string_lossy().as_ref(), binary_name)
+    crate::timings::time_phase("Linking", show_time, || {
+        super::link_with_gcc(path.to_string_lossy().as_ref(), binary_name)
+    })
 }
 
 fn native_target_machine() -> TargetMachine {

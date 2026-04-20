@@ -43,7 +43,8 @@ where
         .flat_map(|item| build_initial_mir_with_shared_map(compiler, item))
         .fold(Mir::default, Mir::extend)
         .reduce(Mir::default, Mir::extend)
-        .remove_internal_externs();
+        .remove_internal_externs()
+        .remove_unreachable_functions();
 
     let shared = SharedDefinitions::default();
 

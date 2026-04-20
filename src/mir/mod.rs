@@ -31,6 +31,7 @@ mod closure_deconversion;
 mod display;
 mod effect_lowering;
 pub(crate) mod monomorphization;
+mod remove_unreachable;
 mod tail_resume_optimization;
 mod validation;
 

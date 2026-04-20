@@ -34,6 +34,7 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
     sync::Arc,
+    time::{Duration, Instant},
 };
 
 use crate::{
@@ -81,6 +82,13 @@ fn compile(args: Cli) {
     // TODO: Pointer size should be configurable depending on the target machine
     TargetPointerSize.set(&mut compiler, 8);
 
+    // Force each pass in dependency order, timing each. inc-complete caches the results,
+    // so the downstream compile mode (`--emit`, `--check`, or the default binary path)
+    // re-uses them and only pays for work not already done here (mainly linking / running).
+    if args.show_time {
+        print_phase_timings(&mut compiler);
+    }
+
     let diagnostics = match args.emit {
         _ if args.check => collect_all_diagnostics(&mut compiler),
         Some(EmitTarget::Tokens) => {
@@ -108,6 +116,77 @@ fn compile(args: Cli) {
     if error_count != 0 {
         std::process::exit(1);
     }
+}
+
+/// Force each major compiler pass in dependency order and print how long each takes.
+/// This simplifies separating each pass for timing but does mean that times are not
+/// exactly representative of real compilations.
+fn print_phase_timings(compiler: &mut Db) {
+    let mut timings = Vec::new();
+
+    // Parse: parse every file and collect every top-level item id. We need the ids
+    // for the per-item phases below, so this does double duty.
+    let t = Instant::now();
+    let crates = GetCrateGraph.get(compiler);
+    let mut item_ids = Vec::new();
+    for crate_ in crates.values() {
+        for file in crate_.source_files.values() {
+            let parse = Parse(*file).get(compiler);
+            for item in parse.cst.top_level_items.iter() {
+                item_ids.push(item.id);
+            }
+        }
+    }
+    timings.push(("Parsing", t.elapsed()));
+
+    // Name resolution: per-item. Transitively forces definition collection queries
+    // (VisibleDefinitions, ExportedDefinitions, VisibleTypes, ...) so those roll up
+    // into this bucket.
+    let t = Instant::now();
+    for id in &item_ids {
+        Resolve(*id).get(&*compiler);
+    }
+    timings.push(("Name resolution", t.elapsed()));
+
+    // Type inference: per-item. Transitively forces the type-check dependency graph
+    // and SCC partitioning.
+    let t = Instant::now();
+    for id in &item_ids {
+        incremental::TypeCheck(*id).get(&*compiler);
+    }
+    timings.push(("Type inference", t.elapsed()));
+
+    // Monomorphization and LLVM codegen assume a well-typed program. Skip them if
+    // there are any errors — matches the guard in `llvm_codegen_separate`.
+    let diagnostics = collect_all_diagnostics(compiler);
+    let (errors, _) = classify_diagnostics(&diagnostics);
+    let skipped = if errors == 0 {
+        // Monomorphization: builds initial MIR and specializes generics. Not cached.
+        let t = Instant::now();
+        let mir = mir::monomorphization::monomorphize(&*compiler);
+        timings.push(("Monomorphization", t.elapsed()));
+
+        // LLVM codegen on the already-monomorphized MIR, so no duplicate mono work here.
+        let t = Instant::now();
+        let _ = codegen::llvm::codegen_llvm_for_mir(&mir);
+        timings.push(("LLVM codegen", t.elapsed()));
+        false
+    } else {
+        true
+    };
+
+    let total: Duration = timings.iter().map(|(_, d)| *d).sum();
+    let label_width = timings.iter().map(|(l, _)| l.len()).max().unwrap_or(0).max("Total".len());
+
+    eprintln!("Phase timings:");
+    for (label, duration) in &timings {
+        eprintln!("  {:<label_width$}  {:>9.2} ms", label, duration.as_secs_f64() * 1000.0);
+    }
+    if skipped {
+        eprintln!("  (Monomorphization and LLVM codegen skipped — earlier errors)");
+    }
+    eprintln!("  {:-<width$}", "", width = label_width + 2 + 9 + 3);
+    eprintln!("  {:<label_width$}  {:>9.2} ms", "Total", total.as_secs_f64() * 1000.0);
 }
 
 /// Returns a pair of (error count, warning count)

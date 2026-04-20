@@ -35,11 +35,16 @@ pub fn codegen_llvm(compiler: &Db) -> Option<CodegenLlvmResult> {
     // Monomorphize everything - ideally we could only monomorphize some items so that the
     // `CodegenLlvmResult` later can be split up and combined but for now it is whole program only.
     let mir = mir::monomorphization::monomorphize(compiler);
+    codegen_llvm_for_mir(&mir)
+}
+
+/// LLVM IR generation on an already-monomorphized `Mir`
+pub(crate) fn codegen_llvm_for_mir(mir: &mir::Mir) -> Option<CodegenLlvmResult> {
     let name = &mir.definitions.iter().next().map_or("_", |(_, function)| &function.name);
 
     initialize_native_target();
     let llvm = inkwell::context::Context::create();
-    let mut module = ModuleContext::new(&llvm, &mir, name);
+    let mut module = ModuleContext::new(&llvm, mir, name);
 
     for (id, function) in &mir.definitions {
         module.codegen_function(function, *id);

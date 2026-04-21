@@ -815,18 +815,22 @@ impl<'ctx> ModuleContext<'ctx> {
         match terminator {
             TerminatorInstruction::Jmp((target_id, argument)) => {
                 let target = self.blocks[*target_id];
-                self.builder.build_unconditional_branch(target).unwrap();
+                // remember_incoming can emit load instructions so it needs to be
+                // called before we insert the terminator instruction
                 self.remember_incoming(*target_id, argument);
+                self.builder.build_unconditional_branch(target).unwrap();
             },
             TerminatorInstruction::If { condition, then, else_, end: _ } => {
                 let condition = self.lookup_value(condition).into_int_value();
 
                 let then_target = self.blocks[then.0];
                 let else_target = self.blocks[else_.0];
-                self.builder.build_conditional_branch(condition, then_target, else_target).unwrap();
 
+                // remember_incoming needs to be called before we insert the terminator instruction
                 self.remember_incoming(then.0, &then.1);
                 self.remember_incoming(else_.0, &else_.1);
+
+                self.builder.build_conditional_branch(condition, then_target, else_target).unwrap();
             },
             TerminatorInstruction::Switch { int_value, cases, else_, end: _ } => {
                 let int_value = self.lookup_value(int_value).into_int_value();

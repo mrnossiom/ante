@@ -1,0 +1,49 @@
+type Shape =
+   | Point
+   | Circle I32
+   | Rect I32 I32
+   | Tri I32 I32
+
+// There used to be a bug when returning a nullary variant from a match.
+// We'd issue a `load` instruction after the block was already terminated.
+mk_shape (n: I32) (m: I32): Shape =
+    match n % 4
+    | 0 -> Point
+    | 1 -> Circle (n + 1)
+    | 2 -> Rect (n + 1) (m + 1)
+    | _ -> Tri n m
+
+// The bug would occur in any conditional with >2 branches which returned a value
+mk_shape_if (n: I32) (m: I32): Shape =
+    if n % 4 == 0 then Point
+    else if n % 4 == 1 then Circle (n + 1)
+    else if n % 4 == 2 then Rect (n + 1) (m + 1)
+    else Tri n m
+
+area (s: Shape): I32 =
+    match s
+    | Point -> 0
+    | Circle r -> r
+    | Rect w h -> w * h
+    | Tri b h -> (b * h) / 2
+
+main () =
+    println <| area <| mk_shape 0 9
+    println <| area <| mk_shape 5 9
+    println <| area <| mk_shape 6 9
+    println <| area <| mk_shape 7 9
+    println <| area <| mk_shape_if 0 9
+    println <| area <| mk_shape_if 5 9
+    println <| area <| mk_shape_if 6 9
+    println <| area <| mk_shape_if 7 9
+
+// args: --delete-binary --no-color
+// expected stdout:
+// 0
+// 6
+// 70
+// 31
+// 0
+// 6
+// 70
+// 31

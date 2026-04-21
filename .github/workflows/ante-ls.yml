@@ -8,6 +8,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  LLVM_SYS_211_PREFIX: /usr/lib/llvm-21
 
 jobs:
   build:
@@ -15,9 +16,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
       with:
         submodules: 'true'
+    - name: Install LLVM 21
+      run: |
+        wget https://apt.llvm.org/llvm.sh
+        chmod +x llvm.sh
+        sudo ./llvm.sh 21 all
     - name: Build
       working-directory: ./ante-ls
-      run: cargo build --no-default-features
+      run: cargo build

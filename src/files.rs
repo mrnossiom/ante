@@ -10,14 +10,15 @@ use crate::incremental::Db;
 ///
 /// If we fail, just default to a fresh compiler with no cached compilations.
 pub fn make_compiler(source_files: &[PathBuf], incremental: bool) -> (Db, Option<PathBuf>) {
-    let (mut compiler, metadata_file) = if let Some(file) = source_files.first() {
+    let (mut compiler, metadata_file) = if let Some(file) = source_files.first()
+        && incremental
+    {
         let metadata_file = file.with_extension("inc");
-
-        if incremental && let Ok(text) = read_file(&metadata_file) {
-            (ron::from_str(&text).unwrap_or_default(), Some(metadata_file))
-        } else {
-            (Db::default(), None)
-        }
+        let db = match read_binary_file(&metadata_file) {
+            Ok(bytes) => rmp_serde::from_slice(&bytes).unwrap_or_default(),
+            Err(_) => Db::default(),
+        };
+        (db, Some(metadata_file))
     } else {
         (Db::default(), None)
     };
@@ -28,22 +29,16 @@ pub fn make_compiler(source_files: &[PathBuf], incremental: bool) -> (Db, Option
     (compiler, metadata_file)
 }
 
-fn write_file(file_name: &Path, text: &str) -> Result<(), String> {
-    let mut metadata_file = File::create(file_name)
-        .map_err(|error| format!("Failed to create file `{}`:\n{error}", file_name.display()))?;
-
-    let text = text.as_bytes();
-    metadata_file
-        .write_all(text)
-        .map_err(|error| format!("Failed to write to file `{}`:\n{error}", file_name.display()))
-}
-
 /// This could be changed so that we only write if the metadata actually
 /// changed but to simplify things we just always write.
 pub fn write_metadata(compiler: &Db, metadata_file: &Path) -> Result<(), String> {
-    // Using `to_writer` here would avoid the intermediate step of creating the string
-    let serialized = ron::to_string(compiler).map_err(|error| format!("Failed to serialize database:\n{error}"))?;
-    write_file(metadata_file, &serialized)
+    let bytes =
+        rmp_serde::to_vec(compiler).map_err(|error| format!("Failed to serialize database:\n{error}"))?;
+
+    let mut file = File::create(metadata_file)
+        .map_err(|error| format!("Failed to create file `{}`:\n{error}", metadata_file.display()))?;
+    file.write_all(&bytes)
+        .map_err(|error| format!("Failed to write to file `{}`:\n{error}", metadata_file.display()))
 }
 
 pub(crate) fn read_file(file_name: &std::path::Path) -> Result<String, String> {
@@ -59,4 +54,15 @@ pub(crate) fn read_file(file_name: &std::path::Path) -> Result<String, String> {
         .map_err(|error| format!("Failed to read from file `{}`:\n{error}", file_name.display()))?;
 
     Ok(text)
+}
+
+fn read_binary_file(file_name: &std::path::Path) -> Result<Vec<u8>, String> {
+    let mut file = File::open(file_name)
+        .map_err(|error| format!("Failed to open `{}`:\n{error}", file_name.display()))?;
+
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)
+        .map_err(|error| format!("Failed to read from file `{}`:\n{error}", file_name.display()))?;
+
+    Ok(bytes)
 }

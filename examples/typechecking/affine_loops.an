@@ -1,0 +1,71 @@
+type Resource = id: I32
+
+consume _ = ()
+
+// error
+move_outer_in_body (r1: Resource) (r2: Resource) =
+    for _i in 0..3 do
+        consume r1
+
+    while false do
+        consume r2
+
+// ok
+move_local_in_body () =
+    for _i in 0..3 do
+        local = Resource 1
+        consume local
+
+    while false do
+        local = Resource 1
+        consume local
+        consume (Resource 1)
+
+// ok
+move_copy_in_body (x: I32) =
+    for _i in 0..3 do
+        consume x
+
+    while false do
+        consume x
+
+// Moves in a for's range are fine
+move_in_start (r: Resource) =
+    for _i in (start_consumes r)..3 do ()
+
+start_consumes (r: Resource) : I32 =
+    consume r
+    0
+
+// A move in a while's condition should error
+move_in_while_condition (r: Resource) =
+    while
+        consume r
+        false
+    do ()
+
+main () = ()
+
+// args: --check --no-color
+// expected exit status: 1
+// expected stderr:
+// examples/typechecking/affine_loops.an:8:17
+//  7 |     for _i in 0..3 do
+//    |         // error: Cannot move r1 in a for loop because it may be executed multiple times
+//  8 |         consume r1
+//    |                 ^^
+// 
+// examples/typechecking/affine_loops.an:11:17
+// 10 |     while false do
+//    |         // error: Cannot move r2 in a while loop because it may be executed multiple times
+// 11 |         consume r2
+//    |                 ^^
+// 
+// examples/typechecking/affine_loops.an:43:17
+// 42 |     while
+//    |         // error: Cannot move r in a while loop because it may be executed multiple times
+// 43 |         consume r
+//    |                 ^
+// 44 |         false
+// 
+// Found 3 errors and 0 warnings

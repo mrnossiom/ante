@@ -67,7 +67,7 @@ Vec.remove_index (v: mut Vec t) (idx:Usz) : t =
 //the vector or none if the element was not found.
 //Uses == to determine element equality.
 //returns the index where the element was found.
-Vec.remove_first (v: mut Vec t) (elem: t) {Eq t} : Maybe Usz =
+Vec.remove_first (v: mut Vec t) (elem: t) {Eq t} {Copy t} : Maybe Usz =
     for i in 0 .. v.len do
         if elem == v.data.[i] then
             v.remove_index i
@@ -101,7 +101,7 @@ Vec.remove_indices (v: mut Vec t) (idxs: Vec Usz) : Unit =
 //remove all matching elements from the vector and
 //return the number of elements removed.
 //Uses = to determine element equality.
-Vec.remove_all (v: mut Vec t) (elem: t) {Eq t} : Usz =
+Vec.remove_all (v: mut Vec t) (elem: t) {Eq t} {Copy t} : Usz =
     var idxs = Vec.empty ()
     for i in 0 .. v.len do
         if elem == v.data.[i] then

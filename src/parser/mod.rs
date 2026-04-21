@@ -1844,7 +1844,7 @@ impl<'tokens> Parser<'tokens> {
     fn parse_while(&mut self) -> Result<ExprId> {
         self.with_expr_id_and_location(|this| {
             this.expect(Token::While, "`while` to begin a while loop")?;
-            let condition = this.parse_expr_with_recovery(Self::parse_expression, Token::Do, &[Token::Newline])?;
+            let condition = this.parse_expr_with_recovery(Self::parse_block_or_expression, Token::Do, &[Token::Newline])?;
             this.accept(Token::Newline);
             this.expect(Token::Do, "`do` to separate the condition from the body of a while loop")?;
             let body = this.parse_block_or_expression()?;

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::{
-    diagnostics::{Diagnostic, Location},
+    diagnostics::{Diagnostic, Location, RepeatedContext},
     incremental::{ExportedTypes, VisibleImplicits},
     name_resolution::Origin,
     parser::{
@@ -212,24 +212,26 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         }
     }
 
-    /// Emit errors for any non-Copy outer variables moved during a handler branch.
-    /// `pre_branch` is the move state before the branch ran, and `outer_names` is
-    /// the set of NameIds that existed before the branch pattern was introduced.
-    pub(super) fn check_moves_in_handler_branch(
-        &mut self, pre_branch: &MoveTracker, outer_names: &rustc_hash::FxHashSet<NameId>,
+    /// Emit errors for any non-Copy outer variables moved during a context whose
+    /// body may run more than once (handler branches, `for` bodies, `while`
+    /// condition + body). Call this with `self.move_tracker` set to the scope-local
+    /// tracker (started empty via `mem::take`); `outer_names` is the set of NameIds
+    /// that existed *before* the scope was entered.
+    pub(super) fn check_moves_in_repeated_context(
+        &mut self, outer_names: &rustc_hash::FxHashSet<NameId>, context: RepeatedContext,
     ) {
-        let new_outer_moves: Vec<(MovePath, Location)> = self
+        let outer_moves: Vec<(MovePath, Location)> = self
             .move_tracker
             .moved
             .iter()
-            .filter(|(path, _)| !pre_branch.moved.contains_key(*path) && outer_names.contains(&path.root_variable()))
+            .filter(|(path, _)| outer_names.contains(&path.root_variable()))
             .map(|(p, l)| (p.clone(), l.clone()))
             .collect();
 
-        for (path, location) in new_outer_moves {
+        for (path, location) in outer_moves {
             if !self.type_is_copy(&self.name_types[&path.root_variable()].clone()) {
                 let name = path.display_name(self.current_extended_context());
-                self.compiler.accumulate(Diagnostic::MoveInHandlerBranch { name, location });
+                self.compiler.accumulate(Diagnostic::MoveInRepeatedContext { name, context, location });
             }
         }
     }

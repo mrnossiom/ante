@@ -218,8 +218,9 @@ pub enum Diagnostic {
         location: Location,
         moved_in: Location,
     },
-    MoveInHandlerBranch {
+    MoveInRepeatedContext {
         name: String,
+        context: RepeatedContext,
         location: Location,
     },
     TraitTypeCantBeUsed {
@@ -231,6 +232,26 @@ pub enum Diagnostic {
     FreeVarsInTypeConstructor {
         location: Location,
     },
+}
+
+/// Identifies a syntactic context whose body may execute more than once.
+/// Used by the affine checker to describe where an outer non-Copy value
+/// was moved.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
+pub enum RepeatedContext {
+    HandlerBranch,
+    ForLoop,
+    WhileLoop,
+}
+
+impl RepeatedContext {
+    fn description(&self) -> &'static str {
+        match self {
+            RepeatedContext::HandlerBranch => "a handler branch",
+            RepeatedContext::ForLoop => "a for loop",
+            RepeatedContext::WhileLoop => "a while loop",
+        }
+    }
 }
 
 impl Ord for Diagnostic {
@@ -477,8 +498,12 @@ impl Diagnostic {
             Diagnostic::UseOfMovedValue { name, location: _, moved_in: _ } => {
                 format!("Use of moved value {}", name.purple())
             },
-            Diagnostic::MoveInHandlerBranch { name, location: _ } => {
-                format!("Cannot move {} in a handler branch because it may be executed multiple times", name.purple())
+            Diagnostic::MoveInRepeatedContext { name, context, location: _ } => {
+                format!(
+                    "Cannot move {} in {} because it may be executed multiple times",
+                    name.purple(),
+                    context.description()
+                )
             },
             Diagnostic::TraitTypeCantBeUsed { location: _ } => {
                 format!("Trait types can't be used in this position")
@@ -539,7 +564,7 @@ impl Diagnostic {
             | Diagnostic::TypeAnnotationNeeded { location, .. }
             | Diagnostic::NotAType { location, .. }
             | Diagnostic::UseOfMovedValue { location, .. }
-            | Diagnostic::MoveInHandlerBranch { location, .. }
+            | Diagnostic::MoveInRepeatedContext { location, .. }
             | Diagnostic::TraitTypeCantBeUsed { location, .. }
             | Diagnostic::HoleCantBeUsed { location, .. }
             | Diagnostic::FreeVarsInTypeConstructor { location, .. }

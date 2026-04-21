@@ -3,7 +3,7 @@ use std::{borrow::Cow, collections::BTreeMap, sync::Arc};
 use rustc_hash::FxHashSet;
 
 use crate::{
-    diagnostics::{Diagnostic, Location, UnimplementedItem},
+    diagnostics::{Diagnostic, Location, RepeatedContext, UnimplementedItem},
     incremental::{AllDefinitions, ExportedDefinitions, GetItemRaw, GetType, Resolve},
     iterator_extensions::mapvec,
     name_resolution::{Origin, builtin::Builtin, namespace::SourceFileId},
@@ -28,10 +28,11 @@ struct LambdaOptions {
     /// `check_lambda` returns. Without this they're closed too early and set to `pure`.
     suppress_effect_closure: bool,
 
-    /// When `Some`, the lambda is a handler branch and should have the affine
-    /// handler-branch check applied to its move tracker. The set is the names
-    /// visible before the branch introduces its own pattern bindings.
-    handler_branch_outer_names: Option<FxHashSet<NameId>>,
+    /// When `Some`, the lambda's body is a context that may execute more than
+    /// once (e.g. a handler branch), and moves of outer non-Copy variables inside
+    /// it should be reported. The set is the names visible before the branch
+    /// introduces its own pattern bindings.
+    repeated_context: Option<(RepeatedContext, FxHashSet<NameId>)>,
 }
 
 impl<'local, 'inner> TypeChecker<'local, 'inner> {
@@ -548,13 +549,12 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
 
         self.check_expr(lambda.body, &return_type, &function_type.effects);
 
-        // If this lambda is a handler branch, report any non-Copy outer
-        // variables moved inside the branch body before we discard the
-        // branch's move tracker. `self.move_tracker` at this point is the
-        // branch-local tracker that `mem::take` above started empty.
-        if let Some(outer_names) = options.handler_branch_outer_names.as_ref() {
-            let pre_branch = super::affine::MoveTracker::default();
-            self.check_moves_in_handler_branch(&pre_branch, outer_names);
+        // If this lambda's body may execute more than once (e.g. a handler
+        // branch), report any non-Copy outer variables moved inside it before
+        // we discard the scope-local move tracker. `self.move_tracker` at this
+        // point is the branch-local tracker that `mem::take` above started empty.
+        if let Some((context, outer_names)) = options.repeated_context.as_ref() {
+            self.check_moves_in_repeated_context(outer_names, *context);
         }
 
         self.function_return_type = old_return_type;
@@ -1003,9 +1003,10 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 effects: expected_effect.clone(),
             }));
 
-            // TODO: Remove handler_branch_outer_names, inlining the check here
-            let options =
-                LambdaOptions { suppress_effect_closure: true, handler_branch_outer_names: Some(outer_names.clone()) };
+            let options = LambdaOptions {
+                suppress_effect_closure: true,
+                repeated_context: Some((RepeatedContext::HandlerBranch, outer_names.clone())),
+            };
 
             let branch_lambda = self.unwrap_lambda(*branch);
             self.expr_types.insert(*branch, handler_type.clone());
@@ -1080,8 +1081,17 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     }
 
     fn check_while(&mut self, while_: &cst::While, expected: &Type, expected_effect: &Type, id: ExprId) {
+        // Both the condition and body may execute more than once, so moves of
+        // outer non-Copy values inside either are unsound.
+        let outer_names = self.name_types.keys().copied().collect::<FxHashSet<_>>();
+        let old_tracker = std::mem::take(&mut self.move_tracker);
+
         self.check_expr(while_.condition, &Type::BOOL, expected_effect);
         self.check_expr(while_.body, &Type::UNIT, expected_effect);
+
+        self.check_moves_in_repeated_context(&outer_names, RepeatedContext::WhileLoop);
+        self.move_tracker = old_tracker;
+
         self.unify(&Type::UNIT, expected, TypeErrorKind::General, id);
     }
 
@@ -1093,10 +1103,20 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         self.push_inferred_int(0, int_ty, id.locate(self));
         let int_ty = Type::Variable(int_ty);
 
+        // Range expressions run exactly once, so normal move semantics apply here.
         self.check_expr(for_.start, &int_ty, expected_effect);
         self.check_expr(for_.end, &int_ty, expected_effect);
+
+        // Snapshot outer names before introducing the loop variable so the
+        // loop variable itself is not counted as an outer binding.
+        let outer_names = self.name_types.keys().copied().collect::<FxHashSet<_>>();
         self.name_types.insert(for_.variable, int_ty);
+
+        let old_tracker = std::mem::take(&mut self.move_tracker);
         self.check_expr(for_.body, &Type::UNIT, expected_effect);
+        self.check_moves_in_repeated_context(&outer_names, RepeatedContext::ForLoop);
+        self.move_tracker = old_tracker;
+
         self.unify(&Type::UNIT, expected, TypeErrorKind::General, id);
     }
 

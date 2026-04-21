@@ -1,7 +1,7 @@
 main () =
     shout x = "${x}!"
     bar = "nested interpolations"
-    print
+    println
         "I can do line breaks${
             shout "\nAny expressions"
         }${

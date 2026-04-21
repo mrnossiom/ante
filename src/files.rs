@@ -43,7 +43,7 @@ pub fn write_metadata(compiler: &Db, metadata_file: &Path) -> Result<(), String>
 
 pub(crate) fn read_file(file_name: &std::path::Path) -> Result<String, String> {
     let mut file = OpenOptions::new()
-        .create(true)
+        .create(false)
         .read(true)
         .write(true)
         .open(file_name)

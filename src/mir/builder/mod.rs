@@ -284,6 +284,9 @@ where
             cst::Expr::Return(return_) => self.return_(return_.expression),
             cst::Expr::Assignment(assignment) => self.assignment(assignment),
             cst::Expr::Extern(extern_) => self.extern_(extern_, expr),
+            cst::Expr::InterpolatedString(_) => {
+                unreachable!("InterpolatedString should be desugared before MIR generation")
+            },
         }
     }
 

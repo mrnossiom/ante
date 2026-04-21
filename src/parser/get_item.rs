@@ -292,6 +292,12 @@ fn collect_expressions_to_desugar(expr: ExprId, context: &DesugarContext, to_des
             }
         },
         Expr::Extern(_) => (),
+        Expr::InterpolatedString(interpolated) => {
+            for expr in &interpolated.exprs {
+                collect_expressions_to_desugar(*expr, context, to_desugar);
+            }
+            to_desugar.push(ExprDesugar::StringInterpolation(expr));
+        },
     }
 }
 
@@ -429,6 +435,9 @@ enum ExprDesugar {
     },
 
     Loop(ExprId),
+
+    /// `"a${x}b${y}c"` desugars to `"a" ++ cast x : String ++ "b" ++ cast y : String ++ "c"`
+    StringInterpolation(ExprId),
 }
 
 /// Classifies this call based on the called function.
@@ -495,6 +504,7 @@ impl ExprDesugar {
             ExprDesugar::TildeArrow { call } => desugar_tilde_arrow(call, context),
             ExprDesugar::TypeCast { call, target_type } => desugar_type_cast(call, target_type, context),
             ExprDesugar::Loop(expr) => desugar_loop(expr, context),
+            ExprDesugar::StringInterpolation(expr) => desugar_string_interpolation(expr, context),
         }
     }
 }
@@ -519,6 +529,63 @@ fn desugar_type_cast(expr: ExprId, target_type: Type, context: &mut DesugarConte
     let cast_call = context.push_expr(cast_call, location);
 
     context.set_expr(expr, Expr::TypeAnnotation(cst::TypeAnnotation { lhs: cast_call, rhs: target_type }));
+}
+
+/// Desugars `"a${x}b${y}c"` into
+/// `"a" ++ cast x : String ++ "b" ++ cast y : String ++ "c"`.
+fn desugar_string_interpolation(expr: ExprId, context: &mut DesugarContext) {
+    let Expr::InterpolatedString(interpolated) = context[expr].clone() else { unreachable!() };
+    let location = context.expr_location(expr).clone();
+    let item = |name: &str| (name.to_string(), location.clone());
+
+    let string_type = {
+        let string_path = Path { components: vec![item("Std"), item("Prelude"), item("String")] };
+        let string_path = context.push_path(string_path, location.clone());
+        Type::new(TypeKind::Named(string_path), location.clone())
+    };
+
+    // 1: create all the strings, 2: filter any known-empty strings, 3: append them together
+    let mut strings = Vec::new();
+    if !interpolated.fragments[0].is_empty() {
+        let first_fragment = Expr::Literal(Literal::String(interpolated.fragments[0].clone()));
+        strings.push(context.push_expr(first_fragment, location.clone()));
+    }
+
+    for (expr, fragment) in interpolated.exprs.iter().zip(interpolated.fragments.iter().skip(1)) {
+        // Std.Prelude.Cast.cast
+        let cast_path = Path { components: vec![item("Std"), item("Prelude"), item("Cast"), item("cast")] };
+        let cast_path = context.push_path(cast_path, location.clone());
+        let cast_var = context.push_expr(Expr::Variable(cast_path), location.clone());
+
+        // Std.Prelude.Cast.cast expr : String
+        let cast_call = Expr::Call(cst::Call { function: cast_var, arguments: vec![Argument::explicit(*expr)] });
+        let cast_call = context.push_expr(cast_call, location.clone());
+        let annotation = cst::TypeAnnotation { lhs: cast_call, rhs: string_type.clone() };
+        let casted = context.push_expr(Expr::TypeAnnotation(annotation), location.clone());
+
+        strings.push(casted);
+        if !fragment.is_empty() {
+            strings.push(context.push_expr(Expr::Literal(Literal::String(fragment.clone())), location.clone()));
+        }
+    }
+
+    let appended = strings.into_iter().reduce(|acc, string| push_append(acc, string, &location, context)).unwrap();
+
+    // Replace `expr`'s slot in-place with the root of the `++` chain so downstream
+    // lookups of `expr` return the desugared form.
+    context.set_expr(expr, context[appended].clone());
+}
+
+// Returns `lhs ++ rhs`
+fn push_append(lhs: ExprId, rhs: ExprId, location: &Location, context: &mut DesugarContext) -> ExprId {
+    let append_path = Path::ident("++".to_string(), location.clone());
+    let append_path = context.push_path(append_path, location.clone());
+    let append_var = context.push_expr(Expr::Variable(append_path), location.clone());
+    let call = Expr::Call(cst::Call {
+        function: append_var,
+        arguments: vec![Argument::explicit(lhs), Argument::explicit(rhs)],
+    });
+    context.push_expr(call, location.clone())
 }
 
 /// Desugars `x |> foo a b` into `foo x a b` and `foo a b <| x` into `foo x a b`

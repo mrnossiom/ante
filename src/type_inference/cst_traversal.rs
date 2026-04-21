@@ -145,6 +145,9 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             Expr::Assignment(assignment) => self.check_assignment(assignment, expected, expected_effect, id),
             Expr::Error => (),
             Expr::Extern(_) => (),
+            Expr::InterpolatedString(_) => {
+                unreachable!("InterpolatedString should be desugared before type inference")
+            },
         }
     }
 

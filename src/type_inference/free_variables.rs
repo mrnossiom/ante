@@ -133,6 +133,9 @@ impl FreeVars {
                     self.find_free_variables(op_expr, checker);
                 }
             },
+            cst::Expr::InterpolatedString(_) => {
+                unreachable!("InterpolatedString should be desugared before finding free variables")
+            },
         }
     }
 

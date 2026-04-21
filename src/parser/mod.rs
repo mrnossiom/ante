@@ -1844,7 +1844,8 @@ impl<'tokens> Parser<'tokens> {
     fn parse_while(&mut self) -> Result<ExprId> {
         self.with_expr_id_and_location(|this| {
             this.expect(Token::While, "`while` to begin a while loop")?;
-            let condition = this.parse_expr_with_recovery(Self::parse_block_or_expression, Token::Do, &[Token::Newline])?;
+            let condition =
+                this.parse_expr_with_recovery(Self::parse_block_or_expression, Token::Do, &[Token::Newline])?;
             this.accept(Token::Newline);
             this.expect(Token::Do, "`do` to separate the condition from the body of a while loop")?;
             let body = this.parse_block_or_expression()?;
@@ -2076,9 +2077,35 @@ impl<'tokens> Parser<'tokens> {
     }
 
     fn parse_string(&mut self, contents: String) -> Result<ExprId> {
-        let location = self.current_token_location();
+        let start_location = self.current_token_location();
         self.advance();
-        Ok(self.push_expr(Expr::Literal(Literal::String(contents)), location))
+
+        if !matches!(self.current_token(), Token::Interpolate) {
+            return Ok(self.push_expr(Expr::Literal(Literal::String(contents)), start_location));
+        }
+
+        let mut fragments = vec![contents];
+        let mut exprs = Vec::new();
+
+        while matches!(self.current_token(), Token::Interpolate) {
+            self.advance();
+
+            let inner = self.parse_expression()?;
+            exprs.push(inner);
+
+            self.expect(Token::BraceRight, "a closing `}` to end the string interpolation")?;
+
+            let next_frag = match self.current_token() {
+                Token::StringLiteral(s) => s.clone(),
+                _ => return self.expected("a string literal continuation after `}`"),
+            };
+            self.advance();
+            fragments.push(next_frag);
+        }
+
+        let location = start_location.to(&self.previous_token_location());
+        let interpolated = cst::InterpolatedString { fragments, exprs };
+        Ok(self.push_expr(Expr::InterpolatedString(interpolated), location))
     }
 
     fn parse_comptime(&mut self) -> Result<Comptime> {

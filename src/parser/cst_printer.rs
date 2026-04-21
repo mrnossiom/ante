@@ -23,9 +23,9 @@ use super::{
     TopLevelContext,
     cst::{
         Call, CompoundAssignOp, Comptime, Cst, Declaration, Definition, EffectDefinition, EffectType, Expr, Extern,
-        FunctionType, Handle, HandlePattern, If, Import, Lambda, Literal, Match, MemberAccess, Parameter, Path,
-        Pattern, Quoted, Reference, SequenceItem, TopLevelItem, TraitDefinition, TraitImpl, Type, TypeAnnotation,
-        TypeDefinition, TypeDefinitionBody, TypeKind,
+        FunctionType, Handle, HandlePattern, If, Import, InterpolatedString, Lambda, Literal, Match, MemberAccess,
+        Parameter, Path, Pattern, Quoted, Reference, SequenceItem, TopLevelItem, TraitDefinition, TraitImpl, Type,
+        TypeAnnotation, TypeDefinition, TypeDefinitionBody, TypeKind,
     },
     ids::{ExprId, PatternId, TopLevelId},
 };
@@ -675,7 +675,20 @@ impl<'a> CstDisplay<'a> {
                 self.fmt_expr(assignment.rhs, context, f)
             },
             Expr::Extern(extern_) => self.fmt_extern(extern_, f),
+            Expr::InterpolatedString(interpolated) => self.fmt_interpolated_string(interpolated, context, f),
         }
+    }
+
+    fn fmt_interpolated_string(
+        &mut self, interpolated: &InterpolatedString, context: &impl IdStore, f: &mut Formatter,
+    ) -> std::fmt::Result {
+        write!(f, "\"{}", interpolated.fragments[0])?;
+        for (part, fragment) in interpolated.exprs.iter().zip(interpolated.fragments.iter().skip(1)) {
+            write!(f, "${{")?;
+            self.fmt_expr(*part, context, f)?;
+            write!(f, "}}{fragment}")?;
+        }
+        write!(f, "\"")
     }
 
     fn fmt_literal(&mut self, literal: &Literal, f: &mut Formatter) -> std::fmt::Result {

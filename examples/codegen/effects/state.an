@@ -6,7 +6,7 @@ use_state (y: I32) =
     x = get () : I32
     set (x + y)
     state = get () : I32
-    print "Ending state = ${state}"
+    println "Ending state = ${state}"
     state
 
 state (f: fn Unit -> a can Use s) (initial: s) {Copy s}: a =
@@ -22,13 +22,6 @@ main () =
     use_state 20 ~> state 2
 
 // args: --delete-binary --no-color
-// expected exit status: 1
-// expected stderr:
-// examples/codegen/effects/state.an:9:27
-//  8 |     state = get () : I32
-//  9 |     print "Ending state = ${state}"	// error: Expected the end of this block but found `${`
-//    |                           ^^
-// 10 |     state
-// 
-// Found 1 error and 0 warnings
-
+// expected stdout:
+// Ending state = 11
+// Ending state = 22

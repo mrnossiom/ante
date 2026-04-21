@@ -248,6 +248,7 @@ pub enum Expr {
     Return(Return),
     Assignment(Assignment),
     Extern(Extern),
+    InterpolatedString(InterpolatedString),
 }
 
 impl ErrorDefault for Expr {
@@ -312,6 +313,16 @@ pub struct Import {
 pub struct SequenceItem {
     pub comments: Vec<String>,
     pub expr: ExprId,
+}
+
+/// An interpolated string literal like `"foo ${bar} baz"`.
+/// `fragments` and `exprs` are interspersed such that:
+/// - The string always starts and ends with a (possibly empty) fragment
+/// - Each expression is between two fragments
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]
+pub struct InterpolatedString {
+    pub fragments: Vec<String>,
+    pub exprs: Vec<ExprId>,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Clone)]

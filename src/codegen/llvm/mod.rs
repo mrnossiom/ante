@@ -34,9 +34,8 @@ pub fn initialize_native_target() {
 pub fn codegen_llvm(compiler: &Db, show_time: bool) -> Option<CodegenLlvmResult> {
     // Monomorphize everything - ideally we could only monomorphize some items so that the
     // `CodegenLlvmResult` later can be split up and combined but for now it is whole program only.
-    let mir = crate::timings::time_phase("Monomorphization", show_time, || {
-        mir::monomorphization::monomorphize(compiler)
-    });
+    let mir =
+        crate::timings::time_phase("Monomorphization", show_time, || mir::monomorphization::monomorphize(compiler));
     crate::timings::time_phase("LLVM codegen", show_time, || codegen_llvm_for_mir(&mir))
 }
 

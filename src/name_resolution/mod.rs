@@ -595,6 +595,9 @@ impl<'local, 'inner> Resolver<'local, 'inner> {
             },
             Expr::Error => (),
             Expr::Extern(_) => (),
+            Expr::InterpolatedString(_) => {
+                unreachable!("InterpolatedString should be desugared before name resolution")
+            },
         }
     }
 

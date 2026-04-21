@@ -14,7 +14,7 @@ use crate::{
     type_inference::{
         Locateable, TypeChecker,
         errors::TypeErrorKind,
-        get_type::try_get_partial_type,
+        get_type::get_partial_type,
         types::{self, FunctionType, ParameterType, Type, TypeBindings},
     },
 };
@@ -39,13 +39,9 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
     pub(super) fn check_definition(&mut self, definition: &Definition, expected_effect: &Type) {
         let next_id = &mut self.next_type_variable_id.get();
         let expected_type =
-            try_get_partial_type(definition, self.current_context(), &self.current_resolve(), self.compiler, next_id);
+            get_partial_type(definition, self.current_context(), &self.current_resolve(), self.compiler, next_id);
+
         self.next_type_variable_id.set(*next_id);
-        let expected_type = match expected_type {
-            // Ignore a possible `forall` here, we don't support polymorphic recursion
-            Some(typ) => typ.ignore_forall().clone(),
-            None => self.next_type_variable(),
-        };
 
         self.check_pattern(definition.pattern, &expected_type, expected_effect);
 

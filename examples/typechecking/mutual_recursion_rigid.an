@@ -19,13 +19,13 @@ trait T2 a with trait2: fn a -> Unit
 
 ex2a (a: t) b {Copy t} =
     ex2b a b
-    trait1 a
+    T1.trait1 a
 
 ex2b (a: u) b {Copy u} =
     ex2c a b
-    trait2 a
+    T2.trait2 a
 
-ex2c (a: v) b =
+ex2c (a: v) b {Copy v} =
     ex2a a b
 
 // args: -e ast-t --no-color
@@ -45,38 +45,27 @@ ex2c (a: v) b =
 // type T2 a [env] =
 //     trait2: fn a [[env]] -> Unit
 // 
-// (ex2a: fn t (error) -> _ pure) ((a: (error))) (b: (error)) {(_: (error))} =
-//     (ex2b: fn t (error) {Copy t} -> _ pure) (a: (error)) (b: (error)) {(error)}
-//     (trait1: (error)) (a: (error))
+// (ex2a: fn t _ {Copy t} -> Unit pure) ((a: t)) (b: _) {(_: Copy t)} =
+//     (ex2b: fn t _ {Copy t} -> Unit pure) (a: t) (b: _) {(_: Copy t)}
+//     (T1.trait1: fn t {T1 t} -> Unit pure) (a: t) {(error)}
 // 
-// (ex2b: fn u (error) {Copy u} -> _ pure) ((a: u)) (b: (error)) {(_: Copy u)} =
-//     (ex2c: fn u (error) -> _ pure) (a: u) (b: (error))
-//     (trait2: (error)) (a: u)
+// (ex2b: fn u _ {Copy u} -> Unit pure) ((a: u)) (b: _) {(_: Copy u)} =
+//     (ex2c: fn u _ {Copy u} -> Unit pure) (a: u) (b: _) {(_: Copy u)}
+//     (T2.trait2: fn u {T2 u} -> Unit pure) (a: u) {(error)}
 // 
-// (ex2c: fn v (error) -> _ pure) ((a: v)) (b: (error)) =
-//     (ex2a: fn v (error) -> _ pure) (a: v) (b: (error))
+// (ex2c: fn v _ {Copy v} -> Unit pure) ((a: v)) (b: _) {(_: Copy v)} =
+//     (ex2a: fn v _ {Copy v} -> Unit pure) (a: v) (b: _) {(_: Copy v)}
 
 // expected stderr:
-// examples/typechecking/mutual_recursion_rigid.an:20:1
-// 20 | ex2a (a: t) b {Copy t} =	// error: Expected 2 arguments but found 3
-//    | ^^^^
-// 21 |     ex2b a b
-// 
-// examples/typechecking/mutual_recursion_rigid.an:21:5
-// 20 | ex2a (a: t) b {Copy t} =
-// 21 |     ex2b a b	// error: No implicit found for type Copy t required by parameter 3 of ex2b
-//    |     ^^^^
-// 22 |     trait1 a
-// 
 // examples/typechecking/mutual_recursion_rigid.an:22:5
 // 21 |     ex2b a b
-// 22 |     trait1 a	// error: `trait1` not found in scope
-//    |     ^^^^^^
+// 22 |     T1.trait1 a	// error: No implicit found for type T1 t required by parameter 2 of trait1
+//    |     ^^^^^^^^^
 // 
 // examples/typechecking/mutual_recursion_rigid.an:26:5
 // 25 |     ex2c a b
-// 26 |     trait2 a	// error: `trait2` not found in scope
-//    |     ^^^^^^
+// 26 |     T2.trait2 a	// error: No implicit found for type T2 u required by parameter 2 of trait2
+//    |     ^^^^^^^^^
 // 
-// Found 4 errors and 0 warnings
+// Found 2 errors and 0 warnings
 

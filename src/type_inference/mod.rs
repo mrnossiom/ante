@@ -227,10 +227,10 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                     let next_id = &mut this.next_type_variable_id.get();
 
                     let typ =
-                        get_type::try_get_partial_type(definition, context.as_ref(), resolution, compiler, next_id);
+                        get_type::get_partial_type(definition, context.as_ref(), resolution, compiler, next_id);
 
                     this.next_type_variable_id.set(*next_id);
-                    typ.unwrap_or_else(|| this.next_type_variable())
+                    typ
                 } else {
                     this.next_type_variable()
                 };

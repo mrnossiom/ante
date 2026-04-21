@@ -21,6 +21,10 @@ does_use x =
     y = get ()
     set (y + x)
 
+// Ensure a function annotated `pure` errors if it uses unhandled effects
+pure_fn () pure =
+    log "foo"
+
 // args: -e ast-t --no-color
 // expected exit status: 1
 // expected stdout:

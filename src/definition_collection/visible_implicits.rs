@@ -10,7 +10,7 @@ use crate::{
         ids::{TopLevelId, TopLevelName},
     },
     type_inference::{
-        get_type::try_get_partial_type,
+        get_type::get_partial_type,
         types::{PrimitiveType, Type},
     },
 };
@@ -105,32 +105,29 @@ pub fn visible_implicits_impl(context: &VisibleImplicits, db: &DbHandle) -> Arc<
         }
 
         let resolution = Resolve(top_level_name.top_level_item).get(db);
-
-        let typ = try_get_partial_type(definition, &item_context, &resolution, db, &mut 0);
+        let typ = get_partial_type(definition, &item_context, &resolution, db, &mut 0);
         let mut inserted = false;
 
-        if let Some(typ) = typ {
-            if let Some((trait_id, arg_key)) = get_trait_id_and_first_argument(&typ, true) {
-                // Fast path: trait and argument types are known
-                let impls = implicits.known_trait_to_impls.entry(trait_id).or_default();
+        if let Some((trait_id, arg_key)) = get_trait_id_and_first_argument(&typ, true) {
+            // Fast path: trait and argument types are known
+            let impls = implicits.known_trait_to_impls.entry(trait_id).or_default();
 
-                match arg_key {
-                    // If this implicit is a function, register it as a candidate for both functions
-                    // and for its return type
-                    KeyKind::Function(return_key) => {
-                        impls.type_to_impls.entry(TypeKey::Function).or_default().push((name.clone(), *top_level_name));
-                        impls.type_to_impls.entry(return_key).or_default().push((name.clone(), *top_level_name));
-                    },
-                    KeyKind::Key(key) => {
-                        impls.type_to_impls.entry(key).or_default().push((name.clone(), *top_level_name));
-                    },
-                    KeyKind::GenericOrUnknown => {
-                        impls.generic_type_impls.push((name.clone(), *top_level_name));
-                    },
-                }
-
-                inserted = true;
+            match arg_key {
+                // If this implicit is a function, register it as a candidate for both functions
+                // and for its return type
+                KeyKind::Function(return_key) => {
+                    impls.type_to_impls.entry(TypeKey::Function).or_default().push((name.clone(), *top_level_name));
+                    impls.type_to_impls.entry(return_key).or_default().push((name.clone(), *top_level_name));
+                },
+                KeyKind::Key(key) => {
+                    impls.type_to_impls.entry(key).or_default().push((name.clone(), *top_level_name));
+                },
+                KeyKind::GenericOrUnknown => {
+                    impls.generic_type_impls.push((name.clone(), *top_level_name));
+                },
             }
+
+            inserted = true;
         }
 
         if !inserted {

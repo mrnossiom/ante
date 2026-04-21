@@ -1,13 +1,13 @@
 effect Fail with
-    fail: Unit -> a
+    fail: fn Unit -> a
 
-try (f: Unit -> a can Fail) : Maybe a =
-    handle f ()
-    | return a -> Some a
+try (f: fn Unit -> a can Fail): Maybe a =
+    handle Some (f ())
     | fail () -> None
 
-try_or (default: a) (f: Unit -> a can Fail) : a =
-    try f else default
+try_or (default: a) (f: fn Unit -> a can Fail): a =
+    handle f ()
+    | fail () -> default
 
 assert (cond: Bool) : Unit can Fail =
     if not cond then fail ()
@@ -24,7 +24,6 @@ assert (cond: Bool) : Unit can Fail =
 ///     input = get_input ()
 ///     parse input
 /// ```
-retry_until_success (f: Unit -> a can Fail) : a =
+retry_until_success (f: fn Unit -> a can Fail) : a =
     handle f ()
-    | return a -> a
     | fail () -> retry_until_success f

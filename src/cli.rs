@@ -28,6 +28,10 @@ pub struct Cli {
     #[arg(long, short, group = "compile_mode")]
     pub build: bool,
 
+    /// Build with suggested optimizations
+    #[arg(long, short, group = "compile_mode")]
+    pub release: bool,
+
     /// Tells the compiler to create something other than an executable
     #[arg(long, short, group = "compile_mode")]
     pub emit: Option<EmitTarget>,
@@ -92,6 +96,39 @@ pub enum EmitTarget {
 pub enum Backend {
     Cranelift,
     Llvm,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum OptLevel {
+    O0,
+    O1,
+    O2,
+    O3,
+    Os,
+    Oz,
+}
+
+impl OptLevel {
+    pub fn as_passes_string(self) -> &'static str {
+        match self {
+            OptLevel::O0 => "default<O0>",
+            OptLevel::O1 => "default<O1>",
+            OptLevel::O2 => "default<O2>",
+            OptLevel::O3 => "default<O3>",
+            OptLevel::Os => "default<Os>",
+            OptLevel::Oz => "default<Oz>",
+        }
+    }
+
+    pub fn inkwell(self) -> inkwell::OptimizationLevel {
+        use inkwell::OptimizationLevel;
+        match self {
+            OptLevel::O0 => OptimizationLevel::None,
+            OptLevel::O1 => OptimizationLevel::Less,
+            OptLevel::O2 | OptLevel::Os | OptLevel::Oz => OptimizationLevel::Default,
+            OptLevel::O3 => OptimizationLevel::Aggressive,
+        }
+    }
 }
 
 fn validate_opt_argument(arg: &str) -> Result<char, &'static str> {

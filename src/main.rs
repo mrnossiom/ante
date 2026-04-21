@@ -37,7 +37,7 @@ use std::{
 };
 
 use crate::{
-    cli::EmitTarget,
+    cli::{EmitTarget, OptLevel},
     codegen::llvm::{CodegenLlvmResult, codegen_llvm},
     diagnostics::{DiagnosticKind, collect_all_diagnostics},
     files::{make_compiler, write_metadata},
@@ -89,6 +89,8 @@ fn compile(args: Cli) {
         print_phase_timings(&mut compiler);
     }
 
+    let opt_level = optimization_level(&args);
+
     let diagnostics = match args.emit {
         _ if args.check => time_phase("Diagnostics", args.show_time, || collect_all_diagnostics(&mut compiler)),
         Some(EmitTarget::Tokens) => {
@@ -100,8 +102,8 @@ fn compile(args: Cli) {
         Some(EmitTarget::AstT) => display_type_checking(&mut compiler, true, args.emit_all),
         Some(EmitTarget::Mir) => display_mir(&mut compiler, args.emit_all),
         Some(EmitTarget::MirMono) => display_mir_mono(&mut compiler),
-        Some(EmitTarget::Ir) => llvm_codegen_separate(&mut compiler, true, args.show_time).2,
-        None => llvm_codegen_all(&mut compiler, &args.files, !args.build, args.delete_binary, args.show_time),
+        Some(EmitTarget::Ir) => llvm_codegen_separate(&mut compiler, true, args.show_time, opt_level).2,
+        None => llvm_codegen_all(&mut compiler, &args.files, !args.build, args.delete_binary, args.show_time, opt_level),
     };
 
     let (error_count, _) = classify_diagnostics(&diagnostics);
@@ -159,6 +161,20 @@ fn print_phase_timings(compiler: &mut Db) {
             incremental::TypeCheck(*id).get(&*compiler);
         }
     });
+}
+
+/// Translate the CLI optimization flags into a single [`OptLevel`]. Explicit `-O` wins when
+/// the user provided a non-default value; otherwise `--release` implies O2.
+fn optimization_level(args: &Cli) -> OptLevel {
+    match args.opt_level {
+        '1' => OptLevel::O1,
+        '2' => OptLevel::O2,
+        '3' => OptLevel::O3,
+        's' => OptLevel::Os,
+        'z' => OptLevel::Oz,
+        _ if args.release => OptLevel::O2,
+        _ => OptLevel::O0,
+    }
 }
 
 /// Returns a pair of (error count, warning count)
@@ -319,7 +335,7 @@ fn display_mir_mono(compiler: &mut Db) -> BTreeSet<Diagnostic> {
 /// Codegen each item as a separate llvm module
 /// Returns (module strings, true if there are any errors, diagnostics)
 fn llvm_codegen_separate(
-    compiler: &mut Db, display_ir: bool, show_time: bool,
+    compiler: &mut Db, display_ir: bool, show_time: bool, opt_level: OptLevel,
 ) -> (Vec<Arc<Vec<u8>>>, bool, BTreeSet<Diagnostic>) {
     let diagnostics = time_phase("Diagnostics", show_time, || collect_all_diagnostics(compiler));
     let (errors, _) = classify_diagnostics(&diagnostics);
@@ -327,7 +343,7 @@ fn llvm_codegen_separate(
         return (Vec::new(), true, diagnostics);
     }
 
-    let modules = if let Some(result) = codegen_llvm(compiler, show_time) {
+    let modules = if let Some(result) = codegen_llvm(compiler, show_time, opt_level) {
         if display_ir {
             display_llvm_bitcode(&result, "program");
         }
@@ -350,9 +366,9 @@ fn display_llvm_bitcode(result: &CodegenLlvmResult, module_name: &str) {
 
 /// Codegen everything, linking together each separate llvm module
 fn llvm_codegen_all(
-    compiler: &mut Db, files: &[PathBuf], run: bool, delete_binary: bool, show_time: bool,
+    compiler: &mut Db, files: &[PathBuf], run: bool, delete_binary: bool, show_time: bool, opt_level: OptLevel,
 ) -> BTreeSet<Diagnostic> {
-    let (mut modules, has_errors, diagnostics) = llvm_codegen_separate(compiler, false, show_time);
+    let (mut modules, has_errors, diagnostics) = llvm_codegen_separate(compiler, false, show_time, opt_level);
     if has_errors {
         return diagnostics;
     }
@@ -365,7 +381,7 @@ fn llvm_codegen_all(
     let module_name = files.first().map_or_else(|| "a.out".into(), |file| file.with_extension(""));
     let module_name = module_name.to_string_lossy();
 
-    let link_succeeded = codegen::llvm::link(modules, &module_name, show_time);
+    let link_succeeded = codegen::llvm::link(modules, &module_name, show_time, opt_level);
     if !link_succeeded {
         return diagnostics;
     }

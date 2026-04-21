@@ -6,6 +6,7 @@ use inkwell::{
     builder::Builder,
     memory_buffer::MemoryBuffer,
     module::Module,
+    passes::PassBuilderOptions,
     targets::{CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetMachine},
     types::{BasicType, BasicTypeEnum, IntType},
     values::{AggregateValue, AnyValue, BasicValue, BasicValueEnum, FunctionValue, GlobalValue, PhiValue},
@@ -14,6 +15,7 @@ use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    cli::OptLevel,
     incremental::Db,
     iterator_extensions::mapvec,
     lexer::token::{FloatKind, IntegerKind},
@@ -31,16 +33,16 @@ pub fn initialize_native_target() {
     Target::initialize_native(&config).unwrap();
 }
 
-pub fn codegen_llvm(compiler: &Db, show_time: bool) -> Option<CodegenLlvmResult> {
+pub fn codegen_llvm(compiler: &Db, show_time: bool, opt_level: OptLevel) -> Option<CodegenLlvmResult> {
     // Monomorphize everything - ideally we could only monomorphize some items so that the
     // `CodegenLlvmResult` later can be split up and combined but for now it is whole program only.
     let mir =
         crate::timings::time_phase("Monomorphization", show_time, || mir::monomorphization::monomorphize(compiler));
-    crate::timings::time_phase("LLVM codegen", show_time, || codegen_llvm_for_mir(&mir))
+    crate::timings::time_phase("LLVM codegen", show_time, || codegen_llvm_for_mir(&mir, opt_level))
 }
 
 /// LLVM IR generation on an already-monomorphized `Mir`
-pub(crate) fn codegen_llvm_for_mir(mir: &mir::Mir) -> Option<CodegenLlvmResult> {
+pub(crate) fn codegen_llvm_for_mir(mir: &mir::Mir, opt_level: OptLevel) -> Option<CodegenLlvmResult> {
     let name = &mir.definitions.iter().next().map_or("_", |(_, function)| &function.name);
 
     initialize_native_target();
@@ -58,6 +60,14 @@ pub(crate) fn codegen_llvm_for_mir(mir: &mir::Mir) -> Option<CodegenLlvmResult> 
         eprintln!("llvm module failed to verify: {error}");
     }
 
+    if opt_level != OptLevel::O0 {
+        let target_machine = native_target_machine(opt_level);
+        module
+            .module
+            .run_passes(opt_level.as_passes_string(), &target_machine, PassBuilderOptions::create())
+            .expect("LLVM pass pipeline failed");
+    }
+
     // TODO: This is inefficient
     let bitcode = module.module.write_bitcode_to_memory();
     let bitcode = bitcode.as_slice().to_vec();
@@ -71,7 +81,7 @@ pub(crate) fn codegen_llvm_for_mir(mir: &mir::Mir) -> Option<CodegenLlvmResult> 
 
 /// Link the given list of llvm bitcode modules into an executable.
 /// Returns `true` if linking succeeded, `false` otherwise.
-pub fn link(modules: Vec<Arc<Vec<u8>>>, binary_name: &str, show_time: bool) -> bool {
+pub fn link(modules: Vec<Arc<Vec<u8>>>, binary_name: &str, show_time: bool, opt_level: OptLevel) -> bool {
     let llvm = inkwell::context::Context::create();
     let module = llvm.create_module(binary_name);
 
@@ -88,7 +98,7 @@ pub fn link(modules: Vec<Arc<Vec<u8>>>, binary_name: &str, show_time: bool) -> b
 
     // generate the bitcode to a .bc file
     let path = std::path::Path::new(binary_name).with_extension("o");
-    let target_machine = native_target_machine();
+    let target_machine = native_target_machine(opt_level);
 
     // Object emission runs the LLVM backend (IR -> machine code), typically the most
     // expensive LLVM step, so it gets its own phase bucket.
@@ -102,11 +112,11 @@ pub fn link(modules: Vec<Arc<Vec<u8>>>, binary_name: &str, show_time: bool) -> b
     })
 }
 
-fn native_target_machine() -> TargetMachine {
+fn native_target_machine(opt_level: OptLevel) -> TargetMachine {
     let triple = TargetMachine::get_default_triple();
     let target = Target::from_triple(&triple).unwrap();
     target
-        .create_target_machine(&triple, "", "", inkwell::OptimizationLevel::None, RelocMode::PIC, CodeModel::Default)
+        .create_target_machine(&triple, "", "", opt_level.inkwell(), RelocMode::PIC, CodeModel::Default)
         .unwrap()
 }
 
@@ -419,7 +429,8 @@ impl<'ctx> ModuleContext<'ctx> {
             IntegerKind::I32 | IntegerKind::U32 => self.llvm.i32_type(),
             IntegerKind::I64 | IntegerKind::U64 => self.llvm.i64_type(),
             IntegerKind::Isz | IntegerKind::Usz => {
-                let machine = native_target_machine();
+                // Pointer size is a property of the target triple, not the opt level, so O0 is fine here.
+                let machine = native_target_machine(OptLevel::O0);
                 let target_data = machine.get_target_data();
                 self.llvm.ptr_sized_int_type(&target_data, None)
             },

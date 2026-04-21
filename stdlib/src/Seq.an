@@ -1,0 +1,120 @@
+import Std.C.malloc, realloc, memcpy, free
+
+export empty, push, pop, remove_last, get, get_copied, iter, copy_seq, print_seq
+
+type Seq t =
+    len: U32
+    data: Ptr (Data t)
+
+type Data t =
+    len: U32
+    cap: U32
+    rc: U32
+    elements: t  // Multiple elements, stored inline
+    // element2...
+    // element3...
+
+Seq.empty (): Seq t =
+    Seq 0 (null ())
+
+Seq.push (seq: ref Seq t) (elem: t): Seq t =
+    if seq.data == null () then
+        data_ptr = malloc (size_of (MkType: Type (Data t)))
+        ptr_store data_ptr (Data 1 1 1 elem)
+        return Seq 1 data_ptr
+
+    data_ref = ptr_to_mut seq.data
+
+    // fast case: just insert the new element
+    if seq.len < data_ref.cap and (seq.len == data_ref.len or data_ref.rc == 1) then
+        new_len = seq.len + 1
+        data_ref.len := new_len
+        array_insert seq.data.elements (Usz seq.len) elem
+        return Seq new_len seq.data
+    
+    // seq.len >= data.cap (no room) or
+    // seq.len != data_ref.len (another seq has pushed to the same shared data)
+    // either way we need to allocate a new buffer
+    new_cap = seq.len * 2
+
+    size = size_of (MkType: Type (Data t)) + (Usz new_cap - 1) * size_of (MkType: Type t)
+    buffer = if data_ref.rc == 1 then
+        // owned, we can realloc
+        realloc seq.data size
+    else
+        // shared case, need to malloc
+        // TODO: This should require a Copy/Clone constraint
+        memcpy (malloc size) seq.data size
+
+    data_ref.rc -= 1
+
+    buffer_ref = ptr_to_mut buffer
+    buffer_ref.len := seq.len + 1
+    buffer_ref.cap := new_cap
+    buffer_ref.rc := 1
+
+    array_insert buffer.elements (Usz seq.len) elem
+    Seq (seq.len + 1) buffer
+
+/// Return a new `Seq t` without the last element.
+/// Returns the popped element if this seq was non-empty.
+Seq.pop (var seq: Seq t) {Copy t}: (Seq t, Maybe t) =
+    if seq.len != 0 then
+        elem = seq.get_copied seq.len
+        seq.len -= 1
+        seq, elem
+    else
+        seq, None
+
+/// Same as `pop` but does not return the last element, and thus
+/// does not require a `Copy` constraint
+Seq.remove_last (var seq: Seq t): Seq t =
+    if seq.len != 0 then
+        seq.len -= 1
+    seq
+
+Seq.get_copied (seq: ref Seq t) (index: U32) {Copy t}: Maybe t =
+    match seq.get index
+    | Some x -> Some x.*
+    | None -> None
+
+Seq.get (seq: ref Seq t) (index: U32): Maybe (ref t) =
+    if index < seq.len then
+        elem = offset seq.data.elements (Usz index)
+        Some (ptr_to_mut elem)
+    else None
+
+Seq.iter (seq: ref Seq t) (f: fn (ref t) [env] -> Unit): Unit =
+    for i in 0 .. seq.len do
+        elem = offset seq.data.elements (Usz i)
+        f (ptr_to_mut elem)
+
+Seq.iter_mut (seq: mut Seq t) (f: fn (mut t) [env] -> Unit): Unit =
+    for i in 0 .. seq.len do
+        elem = offset seq.data.elements (Usz i)
+        f (ptr_to_mut elem)
+
+// Paper cut #2: Copy t
+impl print_seq {p: Print t} {Copy t}: Print (Seq t) with
+    print (seq: Seq t): Unit =
+        print "["
+        for i in 0 .. seq.len do
+            if i != 0 then print ", "
+            elem = offset seq.data.elements (Usz i)
+            print (ptr_to_mut elem).*
+        print "]"
+
+impl copy_seq: Copy (Seq t) with
+    // bug: multiple matching implicits if we just return `seq`
+    (.*) (seq: ref (Seq t)) =
+        ptr_store seq.data.rc (deref_ptr seq.data.rc + 1)
+        deref seq
+
+impl drop_seq {Drop t}: Drop (Seq t) with
+    drop (seq: mut Seq t) =
+        rc = deref_ptr seq.data.rc
+        if rc != 1 then
+            ptr_store seq.data.rc (rc - 1)
+        else
+            seq.iter_mut Drop.drop
+            free seq.data

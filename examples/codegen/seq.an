@@ -1,20 +1,20 @@
-import Std.PVec
-import Std.PVec.copy_pvec, print_pvec
+import Std.Seq
+import Std.Seq.copy_seq, print_seq
 
 main () =
-    var vec = PVec.empty ()
-    vec := vec.push 33
-    vec := vec.push 44
+    var seq = Seq.empty ()
+    seq := seq.push 33
+    seq := seq.push 44
 
     // Copy calls aren't inserted automatically yet...
-    snapshot1 = (ref vec).*
+    snapshot1 = (ref seq).*
 
-    vec := vec.push 55
-    println vec
+    seq := seq.push 55
+    println seq
     println snapshot1
 
     println (snapshot1.push 100)
-    println vec
+    println seq
     0
 
 // args: --delete-binary --no-color

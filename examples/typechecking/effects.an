@@ -25,6 +25,11 @@ does_use x =
 pure_fn () pure =
     log "foo"
 
+// main should always be pure and handle all effects
+// TODO: When primitive IO effects are added, those can be unhandled in main
+main () =
+    log "foo"
+
 // args: -e ast-t --no-color
 // expected exit status: 1
 // expected stdout:
@@ -47,6 +52,12 @@ pure_fn () pure =
 // (does_use: fn _ -> Unit can (Use _)) (x: _) =
 //     (y: _) = (get: fn Unit -> _ can (Use _)) ()
 //     (set: fn _ -> Unit can (Use _)) ((+: fn _ _ {Add _} -> _ pure) (y: _) (x: _) {(error)})
+// 
+// (pure_fn: fn Unit -> _ pure) () =
+//     (log: fn String -> Unit can Log) "foo"
+// 
+// (main: fn Unit -> Unit can Log) () =
+//     (log: fn String -> Unit can Log) "foo"
 
 // expected stderr:
 // examples/typechecking/effects.an:22:12
@@ -55,5 +66,17 @@ pure_fn () pure =
 // 22 |     set (y + x)
 //    |            ^
 // 
-// Found 1 error and 0 warnings
+// examples/typechecking/effects.an:26:5
+// 25 | pure_fn () pure =
+// 26 |     log "foo"	// error: Expected fn _ [_] -> _ pure but found fn String -> Unit can Log
+//    |     ^^^
+// 
+// examples/typechecking/effects.an:30:1
+// 29 | // TODO: When primitive IO effects are added, those can be unhandled in main
+//    | // error: main here has type fn Unit -> Unit can Log but it should always have type fn Unit -> Unit pure
+// 30 | main () =
+//    | ^^^^
+// 31 |     log "foo"
+// 
+// Found 3 errors and 0 warnings
 

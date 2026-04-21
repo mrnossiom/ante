@@ -10,7 +10,10 @@ use crate::{
     },
     iterator_extensions::mapvec,
     lexer::token::IntegerKind,
-    name_resolution::{Origin, ResolutionResult, namespace::SourceFileId},
+    name_resolution::{
+        Origin, ResolutionResult,
+        namespace::{CrateId, SourceFileId},
+    },
     parser::{
         cst::{self, Name, ReferenceKind, TopLevelItem, TopLevelItemKind},
         desugar_context::DesugarContext,
@@ -226,8 +229,7 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 let typ = if let TopLevelItemKind::Definition(definition) = &item.kind {
                     let next_id = &mut this.next_type_variable_id.get();
 
-                    let typ =
-                        get_type::get_partial_type(definition, context.as_ref(), resolution, compiler, next_id);
+                    let typ = get_type::get_partial_type(definition, context.as_ref(), resolution, compiler, next_id);
 
                     this.next_type_variable_id.set(*next_id);
                     typ
@@ -814,6 +816,30 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             }
         }
         substitutions
+    }
+
+    /// If the current item is the main function, ensure it has the expected signature `fn Unit -> Unit pure`
+    fn check_for_main(&mut self, pattern: PatternId, typ: &Type) {
+        let Some(item) = self.current_item else { return };
+
+        if item.source_file.crate_id != CrateId::LOCAL {
+            return;
+        }
+
+        let context = self.current_context();
+        let cst::Pattern::Variable(name) = context[pattern] else { return };
+        if context[name].as_str() != "main" {
+            return;
+        }
+
+        let expected = Type::Function(Arc::new(FunctionType {
+            parameters: vec![ParameterType::explicit(Type::UNIT)],
+            environment: Type::NO_CLOSURE_ENV,
+            return_type: Type::UNIT,
+            effects: Type::no_effects(),
+        }));
+
+        self.unify(typ, &expected, TypeErrorKind::MainFn, pattern);
     }
 }
 

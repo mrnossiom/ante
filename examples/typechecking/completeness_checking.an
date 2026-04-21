@@ -26,10 +26,12 @@ main () =
     | (1, 2) -> 1
     | (_, _, _, _) -> 3
 
+    ()
+
 // args: -e ast-t --no-color
 // expected exit status: 1
 // expected stdout:
-// (main: fn Unit -> I32 pure) () =
+// (main: fn Unit -> Unit pure) () =
 //     (match_var27: (error)) = (Maybe.None: Maybe _)
 //     switch (match_var27: Maybe _)
 //     | 0 -> 1
@@ -80,6 +82,7 @@ main () =
 //     | 0, (match_var43: (_, _), _), (match_var44: I32, (I32, I32)) -> switch (match_var43: (_, _), _)
 //         | 0, (match_var45: _, _), (match_var46: _) -> switch (match_var44: I32, (I32, I32))
 //             | 0, (match_var47: I32), (match_var48: I32, I32) -> 1
+//     ()
 
 // expected stderr:
 // examples/typechecking/completeness_checking.an:2:11

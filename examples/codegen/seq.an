@@ -15,7 +15,6 @@ main () =
 
     println (snapshot1.push 100)
     println seq
-    0
 
 // args: --delete-binary --no-color
 // expected stdout:

@@ -7,7 +7,6 @@ use_state (y: I32) =
     set (x + y)
     state = get () : I32
     println "Ending state = ${state}"
-    state
 
 state (f: fn Unit -> a can Use s) (initial: s) {Copy s}: a =
     var state = initial

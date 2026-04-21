@@ -39,6 +39,8 @@ pub enum TypeErrorKind {
     ClosureEnv,
     /// A function call argument with the given 0-based index
     CallArgument { index: usize },
+    /// `main` function defined with a type other than `fn Unit -> Unit pure`
+    MainFn,
 }
 
 impl TypeErrorKind {
@@ -87,6 +89,9 @@ impl TypeErrorKind {
             },
             TypeErrorKind::CallArgument { index } => {
                 format!("Argument {} has type {actual} but {expected} was expected", index + 1)
+            },
+            TypeErrorKind::MainFn => {
+                format!("{} here has type {actual} but it should always have type {expected}", "main".purple())
             },
         }
     }

@@ -9,7 +9,7 @@ main () =
     | None -> 0
 
     show "foo\0"
-    0
+    ()
 
 // args: --delete-binary --no-color
 // expected stdout: foo

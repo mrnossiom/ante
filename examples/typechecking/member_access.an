@@ -15,6 +15,7 @@ bar = Bar c"3"
 main () =
     foo_and_bar foobar foobar
     foo_and_bar foo bar
+    ()
 
 // args: -e ast-t --no-color
 // expected exit status: 1
@@ -41,9 +42,10 @@ main () =
 // 
 // (bar: Bar) = (Bar: fn Char -> Bar pure) c"3"
 // 
-// (main: fn Unit -> String pure) () =
+// (main: fn Unit -> Unit pure) () =
 //     (foo_and_bar: fn FooBar FooBar -> String pure) (foobar: FooBar) (foobar: FooBar)
 //     (foo_and_bar: fn Foo Bar -> String pure) (foo: Foo) (bar: Bar)
+//     ()
 
 // expected stderr:
 // examples/typechecking/member_access.an:8:6

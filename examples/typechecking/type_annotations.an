@@ -15,6 +15,7 @@ main () =
 
     exit2 "test"
     puts2
+    ()
 
 // args: -e ast-t --no-color
 // expected exit status: 1
@@ -30,11 +31,12 @@ main () =
 // (baz: fn Usz -> Ptr a pure) ((a: Usz)) : Ptr a =
 //     (transmute: fn Usz -> Ptr a pure) (a: Usz)
 // 
-// (main: fn Unit -> fn String -> I32 can _ pure) () =
+// (main: fn Unit -> Unit pure) () =
 //     (exit2: fn I32 -> Unit pure) = (exit: fn I32 -> Unit pure)
 //     (puts2: fn String -> I32 can _) = (puts: fn String -> I32 can _)
 //     (exit2: fn I32 -> Unit pure) "test"
 //     (puts2: fn String -> I32 can _)
+//     ()
 
 // expected stderr:
 // examples/typechecking/type_annotations.an:7:15

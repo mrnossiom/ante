@@ -79,6 +79,8 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         if definition.implicit {
             self.add_implicit(definition.pattern);
         }
+
+        self.check_for_main(definition.pattern, &expected_type);
     }
 
     /// Check an expression's type matches the expected type.

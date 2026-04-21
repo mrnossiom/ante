@@ -10,6 +10,7 @@ two2 = add one one
 main () =
     id 3
     id "four"
+    id ()
 
 id x = x
 
@@ -23,9 +24,10 @@ id x = x
 // 
 // (two2: fn (fn _ [_] -> _ can _) [(fn (fn _ [_] -> _ can _) _ -> _ can _), (fn (fn _ [_] -> _ can _) _ -> _ can _)] -> fn _ [(fn (fn _ [_] -> _ can _) _ -> _ can _), (fn (fn _ [_] -> _ can _) _ -> _ can _), (fn _ [_] -> _ can _)] -> _ can _ pure) = (add: fn (fn (fn _ [_] -> _ can _) _ -> _ can _) (fn (fn _ [_] -> _ can _) _ -> _ can _) -> fn (fn _ [_] -> _ can _) [(fn (fn _ [_] -> _ can _) _ -> _ can _), (fn (fn _ [_] -> _ can _) _ -> _ can _)] -> fn _ [(fn (fn _ [_] -> _ can _) _ -> _ can _), (fn (fn _ [_] -> _ can _) _ -> _ can _), (fn _ [_] -> _ can _)] -> _ can _ pure pure) (one: fn (fn _ [_] -> _ can _) _ -> _ can _) (one: fn (fn _ [_] -> _ can _) _ -> _ can _)
 // 
-// (main: fn Unit -> String pure) () =
+// (main: fn Unit -> Unit pure) () =
 //     (id: fn I32 -> I32 pure) 3
 //     (id: fn String -> String pure) "four"
+//     (id: fn Unit -> Unit pure) ()
 // 
 // (id: fn _ -> _ pure) (x: _) = (x: _)
 

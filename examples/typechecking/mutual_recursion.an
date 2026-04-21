@@ -8,7 +8,9 @@ is_even n =
 is_odd n =
     n == 1 or not is_even (n - 1)
 
-main () = is_even 4
+main () =
+    is_even 4
+    ()
 
 
 // Both of these definitions should have the `Print (int a)` constraint.
@@ -24,5 +26,7 @@ main () = is_even 4
 // (is_odd: fn I32 -> Bool pure) (n: I32) =
 //     if (==: fn I32 I32 {Eq I32} -> Bool pure) (n: I32) 1 {(eq_i32: Eq I32)} then true else (not: fn Bool {Not Bool} -> Bool pure) ((is_even: fn I32 -> Bool pure) ((-: fn I32 I32 {Sub I32} -> I32 pure) (n: I32) 1 {(sub_i32: Sub I32)})) {(not_bool: Not Bool)}
 // 
-// (main: fn Unit -> Bool pure) () = (is_even: fn I32 -> Bool pure) 4
+// (main: fn Unit -> Unit pure) () =
+//     (is_even: fn I32 -> Bool pure) 4
+//     ()
 

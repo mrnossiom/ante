@@ -13,6 +13,7 @@ handle_count f =
 
 main () =
     handle_count foo
+    ()
 
 // args: -e ast-t --no-color
 // expected stdout:
@@ -29,6 +30,7 @@ main () =
 //         0
 //     | (count: fn Unit -> Unit can Count) () -> fn () (resume: fn Unit [Ptr] -> I32 can _) -> (+: fn I32 I32 {Add I32} -> I32 pure) 1 ((resume: fn Unit [Ptr] -> I32 can _) ()) {(add_i32: Add I32)}
 // 
-// (main: fn Unit -> I32 pure) () =
+// (main: fn Unit -> Unit pure) () =
 //     (handle_count: fn (fn Unit -> Unit can Count) -> I32 pure) (foo: fn Unit -> Unit can Count)
+//     ()
 

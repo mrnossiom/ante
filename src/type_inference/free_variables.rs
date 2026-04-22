@@ -39,6 +39,14 @@ impl TypeChecker<'_, '_> {
             }
         }
     }
+
+    /// True if the given branch of a Handle expression references its `resume` variable.
+    pub(super) fn handler_branch_uses_resume(&self, resume_name: NameId, branch: ExprId) -> bool {
+        let cst::Expr::Lambda(lambda) = &self.current_extended_context()[branch] else { unreachable!() };
+        let mut context = FreeVars::default();
+        context.find_free_variables(lambda.body, self);
+        context.free_vars.contains(&resume_name)
+    }
 }
 
 #[derive(Default)]

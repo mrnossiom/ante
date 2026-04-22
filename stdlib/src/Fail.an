@@ -5,9 +5,13 @@ try (f: fn Unit -> a can Fail): Maybe a =
     handle Some (f ())
     | fail () -> None
 
-try_or (default: a) (f: fn Unit -> a can Fail): a =
+try_or (f: fn Unit -> a can Fail) (default: a): a =
     handle f ()
     | fail () -> default
+
+try_or_else (f: fn Unit -> a can Fail) (default: fn Unit [env] -> a): a =
+    handle f ()
+    | fail () -> default ()
 
 assert (cond: Bool) : Unit can Fail =
     if not cond then fail ()

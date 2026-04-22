@@ -1004,10 +1004,13 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 effects: expected_effect.clone(),
             }));
 
-            let options = LambdaOptions {
-                suppress_effect_closure: true,
-                repeated_context: Some((RepeatedContext::HandlerBranch, outer_names.clone())),
-            };
+            // Only allow moving variables into this branch if `resume` is never mentioned.
+            // This notably keeps handlers like `try_or` working.
+            let repeated_context = self
+                .handler_branch_uses_resume(pattern.resume_name, *branch)
+                .then(|| (RepeatedContext::HandlerBranch, outer_names.clone()));
+
+            let options = LambdaOptions { suppress_effect_closure: true, repeated_context };
 
             let branch_lambda = self.unwrap_lambda(*branch);
             self.expr_types.insert(*branch, handler_type.clone());

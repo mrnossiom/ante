@@ -231,7 +231,10 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         let actual = match self.path_origin(path) {
             Some(Origin::TopLevelDefinition(id)) => self.type_of_top_level_name(&id, path),
             Some(Origin::Local(name)) => {
-                let typ = self.name_types[&name].clone();
+                let typ = self.name_types.get(&name).cloned().unwrap_or_else(|| {
+                    panic!("No type for name `{}`", self.current_extended_context_mut()[name])
+                });
+
                 if !self.suppress_move {
                     let move_path = super::affine::MovePath::Variable(name);
                     self.check_use_of_move_path(&move_path, path);

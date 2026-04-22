@@ -1,6 +1,6 @@
 import Std.C.realloc
 
-export Vec, empty, is_empty, len, capacity, reserve, push, pop,
+export Vec, empty, is_empty, len, capacity, reserve, push, pop, get, get_unchecked,
     remove_index, remove_first, remove_indices, remove_all, swap_last,
     print_vec, print_helper, extract_vec, (.[)
 
@@ -46,6 +46,20 @@ Vec.pop (v: mut Vec t) : Maybe t =
     else
         v.len := v.len - 1
         Some (v.data.[v.len])
+
+/// Retrieves the element at the given index or returns None
+/// if the index is out of bounds
+Vec.get (v: imm Vec t) (i: Usz): Maybe (imm t) =
+    if i < v.len then
+        Some (v.get_unchecked i)
+    else
+        None
+
+/// An unsafe function to retrieve an element at the given index
+/// without checking if the index is inbounds
+Vec.get_unchecked (v: imm Vec t) (i: Usz): imm t =
+    ptr = offset v.data i
+    transmute ptr
 
 //remove the element at the given index and return it.
 //will error if the index is out of bounds.

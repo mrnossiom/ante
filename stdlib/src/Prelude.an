@@ -41,14 +41,16 @@ export String, from_parts, Maybe, None, Some, unwrap, Result, Ok, Error, (,),
 
 type String =
     data: Ptr Char
-    length: U32
     refcount: Ptr U32
+    length: U32
+    // Substrings store their offset into the original string for use when freeing them later
+    offset: U32
 
 // Construct a fresh, unaliased string from an owned pointer to characters and a length.
 String.from_parts (pointer: Ptr Char) (length: U32): String =
     rc: Ptr U32 = malloc 4
     ptr_store rc 1
-    String pointer length rc
+    String pointer rc length 0
 
 type Maybe t =
    | None
@@ -567,6 +569,10 @@ offset_bytes (ptr: Ptr t) (index: Usz): Ptr t =
     addr: Usz = transmute ptr
     transmute (addr + index)
 
+offset_negative (ptr: Ptr t) (index: Usz): Ptr t =
+    addr: Usz = transmute ptr
+    transmute (addr - index)
+
 // Dereference without a Copy constraint. This is unsafe to use directly
 deref (x: ref t): t =
     intrinsic "Deref" x
@@ -631,7 +637,7 @@ impl drop_string: Drop String with
         if s.refcount != null () then
             count = deref_ptr s.refcount
             if count == 1u32 then
-                free s.data
+                free (offset_negative s.data (Usz s.offset))
                 free s.refcount
             else
                 ptr_store s.refcount (count - 1)

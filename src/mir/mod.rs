@@ -730,8 +730,15 @@ impl Type {
         Type::Primitive(PrimitiveType::Float(kind))
     }
 
+    /// The type of a string: this needs to be updated whenever the repr of a string is changed in
+    /// the prelude.
     pub fn string() -> Type {
-        Type::Tuple(Arc::new(vec![Type::POINTER, Type::int(IntegerKind::U32), Type::POINTER]))
+        Type::Tuple(Arc::new(vec![
+            Type::POINTER,
+            Type::POINTER,
+            Type::int(IntegerKind::U32),
+            Type::int(IntegerKind::U32),
+        ]))
     }
 
     pub fn generic(index: u32) -> Type {

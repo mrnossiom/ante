@@ -1,0 +1,49 @@
+import Std.Vec
+import Std.C.malloc
+import Std.Stream.Emit, emit
+
+reverse (s: String): String =
+    if deref_ptr s.refcount == 1 then
+        // in-place reverse
+        len = s.length
+        for i in 0 .. Usz len / 2 do
+            opposite_i = Usz len - i - 1
+            c: Char = s.data.[i]
+            s.data.[i] := s.data.[opposite_i]
+            s.data.[opposite_i] := c
+        s
+    else
+        var buf = malloc (Usz s.length + 1)
+        for i in 0 .. Usz s.length do
+            buf.[i] := s.data.[Usz s.length - i - 1]
+        String.from_parts buf s.length
+
+/// Split a string at the given character. Emits substrings
+/// separated by the given character.
+///
+/// For example `split "foo bar  baz "` will emit all of:
+/// ["foo", "bar", "", "baz", ""]
+split (s: String) (c: Char): Unit can Emit String =
+    var subend = 0usz
+    var substart = 0usz
+    while U32 subend < s.length do
+        if s.data.[Usz subend] == c then
+            emit (substr s substart subend)
+            substart := subend + 1
+        subend += 1
+
+    emit (substr s substart subend)
+
+/// Returns a substring into the given string. The given
+/// `begin..end` range represents an end-exclusive byte range
+/// of the substring to create.
+///
+/// This function does not allocate - the resulting substring
+/// increments the reference count of the original string.
+substr (var s: String) (begin: Usz) (end: Usz): String =
+    if end > Usz s.length or begin >= Usz s.length then
+        return ""
+
+    buf = offset s.data begin
+    len = U32 end - U32 begin
+    String buf s.refcount len (s.offset + U32 begin)

@@ -564,6 +564,7 @@ impl<'ctx> ModuleContext<'ctx> {
                 let tuple = self.lookup_value(tuple).into_struct_value();
                 self.builder.build_extract_value(tuple, *index, "").unwrap()
             },
+            // String: { ptr data, ptr rc, u32 len, u32 offset }
             mir::Instruction::MakeString(string) => {
                 let string_data = self.llvm.const_string(string.as_bytes(), true);
                 // Need to create a unique name across modules. Llvm will auto-rename within
@@ -574,8 +575,9 @@ impl<'ctx> ModuleContext<'ctx> {
                 let c_string = global.as_pointer_value().into();
 
                 let length = self.llvm.i32_type().const_int(string.len() as u64, false).into();
+                let offset = self.llvm.i32_type().const_int(0, false).into();
                 let null_ptr = self.llvm.ptr_type(AddressSpace::default()).const_null().into();
-                self.llvm.const_struct(&[c_string, length, null_ptr], false).into()
+                self.llvm.const_struct(&[c_string, null_ptr, length, offset], false).into()
             },
             mir::Instruction::MakeTuple(fields) => self.make_tuple(fields),
             mir::Instruction::StackAlloc(value) => {

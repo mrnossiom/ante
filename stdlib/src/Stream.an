@@ -48,23 +48,9 @@ foldr (s: s) {Stream s a} (acc: b) (f: fn a b [env] -> b): b =
         rest = resume ()
         f value rest
 
-map2 (sa: sa) (sb: sb) {Stream sa a} {Stream sb b} (f: fn a b [env] -> c): Unit can Emit c =
-    var a_emitter () = Stream.stream sa
-    var b_emitter () = Stream.stream sb
-
-    handle a_emitter ()
-    | emit a ->
-        resume_a = resume
-        // TODO: This can't be right
-        handle Stream.stream sb
-        | emit b ->
-            emit (f a b)
-            resume_a ()
-            resume ()
-
 map2 (s1: s1) (s2: s2) {Stream s1 a} {Stream s2 b} (f: fn a b [env] -> c): Unit can Emit c =
-    var left  = None
-    var right = None
+    var left = Maybe.None
+    var right = Maybe.None
 
     try_emit () =
         match left, right
@@ -76,16 +62,16 @@ map2 (s1: s1) (s2: s2) {Stream s1 a} {Stream s2 b} (f: fn a b [env] -> c): Unit 
             resume_b ()
         | _ -> ()
 
-    handle s1 ()
+    handle Stream.stream s1
     | emit a ->
         left := Some (a, resume)
         try_emit ()
 
-    handle s2 ()
+    handle Stream.stream s2
     | emit b ->
         right := Some (b, resume)
         try_emit ()
 
 
-zip a b {s1} {s2} = map2 a b {s1} {s2} (,)
+zip a b {sa: Stream sa a} {sb: Stream sb b} = map2 a b {sa} {sb} (,)
 

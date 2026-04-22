@@ -70,6 +70,14 @@ impl MoveTracker {
         self.moved.insert(path, location);
     }
 
+    /// Clear any move record for `path` and its descendants. Called when `path` is being reassigned.
+    pub(super) fn clear_moves(&mut self, path: &MovePath) {
+        self.moved.remove(path);
+        self.moved.retain(|p, _| !p.is_descendant_of(path));
+        self.errored.remove(path);
+        self.errored.retain(|p| !p.is_descendant_of(path));
+    }
+
     /// Check if this path or any ancestor is already moved.
     /// Returns the location of the move if found.
     pub(super) fn is_moved(&self, path: &MovePath) -> Option<&Location> {

@@ -231,9 +231,9 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         let actual = match self.path_origin(path) {
             Some(Origin::TopLevelDefinition(id)) => self.type_of_top_level_name(&id, path),
             Some(Origin::Local(name)) => {
-                let typ = self.name_types.get(&name).cloned().unwrap_or_else(|| {
-                    panic!("No type for name `{}`", self.current_extended_context_mut()[name])
-                });
+                let typ = self.name_types.get(&name).cloned();
+                let typ =
+                    typ.unwrap_or_else(|| panic!("No type for name `{}`", self.current_extended_context_mut()[name]));
 
                 if !self.suppress_move {
                     let move_path = super::affine::MovePath::Variable(name);
@@ -1038,7 +1038,16 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
 
     fn check_assignment(&mut self, assignment: &cst::Assignment, expected: &Type, expected_effect: &Type, id: ExprId) {
         let lhs_type = self.next_type_variable();
-        self.check_expr(assignment.lhs, &lhs_type, expected_effect);
+
+        // Allow `x := v` to use `x` even if moved but `x += v` cannot since it reads `x`
+        let is_plain = assignment.op.is_none();
+        if is_plain {
+            let old_suppress = std::mem::replace(&mut self.suppress_move, true);
+            self.check_expr(assignment.lhs, &lhs_type, expected_effect);
+            self.suppress_move = old_suppress;
+        } else {
+            self.check_expr(assignment.lhs, &lhs_type, expected_effect);
+        }
 
         // If the LHS is a reference type (e.g. `p.x` where `p: mut Point` yields `mut I32`),
         // the RHS should match the inner (pointee) type rather than the reference wrapper.
@@ -1071,6 +1080,12 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         }
 
         self.check_expr(assignment.rhs, &value_type, expected_effect);
+
+        // The LHS always holds a value after an assignment
+        if let Some(path) = self.try_build_move_path(assignment.lhs) {
+            self.move_tracker.clear_moves(&path);
+        }
+
         self.unify(&Type::UNIT, expected, TypeErrorKind::General, id);
     }
 

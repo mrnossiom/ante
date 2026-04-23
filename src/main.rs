@@ -103,7 +103,9 @@ fn compile(args: Cli) {
         Some(EmitTarget::Mir) => display_mir(&mut compiler, args.emit_all),
         Some(EmitTarget::MirMono) => display_mir_mono(&mut compiler),
         Some(EmitTarget::Ir) => llvm_codegen_separate(&mut compiler, true, args.show_time, opt_level).2,
-        None => llvm_codegen_all(&mut compiler, &args.files, !args.build, args.delete_binary, args.show_time, opt_level),
+        None => {
+            llvm_codegen_all(&mut compiler, &args.files, !args.build, args.delete_binary, args.show_time, opt_level)
+        },
     };
 
     let (error_count, _) = classify_diagnostics(&diagnostics);

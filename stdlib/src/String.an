@@ -28,7 +28,7 @@ split (s: String) (c: Char): Unit can Emit String =
     var substart = 0usz
     while U32 subend < s.length do
         if s.data.[Usz subend] == c then
-            emit (substr s substart subend)
+            emit (substr (clone (ref s)) substart subend)
             substart := subend + 1
         subend += 1
 

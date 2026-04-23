@@ -1,7 +1,7 @@
 import Std.C.malloc, free
 
 export Rc, of, as_ref, as_mut, ref_count, inc_ref_count, dec_ref_count,
-    copy_rc, clone_rc, drop_rc
+    clone_rc, drop_rc
 
 /// A non-threadsafe reference-counted pointer.
 type Rc t =
@@ -41,14 +41,11 @@ dec_ref_count (rc: mut Rc t): Unit =
     rc = ptr_to_mut rc.ptr
     rc.first -= 1
 
-impl copy_rc: Copy (Rc t) with
-    (.*) (rc: ref Rc t) =
+impl clone_rc: Clone (Rc t) with
+    clone (rc: ref Rc t) =
         // transmute ref -> mut
         inc_ref_count (transmute rc)
         deref rc
-
-impl clone_rc: Clone (Rc t) with
-    clone = (.*)
 
 impl drop_rc: Drop (Rc t) with
     drop (rc: mut Rc t) =

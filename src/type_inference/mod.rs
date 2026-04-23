@@ -177,10 +177,16 @@ struct TypeChecker<'local, 'inner> {
     /// Used for affine type checking: non-Copy values may only be used once.
     move_tracker: affine::MoveTracker,
 
-    /// When true, suppresses move checking and recording in `check_path`.
-    /// Set by `check_reference` (ref doesn't move) and `check_member_access`
-    /// (which handles its own partial-move tracking).
-    suppress_move: bool,
+    /// When true, suppresses the "is this path already moved" check in `check_path`.
+    /// Kept `false` inside `check_reference` - `ref x` must still verify `x` is valid
+    /// even though it doesn't itself record a move.
+    suppress_move_check: bool,
+
+    /// When true, suppresses recording a move in `check_path`.
+    /// Set by `check_reference` (ref doesn't move), the member-access / method-call
+    /// object probes (partial-move tracking is done at the field level), and the
+    /// plain `x := v` LHS (reassignment reads nothing from `x`).
+    suppress_move_record: bool,
 
     /// Cached TopLevelName for the Prelude's `Copy` type, lazily resolved on first use.
     copy_type_name: Option<TopLevelName>,
@@ -218,7 +224,8 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             string_type: None,
             deref_name: None,
             move_tracker: Default::default(),
-            suppress_move: false,
+            suppress_move_check: false,
+            suppress_move_record: false,
             copy_type_name: None,
             mutable_definitions: Default::default(),
         };

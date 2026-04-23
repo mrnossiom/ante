@@ -29,10 +29,9 @@ use crate::{
 pub(crate) mod builder;
 mod closure_deconversion;
 mod display;
-mod effect_lowering;
+mod effects;
 pub(crate) mod monomorphization;
 mod remove_unreachable;
-mod tail_resume_optimization;
 mod validation;
 
 #[derive(Default)]

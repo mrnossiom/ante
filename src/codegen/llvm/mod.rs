@@ -115,9 +115,7 @@ pub fn link(modules: Vec<Arc<Vec<u8>>>, binary_name: &str, show_time: bool, opt_
 fn native_target_machine(opt_level: OptLevel) -> TargetMachine {
     let triple = TargetMachine::get_default_triple();
     let target = Target::from_triple(&triple).unwrap();
-    target
-        .create_target_machine(&triple, "", "", opt_level.inkwell(), RelocMode::PIC, CodeModel::Default)
-        .unwrap()
+    target.create_target_machine(&triple, "", "", opt_level.inkwell(), RelocMode::PIC, CodeModel::Default).unwrap()
 }
 
 struct ModuleContext<'ctx> {

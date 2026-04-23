@@ -16,13 +16,19 @@ copy_twice () =
     b = x + 2
     a + b
 
-// Taking a reference does not count as a move 
+// Taking a reference does not count as a move
 ref_then_use () =
     r = Resource 2
     r_ref = ref r
     consume r
 
-// Non-copy value used in both if/else branches (each is a move) 
+// Taking a reference to an already-moved value should error
+use_then_ref () =
+    r = Resource 7
+    consume r
+    consume (ref r)
+
+// Non-copy value used in both if/else branches (each is a move)
 use_in_both_branches (cond: Bool) =
     r = Resource 3
     if cond
@@ -94,38 +100,45 @@ main () = ()
 // 10 |     consume r	// error: Use of moved value r
 //    |             ^
 // 
-// examples/typechecking/affine.an:37:18
-// 34 |     r = Resource 4
-// 35 |     consume r	// note: r was previously moved here
+// examples/typechecking/affine.an:29:18
+// 27 |     r = Resource 7
+// 28 |     consume r	// note: r was previously moved here
 //    |             -
-// 36 |     if cond
-// 37 |     then consume r	// error: Use of moved value r
+// 29 |     consume (ref r)	// error: Use of moved value r
 //    |                  ^
-// 38 |     else ()
 // 
-// examples/typechecking/affine.an:57:16
-// 56 |     r = Resource 6
+// examples/typechecking/affine.an:43:18
+// 40 |     r = Resource 4
+// 41 |     consume r	// note: r was previously moved here
+//    |             -
+// 42 |     if cond
+// 43 |     then consume r	// error: Use of moved value r
+//    |                  ^
+// 44 |     else ()
+// 
+// examples/typechecking/affine.an:63:16
+// 62 |     r = Resource 6
 //    |     // error: Use of moved value r
 //    |     // note: r was previously moved here
-// 57 |     take_two r r
+// 63 |     take_two r r
 //    |              - ^
 // 
-// examples/typechecking/affine.an:71:14
-// 69 |     _ = c.one.two
-// 70 |     _ = c.two	// note: c.two.two was previously moved here
+// examples/typechecking/affine.an:77:14
+// 75 |     _ = c.one.two
+// 76 |     _ = c.two	// note: c.two.two was previously moved here
 //    |          ----
-// 71 |     _ = c.two.two	// error: Use of moved value c.two.two
+// 77 |     _ = c.two.two	// error: Use of moved value c.two.two
 //    |              ^^^^
 // 
-// examples/typechecking/affine.an:83:14
-// 76 |     r = Resource 42
-// 77 |     consume r	// note: r was previously moved here
+// examples/typechecking/affine.an:89:14
+// 82 |     r = Resource 42
+// 83 |     consume r	// note: r was previously moved here
 //    |             -
-// 78 |     ()
+// 84 |     ()
 // .. | 
-// 82 |     ()
-// 83 |     take_two r r	// error: Use of moved value r
+// 88 |     ()
+// 89 |     take_two r r	// error: Use of moved value r
 //    |              ^
 // 
-// Found 5 errors and 0 warnings
+// Found 6 errors and 0 warnings
 

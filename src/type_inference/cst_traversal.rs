@@ -235,13 +235,13 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                 let typ =
                     typ.unwrap_or_else(|| panic!("No type for name `{}`", self.current_extended_context_mut()[name]));
 
-                if !self.suppress_move {
-                    let move_path = super::affine::MovePath::Variable(name);
+                let move_path = super::affine::MovePath::Variable(name);
+                if !self.suppress_move_check {
                     self.check_use_of_move_path(&move_path, path);
-                    if !self.type_is_copy(&typ) {
-                        let location = path.locate(self);
-                        self.move_tracker.record_move(move_path, location);
-                    }
+                }
+                if !self.suppress_move_record && !self.type_is_copy(&typ) {
+                    let location = path.locate(self);
+                    self.move_tracker.record_move(move_path, location);
                 }
                 typ
             },
@@ -429,10 +429,13 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         // Suppress moves: if the rewrite fails, the normal call handling will
         // process the member access with proper partial-move tracking.
         let struct_type = self.next_type_variable();
-        let old_suppress = self.suppress_move;
-        self.suppress_move = true;
+        let old_suppress_check = self.suppress_move_check;
+        let old_suppress_record = self.suppress_move_record;
+        self.suppress_move_check = true;
+        self.suppress_move_record = true;
         self.check_expr(object, &struct_type, expected_effect);
-        self.suppress_move = old_suppress;
+        self.suppress_move_check = old_suppress_check;
+        self.suppress_move_record = old_suppress_record;
 
         // Resolve the method name to a top-level function
         let Some((method_name, func_type, bindings)) = self.resolve_method_for_type(&struct_type, &member) else {
@@ -638,10 +641,13 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         let struct_type = self.next_type_variable();
 
         // Suppress moves on the object — we handle partial move tracking here at the field level
-        let old_suppress = self.suppress_move;
-        self.suppress_move = true;
+        let old_suppress_check = self.suppress_move_check;
+        let old_suppress_record = self.suppress_move_record;
+        self.suppress_move_check = true;
+        self.suppress_move_record = true;
         self.check_expr(member_access.object, &struct_type, expected_effect);
-        self.suppress_move = old_suppress;
+        self.suppress_move_check = old_suppress_check;
+        self.suppress_move_record = old_suppress_record;
 
         let fields = self.get_field_types(&struct_type, None);
         if let Some((field, field_index)) = fields.get(&member_access.member) {
@@ -655,14 +661,14 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             let struct_is_ref = struct_type.reference_element(&self.bindings).is_some();
             let struct_is_indirect = struct_is_ref || struct_type.pointer_element(&self.bindings).is_some();
 
-            // Track partial moves only when:
-            // - The struct is NOT behind a reference or pointer (accessing through one doesn't move)
-            // - We're not ourselves an intermediate object of a deeper member access chain
-            if !struct_is_indirect && !old_suppress {
+            // Track partial moves only when the struct is not behind a reference or pointer.
+            if !struct_is_indirect {
                 if let Some(parent_path) = self.try_build_move_path(member_access.object) {
                     let move_path = super::affine::MovePath::Field(Box::new(parent_path), member_access.member.clone());
-                    self.check_use_of_move_path(&move_path, expr);
-                    if !self.type_is_copy(&field) {
+                    if !old_suppress_check {
+                        self.check_use_of_move_path(&move_path, expr);
+                    }
+                    if !old_suppress_record && !self.type_is_copy(&field) {
                         let location = expr.locate(self);
                         self.move_tracker.record_move(move_path, location);
                     }
@@ -911,10 +917,12 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
             },
         };
 
-        let old_suppress = self.suppress_move;
-        self.suppress_move = true;
+        // A reference doesn't move its rhs, but it still reads it, so we must
+        // check that the rhs isn't already moved.
+        let old_suppress_record = self.suppress_move_record;
+        self.suppress_move_record = true;
         self.check_expr(reference.rhs, &expected_element_type, expected_effect);
-        self.suppress_move = old_suppress;
+        self.suppress_move_record = old_suppress_record;
     }
 
     fn check_constructor(
@@ -1042,9 +1050,11 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         // Allow `x := v` to use `x` even if moved but `x += v` cannot since it reads `x`
         let is_plain = assignment.op.is_none();
         if is_plain {
-            let old_suppress = std::mem::replace(&mut self.suppress_move, true);
+            let old_suppress_check = std::mem::replace(&mut self.suppress_move_check, true);
+            let old_suppress_record = std::mem::replace(&mut self.suppress_move_record, true);
             self.check_expr(assignment.lhs, &lhs_type, expected_effect);
-            self.suppress_move = old_suppress;
+            self.suppress_move_check = old_suppress_check;
+            self.suppress_move_record = old_suppress_record;
         } else {
             self.check_expr(assignment.lhs, &lhs_type, expected_effect);
         }

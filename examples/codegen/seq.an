@@ -1,5 +1,5 @@
 import Std.Seq
-import Std.Seq.copy_seq, print_seq
+import Std.Seq.clone_seq, print_seq
 
 main () =
     var seq = Seq.empty ()
@@ -7,11 +7,11 @@ main () =
     seq := seq.push 44
 
     // Copy calls aren't inserted automatically yet...
-    snapshot1 = (ref seq).*
+    snapshot1 = clone (ref seq)
 
     seq := seq.push 55
-    println seq
-    println snapshot1
+    println (clone (ref seq))
+    println (clone (ref snapshot1))
 
     println (snapshot1.push 100)
     println seq

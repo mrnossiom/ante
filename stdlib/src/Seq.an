@@ -1,6 +1,6 @@
 import Std.C.malloc, realloc, memcpy, free
 
-export empty, push, pop, remove_last, get, get_copied, iter, copy_seq, print_seq
+export empty, push, pop, remove_last, get, get_copied, iter, clone_seq, print_seq
 
 type Seq t =
     len: U32
@@ -104,9 +104,9 @@ impl print_seq {p: Print t} {Copy t}: Print (Seq t) with
             print (ptr_to_mut elem).*
         print "]"
 
-impl copy_seq: Copy (Seq t) with
+impl clone_seq: Clone (Seq t) with
     // bug: multiple matching implicits if we just return `seq`
-    (.*) (seq: ref (Seq t)) =
+    clone (seq: ref (Seq t)) =
         ptr_store seq.data.rc (deref_ptr seq.data.rc + 1)
         deref seq
 

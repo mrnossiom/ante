@@ -53,6 +53,8 @@ pub(crate) fn codegen_llvm_for_mir(mir: &mir::Mir, opt_level: OptLevel) -> Optio
         module.codegen_function(function, *id);
     }
 
+    module.codegen_main_wrapper();
+
     assert!(mir.externals.is_empty(), "All Mir compilation units should be linked");
 
     if let Err(error) = module.module.verify() {
@@ -130,6 +132,11 @@ struct ModuleContext<'ctx> {
     current_function: Option<DefinitionId>,
     current_function_value: Option<FunctionValue<'ctx>>,
 
+    /// This is the source-level `main` which we create a wrapper around to return 0 even though
+    /// Ante's main has a signature returning a Unit value.
+    /// This is `None` for libraries that do not define `main`.
+    ante_main: Option<FunctionValue<'ctx>>,
+
     global_values: FxHashMap<mir::Value, GlobalValue<'ctx>>,
     values: FxHashMap<mir::Value, BasicValueEnum<'ctx>>,
 
@@ -154,6 +161,7 @@ impl<'ctx> ModuleContext<'ctx> {
             mir,
             current_function: None,
             current_function_value: None,
+            ante_main: None,
             global_values: Default::default(),
             values: Default::default(),
             builder: llvm.create_builder(),
@@ -192,7 +200,7 @@ impl<'ctx> ModuleContext<'ctx> {
 
     fn constant_value(&mut self, value: mir::Value) -> BasicValueEnum<'ctx> {
         match value {
-            mir::Value::Unit => self.llvm.const_struct(&[], false).into(),
+            mir::Value::Unit => self.unit_value(),
             mir::Value::Bool(b) => self.llvm.bool_type().const_int(b as u64, false).into(),
             mir::Value::Char(c) => self.llvm.i8_type().const_int(c as u64, false).into(),
             mir::Value::Integer(constant) => {
@@ -304,12 +312,14 @@ impl<'ctx> ModuleContext<'ctx> {
             return;
         }
 
+        let is_ante_main = function.name.as_str() == "main";
         let function_value = match self.global_values.get(&mir::Value::Definition(id)) {
             Some(existing) => existing.as_any_value_enum().into_function_value(),
             None => {
                 let function_type = self.convert_function_type(&function.typ).unwrap();
-                let mangled_name = if function.name.as_str() == "main" {
-                    function.name.as_ref().clone()
+                // Rename `main`: see `codegen_main_wrapper`.
+                let mangled_name = if is_ante_main {
+                    format!("main_{}%", function.id)
                 } else {
                     format!("{}_{}", function.name, function.id)
                 };
@@ -318,6 +328,10 @@ impl<'ctx> ModuleContext<'ctx> {
                 function_value
             },
         };
+
+        if is_ante_main {
+            self.ante_main = Some(function_value);
+        }
 
         self.current_function = Some(id);
         self.current_function_value = Some(function_value);
@@ -348,6 +362,22 @@ impl<'ctx> ModuleContext<'ctx> {
         self.values.clear();
         self.blocks.clear();
         self.incoming.clear();
+    }
+
+    /// Emit a `main (): I32` wrapper that calls the renamed source `main` and returns 0
+    fn codegen_main_wrapper(&mut self) {
+        let Some(ante_main) = self.ante_main else { return };
+
+        let i32_type = self.llvm.i32_type();
+        let wrapper_type = i32_type.fn_type(&[], false);
+        let wrapper = self.module.add_function("main", wrapper_type, None);
+
+        let entry = self.llvm.append_basic_block(wrapper, "");
+        self.builder.position_at_end(entry);
+
+        let unit = self.unit_value().into();
+        self.builder.build_direct_call(ante_main, &[unit], "").unwrap();
+        self.builder.build_return(Some(&i32_type.const_int(0, false))).unwrap();
     }
 
     /// Create an empty block for each block in the given function
@@ -465,7 +495,7 @@ impl<'ctx> ModuleContext<'ctx> {
     fn lookup_value(&mut self, value: &mir::Value) -> BasicValueEnum<'ctx> {
         match value {
             mir::Value::Error => unreachable!("Error value encountered during llvm codegen"),
-            mir::Value::Unit => self.llvm.const_struct(&[], false).into(),
+            mir::Value::Unit => self.unit_value(),
             mir::Value::Bool(value) => self.llvm.bool_type().const_int(*value as u64, false).into(),
             mir::Value::Char(value) => self.llvm.i8_type().const_int(*value as u64, false).into(),
             mir::Value::Integer(constant) => {
@@ -518,6 +548,10 @@ impl<'ctx> ModuleContext<'ctx> {
                 }
             },
         }
+    }
+
+    fn unit_value(&mut self) -> BasicValueEnum<'ctx> {
+        self.llvm.const_struct(&[], false).into()
     }
 
     fn codegen_instruction(&mut self, function: &mir::Definition, id: mir::InstructionId) {
@@ -747,7 +781,7 @@ impl<'ctx> ModuleContext<'ctx> {
                 let pointer = self.lookup_value(pointer).into_pointer_value();
                 let value = self.lookup_value(value);
                 self.builder.build_store(pointer, value).unwrap();
-                self.llvm.const_struct(&[], false).into()
+                self.unit_value()
             },
             mir::Instruction::GetFieldPtr { struct_ptr, struct_type, index } => {
                 let struct_ptr = self.lookup_value(struct_ptr).into_pointer_value();

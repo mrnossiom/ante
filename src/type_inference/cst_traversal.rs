@@ -252,6 +252,12 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         if let Some(expr) = expr {
             match self.try_coercion(&actual, expected, expr, call_expr) {
                 super::CoercionOutcome::ReplacedExpr => {
+                    // If the coercion wrapped a local variable (e.g. auto-ref `seq` → `ref seq`),
+                    // the move recorded above no longer applies — the wrapper doesn't consume its
+                    // operand. Clear it so subsequent uses don't wrongly see the variable as moved.
+                    if let Some(Origin::Local(name)) = self.path_origin(path) {
+                        self.move_tracker.clear_moves(&super::affine::MovePath::Variable(name));
+                    }
                     self.check_expr(expr, expected, expected_effect);
                     return;
                     // no need to unify or modify self.path_types, that will be handled in the

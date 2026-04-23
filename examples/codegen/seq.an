@@ -6,12 +6,11 @@ main () =
     seq := seq.push 33
     seq := seq.push 44
 
-    // Copy calls aren't inserted automatically yet...
-    snapshot1 = clone (ref seq)
+    snapshot1 = clone seq
 
     seq := seq.push 55
-    println (clone (ref seq))
-    println (clone (ref snapshot1))
+    println (clone seq)
+    println (clone snapshot1)
 
     println (snapshot1.push 100)
     println seq

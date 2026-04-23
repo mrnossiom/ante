@@ -472,25 +472,53 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
                     None => CoercionOutcome::None,
                 }
             },
-            // Auto-deref: coerce `ref-kind t` to `t` by inserting a `(.*) expr` call if `Copy t`
-            // can be found.
-            (Type::Application(constructor, args), expected) => {
-                if args.len() == 1
-                    && matches!(self.follow_type(constructor), Type::Primitive(PrimitiveType::Reference(_)))
-                    && !matches!(&expected, Type::Variable(_))
-                {
-                    let arg = args[0].clone();
-                    let expected = expected.clone();
-                    if let Ok(bindings) = self.try_unify(&arg, &expected) {
-                        self.bindings.extend(bindings);
-                        let new_expr = self.auto_deref_coercion(expr, expected);
-                        self.current_extended_context_mut().insert_expr(expr, new_expr);
-                        return CoercionOutcome::ReplacedExpr;
+            (actual, expected) => {
+                // Auto-deref: coerce `ref-kind t` to `t` by inserting a `(.*) expr` call if `Copy t`
+                // can be found.
+                if let Type::Application(constructor, args) = &actual {
+                    if args.len() == 1
+                        && matches!(self.follow_type(constructor), Type::Primitive(PrimitiveType::Reference(_)))
+                        && !matches!(&expected, Type::Variable(_))
+                    {
+                        let arg = args[0].clone();
+                        let expected = expected.clone();
+                        if let Ok(bindings) = self.try_unify(&arg, &expected) {
+                            self.bindings.extend(bindings);
+                            let new_expr = self.auto_deref_coercion(expr, expected);
+                            self.current_extended_context_mut().insert_expr(expr, new_expr);
+                            return CoercionOutcome::ReplacedExpr;
+                        }
+                    }
+                }
+                // Auto-ref: coerce `t` to `ref t` or `imm t` by wrapping `expr` in a reference
+                // expression. Only fires for `Ref`/`Imm` kinds; `Mut`/`Uniq` must be written
+                // explicitly because of their aliasing/affine semantics. Skip when `actual`
+                // is itself a reference (subtyping through `try_unify` handles those cases).
+                if let Type::Application(expected_ctor, expected_args) = &expected {
+                    if expected_args.len() == 1
+                        && !matches!(&actual, Type::Variable(_))
+                        && actual.reference_element(&self.bindings).is_none()
+                    {
+                        let kind = match self.follow_type(expected_ctor) {
+                            Type::Primitive(PrimitiveType::Reference(kind)) => Some(*kind),
+                            _ => None,
+                        };
+                        if let Some(kind) = kind {
+                            if matches!(kind, ReferenceKind::Ref | ReferenceKind::Imm) {
+                                let inner = expected_args[0].clone();
+                                let actual = actual.clone();
+                                if let Ok(bindings) = self.try_unify(&actual, &inner) {
+                                    self.bindings.extend(bindings);
+                                    let new_expr = self.auto_ref_coercion(expr, kind, actual);
+                                    self.current_extended_context_mut().insert_expr(expr, new_expr);
+                                    return CoercionOutcome::ReplacedExpr;
+                                }
+                            }
+                        }
                     }
                 }
                 CoercionOutcome::None
             },
-            _ => CoercionOutcome::None,
         }
     }
 
@@ -521,6 +549,16 @@ impl<'local, 'inner> TypeChecker<'local, 'inner> {
         }));
         let func_expr = self.push_expr(cst::Expr::Variable(deref_path), function_type, location);
         cst::Expr::Call(cst::Call { function: func_expr, arguments: vec![cst::Argument::explicit(arg_id)] })
+    }
+
+    /// Synthesize a `ref`/`imm` expression wrapping the original expression for
+    /// auto-ref coercion. The original expression at `expr` is copied to a new
+    /// ExprId and the returned expression references it.
+    fn auto_ref_coercion(&mut self, expr: ExprId, kind: ReferenceKind, element_type: Type) -> cst::Expr {
+        let location = expr.locate(self);
+        let original_expr = self.current_extended_context()[expr].clone();
+        let rhs = self.push_expr(original_expr, element_type, location);
+        cst::Expr::Reference(cst::Reference { kind, rhs })
     }
 
     pub(crate) fn type_to_string(&self, typ: &Type) -> String {

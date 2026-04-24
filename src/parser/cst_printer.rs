@@ -23,7 +23,7 @@ use super::{
     TopLevelContext,
     cst::{
         Call, CompoundAssignOp, Comptime, Cst, Declaration, Definition, EffectDefinition, EffectType, Expr, Extern,
-        FunctionType, Handle, HandlePattern, If, Import, InterpolatedString, Lambda, Literal, Match, MemberAccess,
+        FunctionType, Handle, HandlePattern, If, Import, InterpolatedString, Is, Lambda, Literal, Match, MemberAccess,
         Parameter, Path, Pattern, Quoted, Reference, SequenceItem, TopLevelItem, TraitDefinition, TraitImpl, Type,
         TypeAnnotation, TypeDefinition, TypeDefinitionBody, TypeKind,
     },
@@ -648,6 +648,7 @@ impl<'a> CstDisplay<'a> {
             Expr::Lambda(lambda) => self.fmt_lambda(lambda, id, context, f),
             Expr::If(if_) => self.fmt_if(if_, context, f),
             Expr::Match(match_) => self.fmt_match(match_, context, id, f),
+            Expr::Is(is_) => self.fmt_is(is_, context, f),
             Expr::Handle(handle_) => self.fmt_handle(handle_, context, f),
             Expr::Reference(reference) => self.fmt_reference(reference, context, f),
             Expr::TypeAnnotation(type_annotation) => self.fmt_type_annotation(type_annotation, context, f),
@@ -951,6 +952,13 @@ impl<'a> CstDisplay<'a> {
             self.fmt_expr(else_, context, f)?;
         }
         Ok(())
+    }
+
+    fn fmt_is(&mut self, is_: &Is, context: &impl IdStore, f: &mut Formatter) -> std::fmt::Result {
+        let paren_lhs = !context.get_expr(is_.lhs).is_atom();
+        self.parenthesize(is_.lhs, paren_lhs, context, f)?;
+        write!(f, " is ")?;
+        self.fmt_pattern(is_.pattern, context, f)
     }
 
     /// Format the `if c then t` portion, but not the else portion
